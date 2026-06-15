@@ -69,16 +69,16 @@ npm start
 
 The project uses Zod in [env.ts](file:///c:/Users/busti/Desktop/Node/x/qcu-msc-central-portal-backend/src/config/env.ts) to parse, type-check, and validate configuration at startup. If any required variables are missing or incorrectly formatted, the server will output a detailed validation schema error and halt.
 
-### Environment Variables (.env)
+### Environment Variables (.env.example)
 
 | Key | Description | Example / Default |
 | :--- | :--- | :--- |
 | `PORT` | The port the Express application server will listen on. | `5000` |
 | `NODE_ENV` | Environment state (`development`, `production`, `test`). | `development` |
-| `DATABASE_URL` | Prisma MySQL connection string. **Note on Special Characters**: If your database credentials (username/password) contain special characters like `@`, `#`, `!`, or `:`, you must URL-encode them (e.g. `@` becomes `%40`, `#` becomes `%23`). | `mysql://root:1q%212w%403e%23@localhost:3306/qcu_msc_central_portal` |
-| `JWT_SECRET` | Secret key used to sign and verify JSON Web Tokens (min 8 chars). | `super-secret-jwt-key` |
+| `DATABASE_URL` | Prisma MySQL connection string. | `mysql://:`DB_PASSWORD`@`DB_HOST`:`DB_PORT`/`DB_NAME` |
+| `JWT_SECRET` | Secret key used to sign and verify JSON Web Tokens (min 8 chars). | `super-secret-jwt-key-change-in-production` |
 | `JWT_EXPIRES_IN` | Token lifespan. | `7d` |
-| `BETTER_AUTH_SECRET` | Secret key for Better Auth operations (min 8 chars). | `better-auth-secret-key` |
+| `BETTER_AUTH_SECRET` | Secret key for Better Auth operations (min 8 chars). | `better-auth-secret-change-in-production` |
 | `BETTER_AUTH_URL` | Base URL routing for your auth service. | `http://localhost:5000` |
 
 ---
