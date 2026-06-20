@@ -11,25 +11,25 @@ This document describes the primary business workflows and user journeys in the 
 
 ```
 User visits portal
-    ↓
+	↓
 User clicks "Register"
-    ↓
+	↓
 User enters: name, email, password
-    ↓
+	↓
 System validates input (Zod schema: createUserSchema)
-    ↓
+	↓
 Email already exists? → Error: "Email already registered"
-    ↓
+	↓
 Create User record in database (role defaults to STUDENT)
-    ↓
+	↓
 Send verification email (managed by Better Auth)
-    ↓
+	↓
 User receives confirmation email
-    ↓
+	↓
 User clicks verification link
-    ↓
+	↓
 emailVerified set to true
-    ↓
+	↓
 Account activated ✓
 ```
 
@@ -43,27 +43,27 @@ Account activated ✓
 
 ```
 User visits login page
-    ↓
+	↓
 User enters email and password
-    ↓
+	↓
 System validates input (Zod schema: loginUserSchema)
-    ↓
+	↓
 Query User by email
-    ↓
+	↓
 User not found? → Error: "Invalid credentials"
-    ↓
+	↓
 Compare passwords (Better Auth handles hashing)
-    ↓
+	↓
 Password incorrect? → Error: "Invalid credentials"
-    ↓
+	↓
 Create Session record
-    ↓
+	↓
 Generate JWT token
-    ↓
+	↓
 Return token to client
-    ↓
+	↓
 Client stores token (localStorage/sessionStorage)
-    ↓
+	↓
 User authenticated ✓
 ```
 
@@ -80,22 +80,22 @@ User authenticated ✓
 
 ```
 Prospective member visits applicant portal
-    ↓
+	↓
 User fills application form:
   - Name, Email, Department choice
   - Resume URL (Google Drive, GitHub, etc.)
   - GitHub profile link
-    ↓
+	↓
 System validates input (Zod schema: createApplicantSchema)
-    ↓
+	↓
 Email already exists? → Error: "You've already applied"
-    ↓
+	↓
 URLs valid? (HTTP/HTTPS check)
-    ↓
+	↓
 Create Applicant record with status = "APPLIED"
-    ↓
+	↓
 Send confirmation email to applicant
-    ↓
+	↓
 Applicant dashboard shows "Application Submitted" ✓
 ```
 
@@ -110,32 +110,32 @@ Applicant dashboard shows "Application Submitted" ✓
 
 ```
 Member/Admin logs in to dashboard
-    ↓
+	↓
 Accesses "Applicant Tracking" section
-    ↓
+	↓
 Views list of all applications (filtered by status)
-    ↓
+	↓
 Member views applicant details:
   - Name, email, department choice
   - Resume and GitHub links
   - Current status
-    ↓
+	↓
 Member reviews qualifications (externally)
-    ↓
+	↓
 Member updates status:
   
   Route 1: APPLIED → INTERVIEWING
-    ↓ Send interview invitation email
-    ↓
+	↓ Send interview invitation email
+	↓
   Route 2: INTERVIEWING → ACCEPTED
-    ↓ Send acceptance offer email
-    ↓ Create User account (role=MEMBER)
-    ↓
+	↓ Send acceptance offer email
+	↓ Create User account (role=MEMBER)
+	↓
   Route 3: INTERVIEWING → REJECTED
-    ↓ Send rejection email
-    ↓
+	↓ Send rejection email
+	↓
 Status updated in database
-    ↓
+	↓
 Dashboard refreshed with new status
 ```
 
@@ -161,23 +161,23 @@ APPLIED (initial)
 
 ```
 Member/Admin logs in
-    ↓
+	↓
 Clicks "Create Event"
-    ↓
+	↓
 Fills event details:
   - Title, description
   - Date/time (future date)
   - Type: PUBLIC or MEMBERS_ONLY
   - Max capacity
-    ↓
+	↓
 System validates input (Zod schema: createEventSchema)
-    ↓
+	↓
 Date in past? → Error: "Event date must be in future"
-    ↓
+	↓
 Create Event record in database
-    ↓
+	↓
 Event published ✓
-    ↓
+	↓
 Event appears in event listings
 ```
 
@@ -194,39 +194,39 @@ Event appears in event listings
 
 ```
 Student visits event listing
-    ↓
+	↓
 Clicks on PUBLIC event
-    ↓
+	↓
 Views event details (title, description, date, capacity)
-    ↓
+	↓
 Clicks "Register"
-    ↓
+	↓
 Fills registration form:
   - Name, email
   - No authentication needed
-    ↓
+	↓
 System validates input (Zod schema: registerEventSchema)
-    ↓
+	↓
 Check: Event capacity reached?
-    ↓ Yes: Error: "Event is at full capacity"
-    ↓ No: Continue
-    ↓
+	↓ Yes: Error: "Event is at full capacity"
+	↓ No: Continue
+	↓
 Check: Already registered with this email?
-    ↓ Yes: Error: "Already registered for this event"
-    ↓ No: Continue
-    ↓
+	↓ Yes: Error: "Already registered for this event"
+	↓ No: Continue
+	↓
 Generate unique QR payload (UUID)
-    ↓
+	↓
 Create Registration record:
   - eventId, name, email
   - userId = null (non-member)
   - qrPayload = unique UUID
   - hasAttended = false
-    ↓
+	↓
 Send confirmation email with QR code
-    ↓
+	↓
 Student receives email with event details and QR
-    ↓
+	↓
 Registration complete ✓
 ```
 
@@ -234,36 +234,36 @@ Registration complete ✓
 
 ```
 Authenticated member logs in
-    ↓
+	↓
 Clicks on MEMBERS_ONLY event
-    ↓
+	↓
 User role check:
   ├─→ ADMIN or MEMBER: Can register ✓
   ├─→ STUDENT: Error: "Members only event"
   └─→ Not authenticated: Error: "Please login"
-    ↓
+	↓
 Clicks "Register"
-    ↓
+	↓
 System auto-fills name, email from user profile
-    ↓
+	↓
 Check: Event capacity reached?
-    ↓ Yes: Error: "Event is at full capacity"
-    ↓ No: Continue
-    ↓
+	↓ Yes: Error: "Event is at full capacity"
+	↓ No: Continue
+	↓
 Check: Already registered (userId + eventId)?
-    ↓ Yes: Error: "You're already registered for this event"
-    ↓ No: Continue
-    ↓
+	↓ Yes: Error: "You're already registered for this event"
+	↓ No: Continue
+	↓
 Generate unique QR payload (UUID)
-    ↓
+	↓
 Create Registration record:
   - eventId, userId (from session)
   - name, email (from User record)
   - qrPayload = unique UUID
   - hasAttended = false
-    ↓
+	↓
 Send confirmation email with QR code
-    ↓
+	↓
 Registration complete ✓
 ```
 
@@ -273,28 +273,28 @@ Registration complete ✓
 
 ```
 Event day arrives
-    ↓
+	↓
 Member/Admin opens check-in dashboard
-    ↓
+	↓
 Views event and list of registrations
-    ↓
+	↓
 Student arrives at event
-    ↓
+	↓
 Student shows QR code (from email or phone)
-    ↓
+	↓
 Member scans/enters QR code
-    ↓
+	↓
 System looks up Registration by qrPayload
-    ↓
+	↓
 Check: Already marked attended?
-    ↓ Yes: Error: "Already checked in"
-    ↓ No: Continue
-    ↓
+	↓ Yes: Error: "Already checked in"
+	↓ No: Continue
+	↓
 Update Registration record:
   - hasAttended = true
-    ↓
+	↓
 Display: "✓ {Name} checked in successfully"
-    ↓
+	↓
 Attendance recorded ✓
 ```
 
@@ -304,21 +304,21 @@ Attendance recorded ✓
 
 ```
 Event date approaching
-    ↓
+	↓
 Admin decides to cancel event (e.g., low registrations, unexpected issue)
-    ↓
+	↓
 Admin clicks "Delete Event"
-    ↓
+	↓
 System confirms deletion warning
-    ↓
+	↓
 Delete Event record (cascade delete)
-    ↓
+	↓
 Cascade: All Registrations for this event deleted
-    ↓
+	↓
 Send cancellation email to all registered attendees
-    ↓
+	↓
 Event removed from listings ✓
-    ↓
+	↓
 Cancellation data retained in audit logs
 ```
 
@@ -398,20 +398,7 @@ POST /api/events/:eventId/attendance/:qrCode
 | Applicant → ACCEPTED | Applicant | Offer acceptance letter |
 | Applicant → REJECTED | Applicant | Rejection email |
 | Event registration (public) | Attendee | Confirmation + QR code |
-| Event registration (member) | Member | Confirmation + QR code |
-| Event cancellation | All registrants | Event cancellation notice |
-
-**Note:** Email implementation pending (managed by external service)
 
 ---
 
-## Key Decision Points Summary
-
-| Workflow | Decision | Implementation |
-|----------|----------|-----------------|
-| Auth | JWT or Session? | JWT + Express middleware |
-| Applicants | Email verification? | No (open recruitment) |
-| Events | Capacity enforcement? | Yes, check before registration |
-| Registration | QR generation | UUID-based unique QR payload |
-| Deletion | Soft or hard delete? | Hard delete (cascade for registrations) |
-| Roles | How many levels? | 3 (ADMIN, MEMBER, STUDENT) |
+# (Content copied from previous `docs/api/v1/workflows.md`)
