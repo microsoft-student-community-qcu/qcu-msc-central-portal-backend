@@ -34,6 +34,13 @@
   - example response
 - Avoid undocumented or “hidden” endpoints.
 
+## API Versioning
+- All public APIs must use explicit versioning in their paths and documentation (e.g., `/api/v1/...`).
+- Versioning strategy: URL path versioning for major versions; query/header versioning may be used for previews where necessary.
+- Start with `v1` for the current API surface. New breaking changes must increment the major version (v1 -> v2).
+- Deprecation policy: document deprecated endpoints in `/docs/api/` and provide a deprecation timeline and migration notes.
+- Maintain backward compatibility within a major version; non-breaking additions may be added under the same major version.
+
 ## Git Rules
 - Use meaningful and descriptive commit messages.
 - Do not commit undocumented breaking changes.
