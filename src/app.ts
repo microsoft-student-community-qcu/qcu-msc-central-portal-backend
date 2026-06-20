@@ -1,9 +1,6 @@
 import express from "express";
 import cors from "cors";
 import { authMiddleware } from "./routes/authMiddleware";
-import usersRouter from "./routes/users";
-import applicantsRouter from "./routes/applicants";
-import eventsRouter from "./routes/events";
 
 const app = express();
 
@@ -25,9 +22,7 @@ app.get("/", (_req, res) => {
     message: "QCU MSC Central Portal API is running.",
     version: "1.0.0",
     endpoints: {
-      users: "/api/users",
-      applicants: "/api/applicants",
-      events: "/api/events",
+        // CRUD endpoints removed
     },
     docs: "/docs/api/",
   });
@@ -37,9 +32,7 @@ app.get("/", (_req, res) => {
  * API Routes
  * See /docs/api/ for detailed endpoint documentation
  */
-app.use("/api/users", usersRouter);
-app.use("/api/applicants", applicantsRouter);
-app.use("/api/events", eventsRouter);
+// All CRUD API routes have been removed per request.
 
 /**
  * Health check endpoint
