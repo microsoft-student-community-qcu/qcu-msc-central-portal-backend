@@ -7,13 +7,43 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+// User role enumeration for role-based access control.
+// Matches docs/data-models.md exactly: ADMIN | MEMBER | STUDENT.
+enum UserRole {
+  ADMIN
+  MEMBER
+  STUDENT
+}
+
+// Applicant status enumeration for tracking recruitment pipeline.
+enum ApplicantStatus {
+  APPLIED
+  INTERVIEWING
+  ACCEPTED
+  REJECTED
+}
+
+// Event visibility and access control type.
+enum EventType {
+  PUBLIC
+  MEMBERS_ONLY
+}
+
+// ============================================================================
+// MODELS
+// ============================================================================
+
 model User {
   id            String         @id @default(uuid())
   email         String         @unique
   name          String
   emailVerified Boolean        @default(false)
   image         String?
-  role          String         @default("STUDENT") // ADMIN, MEMBER, STUDENT
+  role          UserRole       @default(STUDENT)
   password      String?        // Optional password field (managed by Better Auth in Account table)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -61,15 +91,15 @@ model Verification {
 }
 
 model Applicant {
-  id               String   @id @default(uuid())
+  id               String          @id @default(uuid())
   name             String
-  email            String   @unique
+  email            String          @unique
   departmentChoice String
   resumeLink       String
   githubLink       String
-  status           String   @default("APPLIED") // APPLIED, INTERVIEWING, ACCEPTED, REJECTED
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  status           ApplicantStatus @default(APPLIED)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 }
 
 model Event {
@@ -77,7 +107,7 @@ model Event {
   title         String
   description   String?
   date          DateTime
-  type          String         @default("PUBLIC") // PUBLIC, MEMBERS_ONLY
+  type          EventType      @default(PUBLIC)
   maxCapacity   Int
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -95,4 +125,6 @@ model Registration {
   qrPayload   String   @unique // Unique UUID for QR code verification
   hasAttended Boolean  @default(false)
   createdAt   DateTime @default(now())
+
+  @@unique([eventId, userId]) // One registration per user per event, per data-models.md
 }
