@@ -10,8 +10,9 @@ export const applicantStatusEnum = z.enum(
 );
 
 // Schema for public applicant submissions.
-// Does not allow status to be set by applicants — status starts at
-// APPLIED by default (enforced server-side via Prisma's @default).
+// Does not allow status or userId to be set by applicants — both are
+// controlled server-side (status defaults to APPLIED, userId is only
+// set once HR accepts the applicant and links them to a Member account).
 export const createApplicantSchema = z.object({
   name: z
     .string()
@@ -30,13 +31,13 @@ export const createApplicantSchema = z.object({
     .url("GitHub link must be a valid URL (e.g. https://github.com/...)"),
 });
 
-// Schema for ADMIN/MEMBER-only applicant status updates.
+// Schema for HR-only applicant status updates.
+// Restricted to ADMIN_HR routes per PRD-V1: only Admin (Management & Dev)
+// can mutate application statuses.
 export const updateApplicantStatusSchema = z.object({
   status: applicantStatusEnum,
 });
 
 export type CreateApplicantSchema = z.infer<typeof createApplicantSchema>;
-export type UpdateApplicantStatusSchema = z.infer<
-  typeof updateApplicantStatusSchema
->;
+export type UpdateApplicantStatusSchema = z.infer<typeof updateApplicantStatusSchema>;
 export type ApplicantStatusEnum = z.infer<typeof applicantStatusEnum>;
