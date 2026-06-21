@@ -12,9 +12,11 @@ generator client {
 // ============================================================================
 
 // User role enumeration for role-based access control.
-// Matches docs/data-models.md exactly: ADMIN | MEMBER | STUDENT.
+// Split ADMIN into domain-specific admins per PRD-V1 Section 2:
+// Admin (Management & Dev) and Admin (Logistics) have distinct permissions.
 enum UserRole {
-  ADMIN
+  ADMIN_HR
+  ADMIN_LOGISTICS
   MEMBER
   STUDENT
 }
@@ -31,6 +33,14 @@ enum ApplicantStatus {
 enum EventType {
   PUBLIC
   MEMBERS_ONLY
+}
+
+// Sponsorship inquiry status enumeration for Relations Office tracking.
+// Supports PRD-V1 Section 2: Guest (External) can submit sponsorship inquiries.
+enum SponsorshipStatus {
+  NEW
+  CONTACTED
+  CLOSED
 }
 
 // ============================================================================
@@ -50,6 +60,7 @@ model User {
   sessions      Session[]
   accounts      Account[]
   registrations Registration[]
+  applicant     Applicant?     // Optional one-to-one relation to Applicant (if linked to a member)
 }
 
 model Session {
@@ -98,20 +109,25 @@ model Applicant {
   resumeLink       String
   githubLink       String
   status           ApplicantStatus @default(APPLIED)
+  userId           String?         @unique // Nullable one-to-one link to User when applicant becomes a member
+  user             User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 }
 
 model Event {
-  id            String         @id @default(uuid())
-  title         String
-  description   String?
-  date          DateTime
-  type          EventType      @default(PUBLIC)
-  maxCapacity   Int
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  registrations Registration[]
+  id                String         @id @default(uuid())
+  title             String
+  description       String?
+  date              DateTime
+  // Tiered registration windows — PRD-V1 Event Registration & Ticketing module.
+  priorityStartDate DateTime       // Members can register starting here
+  generalStartDate  DateTime       // Everyone can register starting here
+  type              EventType      @default(PUBLIC)
+  maxCapacity       Int
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  registrations     Registration[]
 }
 
 model Registration {
@@ -126,5 +142,19 @@ model Registration {
   hasAttended Boolean  @default(false)
   createdAt   DateTime @default(now())
 
-  @@unique([eventId, userId]) // One registration per user per event, per data-models.md
+  @@unique([eventId, userId]) // One registration per user per event
+}
+
+// Sponsorship inquiry capture — PRD-V1: Guest (External) can submit
+// sponsorship inquiry forms via the landing page's "Collaborate With Us" CTA.
+model SponsorshipInquiry {
+  id           String            @id @default(uuid())
+  email        String
+  contactName  String
+  contactPhone String?
+  company      String
+  message      String            @db.Text
+  status       SponsorshipStatus @default(NEW)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 }
