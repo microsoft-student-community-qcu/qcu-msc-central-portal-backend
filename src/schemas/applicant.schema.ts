@@ -1,17 +1,24 @@
 import { z } from "zod";
 
-/**
- * Schema for validating new applicant registration submissions.
- * Validates name, email, department choices, and mandatory URL links.
- */
+// Zod enum for ApplicantStatus values.
+// Mirrors Prisma ApplicantStatus exactly.
+export const applicantStatusEnum = z.enum(
+  ["APPLIED", "INTERVIEWING", "ACCEPTED", "REJECTED"],
+  {
+    error: "Status must be APPLIED, INTERVIEWING, ACCEPTED, or REJECTED",
+  }
+);
+
+// Schema for public applicant submissions.
+// Does not allow status or userId to be set by applicants — both are
+// controlled server-side (status defaults to APPLIED, userId is only
+// set once HR accepts the applicant and links them to a Member account).
 export const createApplicantSchema = z.object({
   name: z
     .string()
     .min(1, "Name is required")
     .max(100, "Name must be less than 100 characters"),
-  email: z
-    .string()
-    .email("Invalid email address format"),
+  email: z.string().email("Invalid email address format"),
   departmentChoice: z
     .string()
     .min(1, "Department choice is required")
@@ -24,22 +31,13 @@ export const createApplicantSchema = z.object({
     .url("GitHub link must be a valid URL (e.g. https://github.com/...)"),
 });
 
-/**
- * Schema for updating an applicant's pipeline status.
- */
+// Schema for HR-only applicant status updates.
+// Restricted to ADMIN_HR routes per PRD-V1: only Admin (Management & Dev)
+// can mutate application statuses.
 export const updateApplicantStatusSchema = z.object({
-  status: z.enum(["APPLIED", "INTERVIEWING", "ACCEPTED", "REJECTED"], {
-    errorMap: () => ({
-      message: "Status must be APPLIED, INTERVIEWING, ACCEPTED, or REJECTED",
-    }),
-  }),
+  status: applicantStatusEnum,
 });
-
-/**
- * Schema for updating applicant details.
- */
-export const updateApplicantSchema = createApplicantSchema.partial();
 
 export type CreateApplicantSchema = z.infer<typeof createApplicantSchema>;
 export type UpdateApplicantStatusSchema = z.infer<typeof updateApplicantStatusSchema>;
-export type UpdateApplicantSchema = z.infer<typeof updateApplicantSchema>;
+export type ApplicantStatusEnum = z.infer<typeof applicantStatusEnum>;
