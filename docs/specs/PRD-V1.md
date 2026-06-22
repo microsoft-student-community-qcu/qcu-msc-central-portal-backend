@@ -24,6 +24,15 @@
 
 - **Performance:** All pages must achieve a Lighthouse score of 90+ for performance, with the landing page optimized for near-instant load times.
 - **Security:** Passwords must be hashed. API routes must be protected using JWT authentication.
+  - Passwords must be hashed and salted (salt length minimum of 16 bytes).
+  - API routes must be protected using JWT authentication (1 hour access tokens, 7 day refresh tokens).
+  - Implement Rate Limiting on all public-facing POST routes Application submissions, Login, Registration) to prevent bot spam and DDOS attacks.
+  - Additional (optional): captcha
+  - All user inputs (including text fields, file uploads, and URL submissions) must be validated and sanitized on the backend prior to database insertion to prevent Cross-Site Scripting (XSS) and SQL/NoSQL Injection attacks. 
+  - The web server must implement secure HTTP response headers, including Content-Security-Policy (CSP), Strict-Transport-Security (HSTS), and X-Frame-Options, to mitigate clickjacking and code injection. 
+  - The backend must generate secure, tamper-evident audit logs for all critical administrative actions (e.g., mutating application statuses, creating events, manual check-in overrides).
+  - All failed login attempts and token generation requests must be logged to allow the detection of credential stuffing or targeted brute-force campaigns.
+  - All client-server communications must be encrypted using TLS 1.2 or higher. Unencrypted HTTP traffic must be strictly rejected or automatically redirected to HTTPS. 
 - **Responsiveness:** The UI must be fully mobile-responsive, targeting a minimum viewport width of 320px.
 
 ## 4. Module Specifications
