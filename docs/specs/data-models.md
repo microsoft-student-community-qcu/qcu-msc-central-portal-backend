@@ -17,6 +17,7 @@ Represents an authenticated user in the system. Users can have different roles t
 | `id` | UUID | Unique identifier (auto-generated) | Primary key, auto-generated |
 | `email` | string | User's email address | Unique, required, valid email format |
 | `name` | string | User's full name | Required, 1-100 characters |
+| `student_id` | string | QCU-issued student ID (format: YY-NNNN) | Unique, required, matches pattern `^\d{2}-\d{4}$` |
 | `emailVerified` | boolean | Email verification status | Defaults to false |
 | `image` | string \| null | Profile image URL | Optional |
 | `role` | enum: ADMIN_HR \| ADMIN_LOGISTICS \| MEMBER \| STUDENT | User's access level | Defaults to STUDENT |
@@ -44,6 +45,7 @@ Represents an authenticated user in the system. Users can have different roles t
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "email": "hr.officer@qcu.edu",
   "name": "HR Officer",
+  "student_id": "23-1234",
   "emailVerified": true,
   "image": null,
   "role": "ADMIN_HR",
@@ -274,6 +276,7 @@ Event (1) ──→ (Many) Registration
 
 ### User
 - Email must be unique across the system
+- Student ID must be unique across the system and follow the format YY-NNNN (e.g., 23-1234)
 - Password handled by Better Auth, not validated/stored directly via the public signup schema
 - Role must be one of: ADMIN_HR, ADMIN_LOGISTICS, MEMBER, STUDENT — **never client-settable on creation**, always defaults to STUDENT server-side
 - Name must be 1-100 characters
@@ -311,6 +314,7 @@ Event (1) ──→ (Many) Registration
 
 **Database Indexes:**
 - `User.email` (unique)
+- `User.student_id` (unique)
 - `Applicant.email` (unique)
 - `Applicant.userId` (unique)
 - `Session.token` (unique)
@@ -336,3 +340,4 @@ When evolving data models:
 | Date | Change |
 |------|--------|
 | 2026-06-20 | Realigned with PRD-V1: split single `ADMIN` role into `ADMIN_HR`/`ADMIN_LOGISTICS`, added `priorityStartDate`/`generalStartDate` to Event, added `SponsorshipInquiry` model, added `Applicant.userId` link, added `Registration` unique composite constraint |
+| 2026-06-24 | Added `student_id` field to User model (unique identifier, YY-NNNN format) with corresponding schema, type, and Better Auth config updates |

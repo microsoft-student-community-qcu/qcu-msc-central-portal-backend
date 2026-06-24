@@ -14,7 +14,7 @@ User visits portal
 	↓
 User clicks "Register"
 	↓
-User enters: name, email, password
+User enters: student_id, name, email, password
 	↓
 System validates input (Zod schema: createUserSchema)
 	↓
