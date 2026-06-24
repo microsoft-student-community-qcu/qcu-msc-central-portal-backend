@@ -16,6 +16,7 @@ Creates a new user account in the system. Supports both admin creation and self-
 **Path:** `/api/users`
 
 **Request Parameters:**
+- `student_id` (string, required): The QCU-issued student ID in the format YY-NNNN (e.g., 23-1234), where YY represents the enrollment year and NNNN is the assigned student number.
 - `name` (string, required): User's full name (1-100 characters)
 - `email` (string, required): Valid email address (must be unique)
 - `password` (string, required): Password (minimum 8 characters)
@@ -27,6 +28,7 @@ Creates a new user account in the system. Supports both admin creation and self-
   "success": boolean,
   "data": {
     "id": string (UUID),
+    "student_id": string,
     "email": string,
     "name": string,
     "role": "ADMIN" | "MEMBER" | "STUDENT",
@@ -42,6 +44,7 @@ Creates a new user account in the system. Supports both admin creation and self-
 curl -X POST http://localhost:5000/api/users \
   -H "Content-Type: application/json" \
   -d '{
+    "student_id": "23-1234",
     "name": "John Doe",
     "email": "john@example.com",
     "password": "SecurePass123",
@@ -55,6 +58,7 @@ curl -X POST http://localhost:5000/api/users \
   "success": true,
   "data": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
+    "student_id": "23-1234",
     "email": "john@example.com",
     "name": "John Doe",
     "role": "STUDENT",

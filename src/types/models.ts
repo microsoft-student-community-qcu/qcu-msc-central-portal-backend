@@ -35,6 +35,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  studentId: string;
   emailVerified: boolean;
   image: string | null;
   /** Strict role — never a raw string. */

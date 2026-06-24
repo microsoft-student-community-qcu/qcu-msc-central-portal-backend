@@ -6,8 +6,13 @@ export const userRoleEnum = z.enum(
 );
 
 export const createUserSchema = z.object({
+  student_id: z
+    .string()
+    .min(1, "Student ID is required")
+    .regex(/^\d{2}-\d{4}$/, "Student ID must be in format YY-NNNN (e.g., 23-1234)"),
   name: z.string().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
   email: z.string().email("Invalid email address format"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
 export const loginUserSchema = z.object({
