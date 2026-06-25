@@ -1,106 +1,95 @@
 # QCU MSC Central Portal Backend
-> The core API backend for the QCU Microsoft Student Community digital hub. Built with Node.js, Express, TypeScript, Prisma ORM, and Better Auth.
+
+The core API backend for the QCU Microsoft Student Community digital hub. Built with Node.js, Express, TypeScript, Prisma ORM, Better Auth, and URL-path API versioning (`/api/v1/...`).
 
 ---
 
-## 🚀 Tech Stack
+## Tech Stack
 
-* **Runtime:** Node.js (Latest LTS)
-* **Language:** TypeScript
-* **Web Framework:** Express
-* **Database & ORM:** MySQL (XAMPP local dev) with Prisma ORM
-* **Authentication:** Better Auth & jsonwebtoken (JWT)
-* **Validation:** Zod
-* **State Management:** Zustand
+- **Runtime:** Node.js (Latest LTS)
+- **Language:** TypeScript
+- **Web Framework:** Express
+- **Database & ORM:** MySQL (XAMPP local dev) with Prisma ORM
+- **Authentication:** Better Auth & jsonwebtoken (JWT)
+- **Validation:** Zod
 
 ---
 
-## 🛠️ Project Setup
+## Quick Start
 
 ### Prerequisites
-* **Node.js** (v18.x or later)
-* **XAMPP** (with Apache and MySQL modules started)
 
-### 1. Installation
-Clone the repository and install the dependencies:
+- Node.js v18+
+- XAMPP (with MySQL started)
+
+### Setup
+
 ```bash
+git clone https://github.com/microsoft-student-community-qcu/qcu-msc-central-portal-backend.git
+cd qcu-msc-central-portal-backend
 npm install
 ```
 
-### 2. Database Creation (XAMPP MySQL)
-1. Open the **XAMPP Control Panel** and start **MySQL**.
-2. Go to phpMyAdmin (`http://localhost/phpmyadmin`).
-3. Create a new database named `qcu_msc_central_portal` (recommended collation: `utf8mb4_general_ci`).
+### Database
 
-### 3. Environment Configuration
-Create a `.env` file in the root of the project:
-```bash
-cp .env.example .env
-```
-Open `.env` and fill in the values. See [Environment Documentation](#-environment-documentation) below for details.
+1. Start MySQL via XAMPP Control Panel.
+2. Create a database named `qcu_msc_central_portal` (collation: `utf8mb4_general_ci`).
+3. Copy `.env.example` → `.env` and fill in values (see [Environment](#environment) below).
+4. Run migrations: `npx prisma migrate dev --name init`
 
-### 4. Database Migrations
-Run the initial Prisma migration to generate database tables in your XAMPP MySQL instance:
+### Run
+
 ```bash
-npx prisma migrate dev --name init
+npm run dev        # Development (live reload)
+npm run build      # Production build
+npm start          # Production server
 ```
+
+The server starts on the port specified in `.env` (default `5000`).
 
 ---
 
-## 💻 Running the Server
+## Environment
 
-### Development Mode
-Start the development server with live reload enabled:
-```bash
-npm run dev
-```
-The server will boot on the port specified in your `.env` (default is `5000`).
-
-### Production Mode
-To build and run the compiled JavaScript:
-```bash
-npm run build
-npm start
-```
-
----
-
-## 📋 Environment Documentation
-
-The project uses Zod in [env.ts](file:///c:/Users/busti/Desktop/Node/x/qcu-msc-central-portal-backend/src/config/env.ts) to parse, type-check, and validate configuration at startup. If any required variables are missing or incorrectly formatted, the server will output a detailed validation schema error and halt.
-
-### Environment Variables (.env.example)
+All environment variables are validated via Zod in `src/config/env.ts` at startup. Missing or malformed values halt the server with a validation error.
 
 | Key | Description | Example / Default |
 | :--- | :--- | :--- |
-| `PORT` | The port the Express application server will listen on. | `5000` |
-| `NODE_ENV` | Environment state (`development`, `production`, `test`). | `development` |
-| `DATABASE_URL` | Prisma MySQL connection string. | `mysql://:`DB_PASSWORD`@`DB_HOST`:`DB_PORT`/`DB_NAME` |
-| `JWT_SECRET` | Secret key used to sign and verify JSON Web Tokens (min 8 chars). | `super-secret-jwt-key-change-in-production` |
-| `JWT_EXPIRES_IN` | Token lifespan. | `7d` |
-| `BETTER_AUTH_SECRET` | Secret key for Better Auth operations (min 8 chars). | `better-auth-secret-change-in-production` |
-| `BETTER_AUTH_URL` | Base URL routing for your auth service. | `http://localhost:5000` |
+| `PORT` | Express server port | `5000` |
+| `NODE_ENV` | Environment state | `development` |
+| `DATABASE_URL` | Prisma MySQL connection string | `mysql://root:password@localhost:3306/qcu_msc_central_portal` |
+| `JWT_SECRET` | JWT signing secret (min 8 chars) | `super-secret-jwt-key-change-in-production` |
+| `JWT_EXPIRES_IN` | Token lifespan | `7d` |
+| `BETTER_AUTH_SECRET` | Better Auth secret (min 8 chars) | `better-auth-secret-change-in-production` |
+| `BETTER_AUTH_URL` | Auth service base URL | `http://localhost:5000` |
 
 ---
 
-## 📂 Directory Structure
+## Project Structure
 
 ```
 qcu-msc-central-portal-backend/
-├── prisma/
-│   ├── schema.prisma          # Prisma database schema definition
-│   └── migrations/            # Generated SQL migration history
-├── src/
-│   ├── config/                # App configuration (auth.ts, env.ts)
-│   ├── controllers/           # Request controllers / handlers
-│   ├── middleware/            # JWT authentication & route protectors
-│   ├── routes/                # Express router endpoints
-│   ├── schemas/               # Zod validation schemas
-│   ├── store/                 # Zustand store setups
-│   ├── app.ts                 # Express application instantiation
-│   └── index.ts               # Server entry point and database connection logic
-├── .env                       # Local environment secrets (ignored by Git)
-├── .env.example               # Environment variables template
-├── tsconfig.json              # TypeScript compiler settings
-└── package.json               # Dependencies and scripts
+├── docs/           # API docs, guides, specs
+├── prisma/         # Schema + migrations
+├── src/            # Application source
+├── .env.example
+├── AGENTS.md
+├── CONTRIBUTING.md
+└── package.json
 ```
+
+---
+
+## Documentation Map
+
+| Resource | Description |
+| :--- | :--- |
+| [docs/](docs/) | API documentation, data models, workflow guides, PRD |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution workflow, branch strategy, PR process |
+| [AGENTS.md](AGENTS.md) | Engineering standards: code style, architecture, API rules, database, testing |
+
+---
+
+## Testing
+
+Test endpoints using **POSTMAN**, **HTTPie**, **Thunder Client** (VS Code), or your preferred HTTP client. Request/response payload formats are documented in `docs/api/v{N}/<endpoint>.md`. See [AGENTS.md](AGENTS.md) for testing expectations.
