@@ -1,6 +1,6 @@
 # Contributing to QCU MSC Central Portal Backend
 
-This repository is internal to the `microsoft-student-community-qcu` GitHub organization (Quezon City University). The following guidelines apply to all org members contributing to the project. For coding and architecture standards, see [AGENTS.md] (AGENTS.md).
+This repository is internal to the `microsoft-student-community-qcu` GitHub organization (Quezon City University). The following guidelines apply to all org members contributing to the project. For coding and architecture standards, see [AGENTS.md](AGENTS.md).
 
 ---
 
