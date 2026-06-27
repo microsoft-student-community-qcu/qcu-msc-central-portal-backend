@@ -401,4 +401,86 @@ POST /api/events/:eventId/attendance/:qrCode
 
 ---
 
-# (Content copied from previous `docs/api/v1/workflows.md`)
+## 6. User Journeys
+
+### 1. The Guest / Corporate Lead / Potential Sponsors
+
+**Goal:** Verify the organization's prestige and initiate a sponsorship or partnership.
+
+**Entry:** Lands on the Unified Public Landing Page.
+
+**Discovery:** Scrolls through the high-impact Hero section, views the leadership board, and checks the "Wall of Logos" static grid displaying past corporate collaborators.
+
+**Action:** Navigates to the "Collaborate With Us" section.
+
+**Completion:** Clicks the direct, brand-aligned `mailto:` button (or "Copy Email" clipboard function) to contact the official Relations Office and initiate a partnership.
+
+### 2. The QCU Student (Non-Member Attendee)
+
+**Goal:** Register for a public technical workshop or seminar.
+
+**Entry:** Lands on the Unified Public Landing Page and views the "Active Initiatives Feed" fetching the top 3 upcoming events.
+
+**Initiation:** Clicks "Register Now" on a specific event, which routes them to the `/events` registration gateway.
+
+**Verification (Zonal OCR):** The system prompts the student to capture an image of their QCU Student ID using a guided camera overlay.
+
+**Fallback Route:** If the OCR fails three consecutive times, the hidden manual entry and photo upload form is revealed.
+
+**Form Completion:** Upon successful extraction (or manual fallback), the user submits their Name and Email address.
+
+**Completion:** The system verifies the student number against the current attendee roster to prevent duplicate registration, generates a unique QR payload, and dispatches the digital ticket via website and email.
+
+### 3. The Applicant (Prospective Member)
+
+**Goal:** Apply for official membership in the QCU Microsoft Student Community.
+
+**Entry:** Clicks the prominent "Apply" CTA on the Unified Public Landing Page.
+
+**Verification (Zonal OCR):** Must capture an image of their QCU Student ID for pre-validation, where the backend extracts and validates the student number via strict Regex.
+
+**Application Form:** Completes the multi-step form detailing basic information, department preference, and mandatory portfolio/resume links.
+
+**Account Creation:** Immediately upon submission, creates a secure account by setting a password paired with their verified QCU email.
+
+**Completion:** Is routed to `/portal/tracking` (the Applicant Dashboard) to view their application status tracker, update timeline, and check the notification inbox for messages from the M&D team.
+
+### 4. The Member (Active QCU MSC Student)
+
+**Goal:** Access priority event registration and the authenticated hub.
+
+**Entry:** Navigates to the portal and logs in.
+
+**Authentication & Routing:** The backend checks the user's role and automatically routes them to `/portal/dashboard`.
+
+**Dashboard View:** Lands on the ultra-lean Member Dashboard featuring the static "Coming Soon" UI (e.g., "Status 200: OK. Workspace Initialized.") to confirm authentication.
+
+**Frictionless Registration:** If the member navigates back to the landing page and clicks "Register" on an upcoming event, the system automatically pulls their credentials and dispatches the QR ticket, entirely bypassing the Zonal OCR requirement.
+
+### 5. The Admin (Management & Development / HR)
+
+**Goal:** Process new member applications and trigger communications.
+
+**Entry:** Logs securely into the HR & Recruitment Pipeline (`/admin/hr`).
+
+**Data Review:** Views the sortable list of all applicants and accesses submitted portfolio links.
+
+**Quarantine Resolution:** Identifies applicants flagged with a "Pending ID Verification" status (from the manual ID fallback queue). Clicks the profile to view the uploaded photo alongside the typed student number and clicks "Approve ID".
+
+**Status Mutation:** Utilizes the Status Mutator to accept or reject the applicant.
+
+**Completion:** Confirms the status change via a modal, which automatically triggers the email engine to dispatch a branded communication to the candidate.
+
+### 6. The Admin (Logistics Office)
+
+**Goal:** Deploy new events to the frontend and manage physical check-ins at the venue doors.
+
+**Entry (Pre-Event):** Logs into the Event Logistics & Check-In dashboard (`/admin/events`).
+
+**Event Creation:** Fills out the Event Creation Form (Title, Date, Type, Max Capacity), which immediately pushes the event to the landing page's Active Initiatives feed.
+
+**Execution (Event Day):** Accesses the mobile-friendly route (`/admin/events/scan`) on their device.
+
+**Ticket Validation:** Uses the device camera to scan student QR tickets at the door. The system validates the UUID against the database and flips the `hasAttended` boolean flag.
+
+**Manual Override:** If a student's phone screen is cracked or the scanner fails, uses the search bar to manually perform a check-in override.
