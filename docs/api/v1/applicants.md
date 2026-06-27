@@ -81,7 +81,7 @@ Retrieves a specific applicant's details by their ID.
 **Method:** `GET`  
 **Path:** `/api/v1/applicants/:applicantId`
 
-**Authentication:** Required (Bearer token, ADMIN_HR or MEMBER only)
+**Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Response Format:**
 ```json
@@ -137,7 +137,7 @@ Retrieves all applicants with optional filtering by status or department.
 **Method:** `GET`  
 **Path:** `/api/v1/applicants`
 
-**Authentication:** Required (Bearer token, ADMIN_HR or MEMBER only)
+**Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Query Parameters:**
 - `status` (optional): Filter by status - `APPLIED`, `INTERVIEWING`, `ACCEPTED`, `REJECTED`
@@ -177,12 +177,12 @@ curl -X GET "http://localhost:5000/api/v1/applicants?status=APPLIED&limit=20" \
 ### 4. Update Applicant Status
 
 **Description:**  
-Updates an applicant's pipeline status. Only ADMIN_HR or MEMBER users can update status.
+Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
 
 **Method:** `PATCH`  
 **Path:** `/api/v1/applicants/:applicantId/status`
 
-**Authentication:** Required (Bearer token, ADMIN_HR or MEMBER only)
+**Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Request Parameters:**
 - `status` (enum, required): New status - `APPLIED`, `INTERVIEWING`, `ACCEPTED`, or `REJECTED`
@@ -232,12 +232,12 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
 ### 5. Update Applicant Details
 
 **Description:**  
-Updates an applicant's profile details. Only ADMIN_HR or MEMBER users can update applicants.
+Updates an applicant's profile details. Only ADMIN_HR users can update applicants.
 
 **Method:** `PATCH`  
 **Path:** `/api/v1/applicants/:applicantId`
 
-**Authentication:** Required (Bearer token, ADMIN_HR or MEMBER only)
+**Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Request Parameters:**
 - `name` (string, optional): Updated name

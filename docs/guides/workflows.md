@@ -94,10 +94,10 @@ The applicant flow has been significantly updated with Zonal OCR verification an
 
 ---
 
-### Applicant Pipeline Management (ADMIN_HR or MEMBER)
+### Applicant Pipeline Management (ADMIN_HR)
 
 ```
-MEMBER or ADMIN_HR logs in to dashboard
+ADMIN_HR logs in to dashboard
 	↓
 Accesses "Applicant Tracking" section
 	↓
@@ -110,14 +110,14 @@ Quarantine Queue — Applicants with "Pending ID Verification"
            side-by-side with typed student number
   "Approve ID" → unlocks status mutator
 	↓
-Member views applicant details:
+Admin views applicant details:
   - Name, email, department choice
   - Resume and GitHub links
   - Current status
 	↓
-Member reviews qualifications (externally)
+Admin reviews qualifications (externally)
 	↓
-Member updates status:
+Admin updates status:
   
   Route 1: APPLIED → INTERVIEWING
 	↓ Send interview invitation email
@@ -208,7 +208,7 @@ The registration flow now includes Zonal OCR verification, email verification, a
 
 **For Members-Only Events (Authenticated):**
 - Authenticated members bypass the Zonal OCR entirely — credentials are auto-pulled.
-- System checks role (ADMIN_LOGISTICS/MEMBER only) and capacity, then dispatches the QR ticket directly.
+- System checks role (MEMBER only) and capacity, then dispatches the QR ticket directly.
 
 ---
 
@@ -217,7 +217,7 @@ The registration flow now includes Zonal OCR verification, email verification, a
 ```
 Event day arrives
 	↓
-MEMBER or ADMIN_LOGISTICS opens check-in dashboard
+ADMIN_LOGISTICS opens check-in dashboard
 	↓
 Views event and list of registrations
 	↓
@@ -225,7 +225,7 @@ Student arrives at event
 	↓
 Student shows QR code (from email or phone)
 	↓
-Member scans/enters QR code
+Admin scans/enters QR code
 	↓
 System looks up Registration by qrPayload
 	↓
@@ -283,11 +283,11 @@ Attendees can cancel their own registration via a unique cancellation link. See 
 
 ```
 ADMIN_HR / ADMIN_LOGISTICS (highest privilege)
-  ├─ All MEMBER permissions
   ├─ ADMIN_HR: HR & Recruitment Pipeline
   │   ├─ View/export applicant lists
   │   ├─ Access portfolio links
   │   ├─ Mutate application statuses
+  │   ├─ Approve ID verification (unlock quarantined)
   │   ├─ Accept → create Member account
   │   └─ Trigger branded emails to candidates
   │
@@ -298,14 +298,11 @@ ADMIN_HR / ADMIN_LOGISTICS (highest privilege)
       ├─ Manual check-in override
       └─ Approve manual registrations
 
-MEMBER (medium privilege)
+MEMBER (authenticated member)
   ├─ All APPLICANT permissions
-  ├─ Create/Update events
-  ├─ View applicant tracking
-  ├─ Update applicant statuses (excluding final accept)
-  ├─ View event registrations
-  ├─ Check-in users to events
-  └─ Priority window registration for Members-Only events
+  ├─ Priority window registration for Members-Only events
+  ├─ Bypass Zonal OCR (auto-pull credentials)
+  └─ Access member dashboard (static "Coming Soon")
 
 APPLICANT (post-account-creation)
   ├─ View public events
@@ -337,8 +334,8 @@ POST /api/v1/events/:eventId/register
 
 GET /api/v1/applicants/:id
   ├─ No auth: Error 401
-  ├─ ADMIN_HR/MEMBER: Allowed ✓
-  └─ APPLICANT: Error 403 (Forbidden)
+  ├─ ADMIN_HR: Allowed ✓
+  └─ All others: Error 403 (Forbidden)
 
 POST /api/v1/events (create)
   ├─ No auth: Error 401
@@ -347,13 +344,13 @@ POST /api/v1/events (create)
 
 POST /api/v1/events/:eventId/attendance
   ├─ No auth: Error 401
-  ├─ ADMIN_LOGISTICS/MEMBER: Allowed ✓
-  └─ Others: Error 403 (Forbidden)
+  ├─ ADMIN_LOGISTICS: Allowed ✓
+  └─ All others: Error 403 (Forbidden)
 
 PATCH /api/v1/applicants/:id/status
   ├─ No auth: Error 401
-  ├─ ADMIN_HR/MEMBER: Allowed ✓
-  └─ Others: Error 403 (Forbidden)
+  ├─ ADMIN_HR: Allowed ✓
+  └─ All others: Error 403 (Forbidden)
 ```
 
 ---
