@@ -20,6 +20,10 @@
 | Admin (Management & Dev) | Manages growth, onboarding, skill-building, and organizational documentation of human resources. | Has full access to the HR & Recruitment Pipeline. Can view and export sortable lists of applicant data, access portfolio links, mutate application statuses, and trigger automated or custom branded emails to candidates. |
 | Admin (Logistics) | The engine of the organization, responsible for physical staging, event workflows, and technical backbones. | Has full access to Event Logistics & Check-In. Can create new event entries (setting capacity and type), view attendee rosters, utilize the mobile-friendly QR scanner route (`/admin/events/scan`) to validate tickets, and perform manual check-in overrides. |
 
+---
+
+> **⚠ IMPORTANT:** Guest (External) and QCU Student (Non-Member) share the same guest-level role with identical system permissions. They are listed separately only to distinguish the use case — corporate lead inquiries vs. student event registration.
+
 ## 3. Global Non-Functional Requirements
 
 - **Performance:** All pages must achieve a Lighthouse score of 90+ for performance, with the landing page optimized for near-instant load times.
