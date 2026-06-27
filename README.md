@@ -84,7 +84,7 @@ qcu-msc-central-portal-backend/
 
 | Resource | Description |
 | :--- | :--- |
-| [docs/](docs/) | API documentation, data models, workflow guides, PRD |
+| [docs/](docs/) | API documentation, data models, workflow guides, flow diagrams, PRD |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution workflow, branch strategy, PR process |
 | [AGENTS.md](AGENTS.md) | Engineering standards: code style, architecture, API rules, database, testing |
 
