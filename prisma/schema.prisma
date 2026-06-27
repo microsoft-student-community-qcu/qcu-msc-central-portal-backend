@@ -119,6 +119,7 @@ model Applicant {
   resumeLink       String
   githubLink       String
   status           ApplicantStatus @default(APPLIED)
+  manual_application Boolean       @default(false) // Flagged true when OCR fails → manual upload
   userId           String?         @unique // Nullable one-to-one link to User when applicant becomes a member
   user             User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt        DateTime        @default(now())

@@ -1,4 +1,4 @@
-﻿-- AlterTable
+-- AlterTable
 ALTER TABLE `registration` ADD COLUMN `manual_registration` BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN `status` ENUM('APPROVED', 'PENDING_REVIEW', 'REJECTED', 'CANCELLED') NOT NULL DEFAULT 'APPROVED',
     ADD COLUMN `studentId` VARCHAR(191) NULL;
