@@ -81,15 +81,16 @@ User authenticated ✓
 The applicant flow has been significantly updated with Zonal OCR verification and post-submission account creation. See the detailed flow diagram in [flows/membership-application-flow.md](flows/membership-application-flow.md).
 
 **Summary:**
-1. User captures an image of their Student ID for Zonal OCR pre-validation.
-2. On success, the form is auto-filled; after 3 OCR failures, a manual upload fallback is revealed.
-3. User submits the application (portfolio/resume links required).
-4. System sends an email with a password setup link (also serves as email verification).
-5. User sets a password → account activated → redirected to `/portal/tracking`.
+1. User captures an image of their Student ID using the guided camera overlay.
+2. Frontend sends the image to `POST /api/v1/ocr/verify` — backend runs Zonal OCR.
+3. On success, the form is auto-filled; after 3 OCR failures, a manual upload fallback is revealed (determined by `manualRequired` in the OCR response).
+4. User submits the application via `POST /api/v1/applicants` with the `ocrSessionId`.
+5. System sends an email with a password setup link (also serves as email verification).
+6. User sets a password → account activated → redirected to `/portal/tracking`.
 
 **Key Decision Points:**
 - No authentication required for submission (open recruitment)
-- Student ID verified via Zonal OCR + Regex
+- Student ID is verified via backend Zonal OCR + Regex (frontend never runs OCR)
 - Manual fallback applications flagged as `{"manual_application": true}` for admin review
 
 ---
@@ -189,9 +190,9 @@ The registration flow now includes Zonal OCR verification, email verification, a
 
 **Summary:**
 1. User clicks "Register Now" and captures an image of their Student ID.
-2. System performs Zonal OCR to extract and validate the student number.
-3. After 3 OCR failures, a manual upload fallback is revealed.
-4. User submits the registration form (Name + Email).
+2. Frontend sends the image to `POST /api/v1/ocr/verify` — backend runs Zonal OCR to extract and validate the student number.
+3. After 3 OCR failures, a manual upload fallback is revealed (determined by `manualRequired` in the OCR response).
+4. User submits the registration form (Name + Email + `ocrSessionId`) via `POST /api/v1/events/:eventId/register`.
 5. System validates the student number against existing attendees to prevent duplicates.
 6. User receives an email verification link.
 7. After verification, the system follows one of two paths:
@@ -392,9 +393,9 @@ PATCH /api/v1/applicants/:id/status
 
 **Initiation:** Clicks "Register Now" on a specific event, which routes them to the `/events` registration gateway.
 
-**Verification (Zonal OCR):** The system prompts the student to capture an image of their QCU Student ID using a guided camera overlay.
+**Verification (Zonal OCR):** The system prompts the student to capture an image of their QCU Student ID using a guided camera overlay. The frontend sends the image to `POST /api/v1/ocr/verify` where the backend runs Zonal OCR.
 
-**Fallback Route:** If the OCR fails three consecutive times, the hidden manual entry and photo upload form is revealed.
+**Fallback Route:** If the OCR fails three consecutive times, the OCR endpoint returns `manualRequired: true`, and the frontend reveals the hidden manual entry and photo upload form.
 
 **Form Completion:** Upon successful extraction (or manual fallback), the user submits their Name and Email address.
 
@@ -408,7 +409,7 @@ PATCH /api/v1/applicants/:id/status
 
 **Entry:** Clicks the prominent "Apply" CTA on the Unified Public Landing Page.
 
-**Verification (Zonal OCR):** Must capture an image of their QCU Student ID for pre-validation, where the backend extracts and validates the student number via strict Regex.
+**Verification (Zonal OCR):** Must capture an image of their QCU Student ID using the guided camera overlay. The frontend sends the image to `POST /api/v1/ocr/verify`, where the backend runs Zonal OCR and validates the student number via strict Regex.
 
 **Application Form:** Completes the multi-step form detailing basic information, department preference, and mandatory portfolio/resume links.
 

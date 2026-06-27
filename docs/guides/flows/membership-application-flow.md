@@ -3,23 +3,28 @@
 ## Application
 
 1. User clicks "Apply".
-2. User captures an image of their Student ID.
-3. System performs Zonal OCR to extract applicant information.
-4. **If OCR succeeds:**
+2. User captures an image of their Student ID using the guided camera overlay.
+3. Frontend sends the captured image to `POST /api/v1/ocr/verify`.
+4. Backend runs **Zonal OCR** on predefined QCU ID card zones.
+5. **If OCR succeeds:**
+   - Backend returns `{ studentId, fullName, manualRequired: false, ocrSessionId }`.
    - Application form is automatically pre-filled using extracted data.
    - User reviews and completes remaining fields.
-5. **If OCR fails 3 times:**
-   - User uploads a Student ID image manually.
-   - User manually completes the application form.
+6. **If OCR fails 3 consecutive times:**
+   - Backend returns `{ manualRequired: true, ocrSessionId }`.
+   - Frontend reveals the manual entry form (hidden by default).
+   - User uploads a Student ID image and manually completes the form.
    - Application is flagged as:
      ```json
      {
        "manual_application": true
      }
      ```
-   - Application requires manual verification by administrators.
-6. User submits the application.
-7. System sends an email containing:
+7. User submits the application via `POST /api/v1/applicants` with the `ocrSessionId`.
+8. Backend validates the OCR session and creates the applicant record.
+   - If `manualRequired: true`, `manual_application` is set to `true`.
+   - If OCR succeeded, `manual_application` remains `false`.
+9. System sends an email containing:
    - Password setup link (this link will also act as email verification link).
 
 ---

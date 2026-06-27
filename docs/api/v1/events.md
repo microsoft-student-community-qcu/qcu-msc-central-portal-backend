@@ -255,7 +255,7 @@ curl -X DELETE http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-44665
 ### 6. Register for Event
 
 **Description:**  
-Registers a guest (no account required) or authenticated member for an event. Guest registrations require Zonal OCR to capture the student ID (sent as `studentId`). Generates a unique QR code for event check-in.
+Registers a guest (no account required) or authenticated member for an event. Guest registrations must first call `POST /api/v1/ocr/verify` to obtain an `ocrSessionId`. Authenticated members bypass OCR — their `studentId` is auto-pulled from their profile. Generates a unique QR code for event check-in.
 
 **Method:** `POST`  
 **Path:** `/api/v1/events/:eventId/register`
@@ -263,7 +263,8 @@ Registers a guest (no account required) or authenticated member for an event. Gu
 **Request Parameters:**
 - `name` (string, required): Attendee's name (1-100 characters)
 - `email` (string, required): Attendee's email address
-- `studentId` (string, optional): QCU Student ID (YY-NNNN format), required for guest registrations (extracted via Zonal OCR), auto-pulled for authenticated members
+- `studentId` (string, optional): QCU Student ID (YY-NNNN format), required for guest registrations (extracted via Zonal OCR, forwarded from OCR session), auto-pulled for authenticated members
+- `ocrSessionId` (string, optional): OCR session token returned from `POST /api/v1/ocr/verify`
 - `userId` (string, optional): User ID if authenticated member (UUID format, auto-attached server-side from JWT)
 
 **Response Format:**
@@ -292,7 +293,8 @@ curl -X POST http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-4466554
   -d '{
     "name": "Alex Johnson",
     "email": "alex@example.com",
-    "studentId": "23-5678"
+    "studentId": "23-5678",
+    "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004"
   }'
 ```
 
