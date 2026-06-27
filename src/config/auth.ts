@@ -29,10 +29,6 @@ export const auth = betterAuth({
         type: "string",
         required: true,
       },
-      student_id: {
-        type: "string",
-        required: true,
-      },
     },
   },
   secret: env.BETTER_AUTH_SECRET,

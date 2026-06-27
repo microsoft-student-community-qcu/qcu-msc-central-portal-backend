@@ -74,6 +74,8 @@ export interface Applicant {
   githubLink: string;
   /** Strict pipeline status — never a raw string. */
   status: ApplicantStatus;
+  /** Flagged true when OCR fails and applicant manually enters credentials. */
+  manualApplication: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

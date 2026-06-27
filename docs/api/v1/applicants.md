@@ -34,6 +34,7 @@ Submits a new applicant to the MSC recruitment system. Validates required fields
     "resumeLink": string,
     "githubLink": string,
     "status": "APPLIED",
+    "manual_application": boolean,
     "createdAt": string (ISO 8601)
   },
   "message": string
@@ -65,6 +66,7 @@ curl -X POST http://localhost:5000/api/v1/applicants \
     "resumeLink": "https://drive.google.com/file/d/1234567890",
     "githubLink": "https://github.com/janesmith",
     "status": "APPLIED",
+    "manual_application": false,
     "createdAt": "2026-06-15T10:30:00Z"
   },
   "message": "Application submitted successfully"
@@ -95,6 +97,7 @@ Retrieves a specific applicant's details by their ID.
     "resumeLink": string,
     "githubLink": string,
     "status": "APPLIED" | "INTERVIEWING" | "ACCEPTED" | "REJECTED",
+    "manual_application": boolean,
     "createdAt": string (ISO 8601),
     "updatedAt": string (ISO 8601)
   },
@@ -120,6 +123,7 @@ curl -X GET http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-4466
     "resumeLink": "https://drive.google.com/file/d/1234567890",
     "githubLink": "https://github.com/janesmith",
     "status": "APPLIED",
+    "manual_application": false,
     "createdAt": "2026-06-15T10:30:00Z",
     "updatedAt": "2026-06-15T10:30:00Z"
   },
@@ -142,6 +146,7 @@ Retrieves all applicants with optional filtering by status or department.
 **Query Parameters:**
 - `status` (optional): Filter by status - `APPLIED`, `INTERVIEWING`, `ACCEPTED`, `REJECTED`
 - `departmentChoice` (optional): Filter by department choice
+- `manual_application` (optional): Filter by manual application flag — `true` or `false`
 - `limit` (optional): Number of records to return (default: 50)
 - `offset` (optional): Pagination offset (default: 0)
 
@@ -158,6 +163,7 @@ Retrieves all applicants with optional filtering by status or department.
         "email": string,
         "departmentChoice": string,
         "status": string,
+        "manual_application": boolean,
         "createdAt": string
       }
     ]
@@ -196,6 +202,7 @@ Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
     "name": string,
     "email": string,
     "status": "APPLIED" | "INTERVIEWING" | "ACCEPTED" | "REJECTED",
+    "manual_application": boolean,
     "updatedAt": string (ISO 8601)
   },
   "message": string
@@ -221,6 +228,7 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
     "name": "Jane Smith",
     "email": "jane@example.com",
     "status": "INTERVIEWING",
+    "manual_application": false,
     "updatedAt": "2026-06-15T11:00:00Z"
   },
   "message": "Applicant status updated successfully"
@@ -258,6 +266,7 @@ Updates an applicant's profile details. Only ADMIN_HR users can update applicant
     "resumeLink": string,
     "githubLink": string,
     "status": string,
+    "manual_application": boolean,
     "updatedAt": string (ISO 8601)
   },
   "message": string

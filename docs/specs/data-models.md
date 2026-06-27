@@ -71,6 +71,7 @@ Represents a prospective MSC member who has submitted an application through the
 | `resumeLink` | string | URL to applicant's resume | Required, valid URL (must be HTTP/HTTPS) |
 | `githubLink` | string | GitHub profile or project repository URL | Required, valid URL |
 | `status` | enum: APPLIED \| INTERVIEWING \| ACCEPTED \| REJECTED | Application pipeline status | Defaults to APPLIED |
+| `manual_application` | boolean | Flagged true when OCR fails and applicant manually enters credentials | Defaults to false |
 | `userId` | UUID \| null | Linked User account, once accepted | Optional, unique, foreign key |
 | `createdAt` | datetime | Application submission timestamp | Auto-generated |
 | `updatedAt` | datetime | Last status update timestamp | Auto-updated |
@@ -81,7 +82,7 @@ Represents a prospective MSC member who has submitted an application through the
 3. `ACCEPTED` → Applicant has been accepted to MSC — a User account is created/linked (role becomes `MEMBER`) via `userId`
 4. `REJECTED` → Applicant's application has been rejected
 
-**Security note:** `status` and `userId` are never client-settable. Public submissions via `/apply` only ever set `status` to its default (`APPLIED`); status changes require an `ADMIN_HR` session and go through a dedicated update endpoint.
+**Security note:** `status`, `manual_application`, and `userId` are never client-settable. Public submissions via `/apply` only ever set `status` to its default (`APPLIED`); `manual_application` is set server-side when OCR fails; status changes require an `ADMIN_HR` session and go through a dedicated update endpoint.
 
 **Example:**
 ```json
@@ -93,6 +94,7 @@ Represents a prospective MSC member who has submitted an application through the
   "resumeLink": "https://drive.google.com/file/d/1234567890",
   "githubLink": "https://github.com/janesmith",
   "status": "INTERVIEWING",
+  "manual_application": false,
   "userId": null,
   "createdAt": "2026-06-10T15:30:00Z",
   "updatedAt": "2026-06-15T11:00:00Z"
@@ -353,3 +355,4 @@ When evolving data models:
 | 2026-06-20 | Realigned with PRD-V1: split single `ADMIN` role into `ADMIN_HR`/`ADMIN_LOGISTICS`, added `priorityStartDate`/`generalStartDate` to Event, added `SponsorshipInquiry` model, added `Applicant.userId` link, added `Registration` unique composite constraint |
 | 2026-06-24 | Added `student_id` field to User model (unique identifier, YY-NNNN format) with corresponding schema, type, and Better Auth config updates |
 | 2026-06-27 | Synced with PRD-V1 4-role model: removed `STUDENT` from User role enum, added `APPLICANT`; added `Guest` behavioral role (no User record); added `studentId`, `status`, `manual_registration` to Registration model; updated validation rules |
+| 2026-06-28 | Added `manual_application` field to Applicant model — server-side boolean flagged when OCR fails |
