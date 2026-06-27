@@ -20,7 +20,7 @@ System validates input (Zod schema: createUserSchema)
 	↓
 Email already exists? → Error: "Email already registered"
 	↓
-Create User record in database (role defaults to STUDENT)
+Create User record in database (role defaults to APPLICANT)
 	↓
 Send verification email (managed by Better Auth)
 	↓
@@ -34,7 +34,7 @@ Account activated ✓
 ```
 
 **Key Decision Points:**
-- Role assignment: Defaults to STUDENT (ADMIN/MEMBER assigned via admin panel)
+- Role assignment: Defaults to APPLICANT (admin assigns to MEMBER, ADMIN_HR, or ADMIN_LOGISTICS via admin panel)
 - Email verification: Required before full access
 
 ---
@@ -144,7 +144,7 @@ APPLIED (initial)
 ```
 
 **Key Decision Points:**
-- Only ADMIN/MEMBER can update status
+- Only ADMIN_HR and MEMBER can update status
 - Accepted applicants automatically become MEMBER users
 - Email notifications sent at each status transition
 
@@ -177,7 +177,7 @@ Event appears in event listings
 ```
 
 **Key Decision Points:**
-- Only ADMIN/MEMBER can create events
+- Only ADMIN_LOGISTICS can create events
 - PUBLIC events visible to all, MEMBERS_ONLY restricted
 - Capacity limits enforce registration cutoff
 
@@ -282,54 +282,78 @@ Attendees can cancel their own registration via a unique cancellation link. See 
 ### Role Hierarchy
 
 ```
-ADMIN (highest privilege)
+ADMIN_HR / ADMIN_LOGISTICS (highest privilege)
   ├─ All MEMBER permissions
-  ├─ All STUDENT permissions
-  ├─ Create/Edit/Delete users
-  ├─ Create/Edit/Delete events
-  ├─ Manage applicants (all statuses)
-  └─ Delete events and force-cancel registrations
+  ├─ ADMIN_HR: HR & Recruitment Pipeline
+  │   ├─ View/export applicant lists
+  │   ├─ Access portfolio links
+  │   ├─ Mutate application statuses
+  │   ├─ Accept → create Member account
+  │   └─ Trigger branded emails to candidates
+  │
+  └─ ADMIN_LOGISTICS: Event Logistics & Check-In
+      ├─ Create/Edit/Delete events
+      ├─ View attendee rosters
+      ├─ Use QR scanner (/admin/events/scan)
+      ├─ Manual check-in override
+      └─ Approve manual registrations
 
 MEMBER (medium privilege)
-  ├─ All STUDENT permissions
+  ├─ All APPLICANT permissions
   ├─ Create/Edit events
   ├─ View applicant tracking
-  ├─ Update applicant statuses
+  ├─ Update applicant statuses (excluding final accept)
   ├─ View event registrations
-  └─ Check-in users to events
+  ├─ Check-in users to events
+  └─ Priority window registration for Members-Only events
 
-STUDENT (lowest privilege)
+APPLICANT (post-account-creation)
   ├─ View public events
-  ├─ Register for events (public & members-only if member)
-  ├─ Submit applications
-  └─ View own profile and registrations
+  ├─ Register for Public events
+  ├─ Track own application status (/portal/tracking)
+  └─ View own profile
+
+——— (no User record) ———
+
+GUEST (unauthenticated)
+  ├─ View landing page
+  ├─ Register for Public events via Zonal OCR (account-free)
+  ├─ Submit sponsorship inquiries ("Collaborate With Us")
+  └─ Cancel own registration via unique link
 ```
 
 ### Access Control Checks
 
 **Endpoint Protection:**
 ```
-GET /api/users/me
+GET /api/v1/users/me
   ├─ No auth: Error 401
-  └─ Any role: Allowed ✓
+  └─ Any authenticated role (APPLICANT, MEMBER, ADMIN_HR, ADMIN_LOGISTICS): Allowed ✓
 
-GET /api/applicants/:id
+POST /api/v1/events/:eventId/register
+  ├─ Unauthenticated (Guest): Allowed ✓ (account-free registration via Zonal OCR, studentId required)
+  ├─ APPLICANT/MEMBER/ADMIN: Allowed ✓ (auto-pulls credentials, no studentId needed)
+  └─ Already registered: Error 409 (Conflict)
+
+GET /api/v1/applicants/:id
   ├─ No auth: Error 401
-  ├─ ADMIN/MEMBER: Allowed ✓
-  └─ STUDENT: Error 403 (Forbidden)
+  ├─ ADMIN_HR/MEMBER: Allowed ✓
+  └─ APPLICANT: Error 403 (Forbidden)
 
-POST /api/events
+POST /api/v1/events (create)
   ├─ No auth: Error 401
-  ├─ ADMIN/MEMBER: Allowed ✓
-  └─ STUDENT: Error 403
+  ├─ ADMIN_LOGISTICS: Allowed ✓
+  └─ All others: Error 403 (Forbidden)
 
-POST /api/events/:eventId/register
-  └─ No auth: Allowed ✓ (non-member registration)
-
-POST /api/events/:eventId/attendance/:qrCode
+POST /api/v1/events/:eventId/attendance
   ├─ No auth: Error 401
-  ├─ ADMIN/MEMBER: Allowed ✓
-  └─ STUDENT: Error 403
+  ├─ ADMIN_LOGISTICS/MEMBER: Allowed ✓
+  └─ Others: Error 403 (Forbidden)
+
+PATCH /api/v1/applicants/:id/status
+  ├─ No auth: Error 401
+  ├─ ADMIN_HR/MEMBER: Allowed ✓
+  └─ Others: Error 403 (Forbidden)
 ```
 
 ---
@@ -363,7 +387,7 @@ POST /api/events/:eventId/attendance/:qrCode
 
 **Completion:** Clicks the direct, brand-aligned `mailto:` button (or "Copy Email" clipboard function) to contact the official Relations Office and initiate a partnership.
 
-### 2. The QCU Student (Non-Member Attendee)
+### 2. The Guest / QCU Student (Non-Member Attendee)
 
 **Goal:** Register for a public technical workshop or seminar.
 
@@ -409,7 +433,7 @@ POST /api/events/:eventId/attendance/:qrCode
 
 **Frictionless Registration:** If the member navigates back to the landing page and clicks "Register" on an upcoming event, the system automatically pulls their credentials and dispatches the QR ticket, entirely bypassing the Zonal OCR requirement.
 
-### 5. The Admin (Management & Development / HR)
+### 5. The Admin — HR (ADMIN_HR, Management & Development)
 
 **Goal:** Process new member applications and trigger communications.
 
@@ -423,7 +447,7 @@ POST /api/events/:eventId/attendance/:qrCode
 
 **Completion:** Confirms the status change via a modal, which automatically triggers the email engine to dispatch a branded communication to the candidate.
 
-### 6. The Admin (Logistics Office)
+### 6. The Admin — Logistics (ADMIN_LOGISTICS)
 
 **Goal:** Deploy new events to the frontend and manage physical check-ins at the venue doors.
 
