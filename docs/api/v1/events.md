@@ -21,6 +21,8 @@ Creates a new workshop, seminar, or initiative event. Only ADMIN_LOGISTICS users
 - `title` (string, required): Event title (1-150 characters)
 - `description` (string, optional): Event description (max 1000 characters)
 - `date` (string, required): Event date in ISO 8601 format (YYYY-MM-DDTHH:mm:ssZ)
+- `priorityStartDate` (string, required): When Members can start registering (ISO 8601)
+- `generalStartDate` (string, required): When general admission opens (ISO 8601, must be after `priorityStartDate`)
 - `type` (enum, optional): Event visibility - `PUBLIC` or `MEMBERS_ONLY`. Defaults to `PUBLIC`
 - `maxCapacity` (number, required): Maximum number of attendees (positive integer)
 
@@ -33,6 +35,8 @@ Creates a new workshop, seminar, or initiative event. Only ADMIN_LOGISTICS users
     "title": string,
     "description": string | null,
     "date": string (ISO 8601),
+    "priorityStartDate": string (ISO 8601),
+    "generalStartDate": string (ISO 8601),
     "type": "PUBLIC" | "MEMBERS_ONLY",
     "maxCapacity": number,
     "createdAt": string (ISO 8601)
@@ -50,6 +54,8 @@ curl -X POST http://localhost:5000/api/v1/events \
     "title": "Python Workshop 2026",
     "description": "Learn advanced Python programming techniques",
     "date": "2026-07-15T14:00:00Z",
+    "priorityStartDate": "2026-07-01T09:00:00Z",
+    "generalStartDate": "2026-07-03T09:00:00Z",
     "type": "PUBLIC",
     "maxCapacity": 50
   }'
@@ -64,6 +70,8 @@ curl -X POST http://localhost:5000/api/v1/events \
     "title": "Python Workshop 2026",
     "description": "Learn advanced Python programming techniques",
     "date": "2026-07-15T14:00:00Z",
+    "priorityStartDate": "2026-07-01T09:00:00Z",
+    "generalStartDate": "2026-07-03T09:00:00Z",
     "type": "PUBLIC",
     "maxCapacity": 50,
     "createdAt": "2026-06-15T10:30:00Z"
@@ -354,7 +362,7 @@ Marks a student as attended using their QR code payload.
 **Method:** `POST`  
 **Path:** `/api/v1/events/:eventId/attendance/:qrCode`
 
-**Authentication:** Required (Bearer token, ADMIN_LOGISTICS or MEMBER)
+**Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
 
 **Response Format:**
 ```json
