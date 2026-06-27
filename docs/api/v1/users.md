@@ -1,7 +1,7 @@
 # User Management API
 
 ## Overview
-The User Management API handles user authentication, registration, and role management for the QCU MSC Central Portal. Users can have one of three roles: `ADMIN`, `MEMBER`, or `STUDENT`.
+The User Management API handles user authentication, registration, and role management for the QCU MSC Central Portal. Users can have one of four roles: `APPLICANT`, `MEMBER`, `ADMIN_HR`, or `ADMIN_LOGISTICS`. Unauthenticated visitors are Guests (no User record).
 
 ---
 
@@ -13,14 +13,14 @@ The User Management API handles user authentication, registration, and role mana
 Creates a new user account in the system. Supports both admin creation and self-registration.
 
 **Method:** `POST`  
-**Path:** `/api/users`
+**Path:** `/api/v1/users`
 
 **Request Parameters:**
 - `student_id` (string, required): The QCU-issued student ID in the format YY-NNNN (e.g., 23-1234), where YY represents the enrollment year and NNNN is the assigned student number.
 - `name` (string, required): User's full name (1-100 characters)
 - `email` (string, required): Valid email address (must be unique)
 - `password` (string, required): Password (minimum 8 characters)
-- `role` (enum, optional): User role - `ADMIN`, `MEMBER`, or `STUDENT`. Defaults to `STUDENT`
+- `role` (enum, optional): User role — `APPLICANT`, `MEMBER`, `ADMIN_HR`, or `ADMIN_LOGISTICS`. Defaults to `APPLICANT`
 
 **Response Format:**
 ```json
@@ -31,7 +31,7 @@ Creates a new user account in the system. Supports both admin creation and self-
     "student_id": string,
     "email": string,
     "name": string,
-    "role": "ADMIN" | "MEMBER" | "STUDENT",
+    "role": "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS",
     "emailVerified": boolean,
     "createdAt": string (ISO 8601 timestamp)
   },
@@ -41,14 +41,14 @@ Creates a new user account in the system. Supports both admin creation and self-
 
 **Example Request:**
 ```bash
-curl -X POST http://localhost:5000/api/users \
+curl -X POST http://localhost:5000/api/v1/users \
   -H "Content-Type: application/json" \
   -d '{
     "student_id": "23-1234",
     "name": "John Doe",
     "email": "john@example.com",
     "password": "SecurePass123",
-    "role": "STUDENT"
+    "role": "APPLICANT"
   }'
 ```
 
@@ -61,7 +61,7 @@ curl -X POST http://localhost:5000/api/users \
     "student_id": "23-1234",
     "email": "john@example.com",
     "name": "John Doe",
-    "role": "STUDENT",
+    "role": "APPLICANT",
     "emailVerified": false,
     "createdAt": "2026-06-15T10:30:00Z"
   },
@@ -77,7 +77,7 @@ curl -X POST http://localhost:5000/api/users \
 Authenticates a user and returns a JWT token for subsequent requests.
 
 **Method:** `POST`  
-**Path:** `/api/users/login`
+**Path:** `/api/v1/users/login`
 
 **Request Parameters:**
 - `email` (string, required): User's email address
@@ -93,7 +93,7 @@ Authenticates a user and returns a JWT token for subsequent requests.
       "id": string,
       "email": string,
       "name": string,
-      "role": "ADMIN" | "MEMBER" | "STUDENT"
+      "role": "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS"
     }
   },
   "message": string
@@ -102,7 +102,7 @@ Authenticates a user and returns a JWT token for subsequent requests.
 
 **Example Request:**
 ```bash
-curl -X POST http://localhost:5000/api/users/login \
+curl -X POST http://localhost:5000/api/v1/users/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "john@example.com",
@@ -120,7 +120,7 @@ curl -X POST http://localhost:5000/api/users/login \
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "email": "john@example.com",
       "name": "John Doe",
-      "role": "STUDENT"
+      "role": "APPLICANT"
     }
   },
   "message": "Login successful"
@@ -135,7 +135,7 @@ curl -X POST http://localhost:5000/api/users/login \
 Retrieves the authenticated user's profile information.
 
 **Method:** `GET`  
-**Path:** `/api/users/me`
+**Path:** `/api/v1/users/me`
 
 **Authentication:** Required (Bearer token in Authorization header)
 
@@ -147,7 +147,7 @@ Retrieves the authenticated user's profile information.
     "id": string,
     "email": string,
     "name": string,
-    "role": "ADMIN" | "MEMBER" | "STUDENT",
+    "role": "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS",
     "emailVerified": boolean,
     "image": string | null,
     "createdAt": string (ISO 8601),
@@ -159,7 +159,7 @@ Retrieves the authenticated user's profile information.
 
 **Example Request:**
 ```bash
-curl -X GET http://localhost:5000/api/users/me \
+curl -X GET http://localhost:5000/api/v1/users/me \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
@@ -171,7 +171,7 @@ curl -X GET http://localhost:5000/api/users/me \
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "email": "john@example.com",
     "name": "John Doe",
-    "role": "STUDENT",
+    "role": "APPLICANT",
     "emailVerified": false,
     "image": null,
     "createdAt": "2026-06-15T10:30:00Z",
@@ -186,15 +186,15 @@ curl -X GET http://localhost:5000/api/users/me \
 ### 4. Update User Role (Admin Only)
 
 **Description:**  
-Updates a user's role. Only accessible to users with `ADMIN` role.
+Updates a user's role. Only accessible to users with `ADMIN_HR` role.
 
 **Method:** `PATCH`  
-**Path:** `/api/users/:userId/role`
+**Path:** `/api/v1/users/:userId/role`
 
-**Authentication:** Required (Bearer token, must be ADMIN)
+**Authentication:** Required (Bearer token, must be ADMIN_HR)
 
 **Request Parameters:**
-- `role` (enum, required): New role - `ADMIN`, `MEMBER`, or `STUDENT`
+- `role` (enum, required): New role — `APPLICANT`, `MEMBER`, `ADMIN_HR`, or `ADMIN_LOGISTICS`
 
 **Response Format:**
 ```json
@@ -204,7 +204,7 @@ Updates a user's role. Only accessible to users with `ADMIN` role.
     "id": string,
     "email": string,
     "name": string,
-    "role": "ADMIN" | "MEMBER" | "STUDENT",
+    "role": "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS",
     "updatedAt": string (ISO 8601)
   },
   "message": string
@@ -213,7 +213,7 @@ Updates a user's role. Only accessible to users with `ADMIN` role.
 
 **Example Request:**
 ```bash
-curl -X PATCH http://localhost:5000/api/users/550e8400-e29b-41d4-a716-446655440000/role \
+curl -X PATCH http://localhost:5000/api/v1/users/550e8400-e29b-41d4-a716-446655440000/role \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -d '{

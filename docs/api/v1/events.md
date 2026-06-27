@@ -10,12 +10,12 @@ The Event Management API handles creation, management, and registration for work
 ### 1. Create Event
 
 **Description:**  
-Creates a new workshop, seminar, or initiative event. Only ADMIN/MEMBER users can create events.
+Creates a new workshop, seminar, or initiative event. Only ADMIN_LOGISTICS users can create events.
 
 **Method:** `POST`  
-**Path:** `/api/events`
+**Path:** `/api/v1/events`
 
-**Authentication:** Required (Bearer token, ADMIN/MEMBER only)
+**Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
 
 **Request Parameters:**
 - `title` (string, required): Event title (1-150 characters)
@@ -43,7 +43,7 @@ Creates a new workshop, seminar, or initiative event. Only ADMIN/MEMBER users ca
 
 **Example Request:**
 ```bash
-curl -X POST http://localhost:5000/api/events \
+curl -X POST http://localhost:5000/api/v1/events \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -d '{
@@ -80,7 +80,7 @@ curl -X POST http://localhost:5000/api/events \
 Retrieves details of a specific event.
 
 **Method:** `GET`  
-**Path:** `/api/events/:eventId`
+**Path:** `/api/v1/events/:eventId`
 
 **Response Format:**
 ```json
@@ -103,7 +103,7 @@ Retrieves details of a specific event.
 
 **Example Request:**
 ```bash
-curl -X GET http://localhost:5000/api/events/770e8400-e29b-41d4-a716-446655440002
+curl -X GET http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655440002
 ```
 
 **Example Response:**
@@ -133,7 +133,7 @@ curl -X GET http://localhost:5000/api/events/770e8400-e29b-41d4-a716-44665544000
 Retrieves all events with optional filtering by type or date range.
 
 **Method:** `GET`  
-**Path:** `/api/events`
+**Path:** `/api/v1/events`
 
 **Query Parameters:**
 - `type` (optional): Filter by type - `PUBLIC` or `MEMBERS_ONLY`
@@ -165,7 +165,7 @@ Retrieves all events with optional filtering by type or date range.
 
 **Example Request:**
 ```bash
-curl -X GET "http://localhost:5000/api/events?type=PUBLIC&limit=20"
+curl -X GET "http://localhost:5000/api/v1/events?type=PUBLIC&limit=20"
 ```
 
 ---
@@ -173,12 +173,12 @@ curl -X GET "http://localhost:5000/api/events?type=PUBLIC&limit=20"
 ### 4. Update Event
 
 **Description:**  
-Updates event details. Only ADMIN/MEMBER users can update events.
+Updates event details. Only ADMIN_LOGISTICS users can update events.
 
 **Method:** `PATCH`  
-**Path:** `/api/events/:eventId`
+**Path:** `/api/v1/events/:eventId`
 
-**Authentication:** Required (Bearer token, ADMIN/MEMBER only)
+**Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
 
 **Request Parameters:**
 - `title` (string, optional): Updated title
@@ -206,7 +206,7 @@ Updates event details. Only ADMIN/MEMBER users can update events.
 
 **Example Request:**
 ```bash
-curl -X PATCH http://localhost:5000/api/events/770e8400-e29b-41d4-a716-446655440002 \
+curl -X PATCH http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655440002 \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -d '{
@@ -219,12 +219,12 @@ curl -X PATCH http://localhost:5000/api/events/770e8400-e29b-41d4-a716-446655440
 ### 5. Delete Event
 
 **Description:**  
-Deletes an event and all associated registrations. Only ADMIN users can delete events.
+Deletes an event and all associated registrations. Only ADMIN_LOGISTICS users can delete events.
 
 **Method:** `DELETE`  
-**Path:** `/api/events/:eventId`
+**Path:** `/api/v1/events/:eventId`
 
-**Authentication:** Required (Bearer token, ADMIN only)
+**Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
 
 **Response Format:**
 ```json
@@ -236,7 +236,7 @@ Deletes an event and all associated registrations. Only ADMIN users can delete e
 
 **Example Request:**
 ```bash
-curl -X DELETE http://localhost:5000/api/events/770e8400-e29b-41d4-a716-446655440002 \
+curl -X DELETE http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655440002 \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
@@ -247,15 +247,16 @@ curl -X DELETE http://localhost:5000/api/events/770e8400-e29b-41d4-a716-44665544
 ### 6. Register for Event
 
 **Description:**  
-Registers a student (member or non-member) for an event. Generates a unique QR code for event check-in.
+Registers a guest (no account required) or authenticated member for an event. Guest registrations require Zonal OCR to capture the student ID (sent as `studentId`). Generates a unique QR code for event check-in.
 
 **Method:** `POST`  
-**Path:** `/api/events/:eventId/register`
+**Path:** `/api/v1/events/:eventId/register`
 
 **Request Parameters:**
 - `name` (string, required): Attendee's name (1-100 characters)
 - `email` (string, required): Attendee's email address
-- `userId` (string, optional): User ID if registered member (UUID format)
+- `studentId` (string, optional): QCU Student ID (YY-NNNN format), required for guest registrations (extracted via Zonal OCR), auto-pulled for authenticated members
+- `userId` (string, optional): User ID if authenticated member (UUID format, auto-attached server-side from JWT)
 
 **Response Format:**
 ```json
@@ -266,6 +267,8 @@ Registers a student (member or non-member) for an event. Generates a unique QR c
     "eventId": string,
     "name": string,
     "email": string,
+    "status": "APPROVED" | "PENDING_REVIEW",
+    "manual_registration": boolean,
     "qrCode": string (QR payload UUID),
     "hasAttended": boolean,
     "createdAt": string (ISO 8601)
@@ -274,18 +277,18 @@ Registers a student (member or non-member) for an event. Generates a unique QR c
 }
 ```
 
-**Example Request:**
+**Example Request (Guest):**
 ```bash
-curl -X POST http://localhost:5000/api/events/770e8400-e29b-41d4-a716-446655440002/register \
+curl -X POST http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655440002/register \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Alex Johnson",
     "email": "alex@example.com",
-    "userId": null
+    "studentId": "23-5678"
   }'
 ```
 
-**Example Response:**
+**Example Response (Guest — Auto-Approved):**
 ```json
 {
   "success": true,
@@ -294,6 +297,8 @@ curl -X POST http://localhost:5000/api/events/770e8400-e29b-41d4-a716-4466554400
     "eventId": "770e8400-e29b-41d4-a716-446655440002",
     "name": "Alex Johnson",
     "email": "alex@example.com",
+    "status": "APPROVED",
+    "manual_registration": false,
     "qrCode": "880e8400-e29b-41d4-a716-446655440003",
     "hasAttended": false,
     "createdAt": "2026-06-15T11:00:00Z"
@@ -307,12 +312,12 @@ curl -X POST http://localhost:5000/api/events/770e8400-e29b-41d4-a716-4466554400
 ### 7. Get Event Registrations
 
 **Description:**  
-Retrieves all registrations for a specific event. Only ADMIN/MEMBER users can view.
+Retrieves all registrations for a specific event. Only ADMIN_LOGISTICS and MEMBER users can view.
 
 **Method:** `GET`  
-**Path:** `/api/events/:eventId/registrations`
+**Path:** `/api/v1/events/:eventId/registrations`
 
-**Authentication:** Required (Bearer token, ADMIN/MEMBER only)
+**Authentication:** Required (Bearer token, ADMIN_LOGISTICS or MEMBER)
 
 **Query Parameters:**
 - `hasAttended` (optional): Filter by attendance status (true/false)
@@ -347,9 +352,9 @@ Retrieves all registrations for a specific event. Only ADMIN/MEMBER users can vi
 Marks a student as attended using their QR code payload.
 
 **Method:** `POST`  
-**Path:** `/api/events/:eventId/attendance/:qrCode`
+**Path:** `/api/v1/events/:eventId/attendance/:qrCode`
 
-**Authentication:** Required (Bearer token, ADMIN/MEMBER only)
+**Authentication:** Required (Bearer token, ADMIN_LOGISTICS or MEMBER)
 
 **Response Format:**
 ```json
@@ -365,7 +370,7 @@ Marks a student as attended using their QR code payload.
 
 **Example Request:**
 ```bash
-curl -X POST http://localhost:5000/api/events/770e8400-e29b-41d4-a716-446655440002/attendance/880e8400-e29b-41d4-a716-446655440003 \
+curl -X POST http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655440002/attendance/880e8400-e29b-41d4-a716-446655440003 \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 

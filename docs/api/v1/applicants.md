@@ -13,7 +13,7 @@ The Applicant Tracking API manages the recruitment and application pipeline for 
 Submits a new applicant to the MSC recruitment system. Validates required fields and URL links.
 
 **Method:** `POST`  
-**Path:** `/api/applicants`
+**Path:** `/api/v1/applicants`
 
 **Request Parameters:**
 - `name` (string, required): Applicant's full name (1-100 characters)
@@ -42,7 +42,7 @@ Submits a new applicant to the MSC recruitment system. Validates required fields
 
 **Example Request:**
 ```bash
-curl -X POST http://localhost:5000/api/applicants \
+curl -X POST http://localhost:5000/api/v1/applicants \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Jane Smith",
@@ -79,9 +79,9 @@ curl -X POST http://localhost:5000/api/applicants \
 Retrieves a specific applicant's details by their ID.
 
 **Method:** `GET`  
-**Path:** `/api/applicants/:applicantId`
+**Path:** `/api/v1/applicants/:applicantId`
 
-**Authentication:** Required (Bearer token, ADMIN/MEMBER only)
+**Authentication:** Required (Bearer token, ADMIN_HR or MEMBER only)
 
 **Response Format:**
 ```json
@@ -104,7 +104,7 @@ Retrieves a specific applicant's details by their ID.
 
 **Example Request:**
 ```bash
-curl -X GET http://localhost:5000/api/applicants/660e8400-e29b-41d4-a716-446655440001 \
+curl -X GET http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-446655440001 \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
@@ -135,9 +135,9 @@ curl -X GET http://localhost:5000/api/applicants/660e8400-e29b-41d4-a716-4466554
 Retrieves all applicants with optional filtering by status or department.
 
 **Method:** `GET`  
-**Path:** `/api/applicants`
+**Path:** `/api/v1/applicants`
 
-**Authentication:** Required (Bearer token, ADMIN/MEMBER only)
+**Authentication:** Required (Bearer token, ADMIN_HR or MEMBER only)
 
 **Query Parameters:**
 - `status` (optional): Filter by status - `APPLIED`, `INTERVIEWING`, `ACCEPTED`, `REJECTED`
@@ -168,7 +168,7 @@ Retrieves all applicants with optional filtering by status or department.
 
 **Example Request:**
 ```bash
-curl -X GET "http://localhost:5000/api/applicants?status=APPLIED&limit=20" \
+curl -X GET "http://localhost:5000/api/v1/applicants?status=APPLIED&limit=20" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
@@ -177,12 +177,12 @@ curl -X GET "http://localhost:5000/api/applicants?status=APPLIED&limit=20" \
 ### 4. Update Applicant Status
 
 **Description:**  
-Updates an applicant's pipeline status. Only ADMIN/MEMBER users can update status.
+Updates an applicant's pipeline status. Only ADMIN_HR or MEMBER users can update status.
 
 **Method:** `PATCH`  
-**Path:** `/api/applicants/:applicantId/status`
+**Path:** `/api/v1/applicants/:applicantId/status`
 
-**Authentication:** Required (Bearer token, ADMIN/MEMBER only)
+**Authentication:** Required (Bearer token, ADMIN_HR or MEMBER only)
 
 **Request Parameters:**
 - `status` (enum, required): New status - `APPLIED`, `INTERVIEWING`, `ACCEPTED`, or `REJECTED`
@@ -204,7 +204,7 @@ Updates an applicant's pipeline status. Only ADMIN/MEMBER users can update statu
 
 **Example Request:**
 ```bash
-curl -X PATCH http://localhost:5000/api/applicants/660e8400-e29b-41d4-a716-446655440001/status \
+curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-446655440001/status \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -d '{
@@ -232,12 +232,12 @@ curl -X PATCH http://localhost:5000/api/applicants/660e8400-e29b-41d4-a716-44665
 ### 5. Update Applicant Details
 
 **Description:**  
-Updates an applicant's profile details. Only ADMIN/MEMBER users can update applicants.
+Updates an applicant's profile details. Only ADMIN_HR or MEMBER users can update applicants.
 
 **Method:** `PATCH`  
-**Path:** `/api/applicants/:applicantId`
+**Path:** `/api/v1/applicants/:applicantId`
 
-**Authentication:** Required (Bearer token, ADMIN/MEMBER only)
+**Authentication:** Required (Bearer token, ADMIN_HR or MEMBER only)
 
 **Request Parameters:**
 - `name` (string, optional): Updated name
@@ -266,7 +266,7 @@ Updates an applicant's profile details. Only ADMIN/MEMBER users can update appli
 
 **Example Request:**
 ```bash
-curl -X PATCH http://localhost:5000/api/applicants/660e8400-e29b-41d4-a716-446655440001 \
+curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-446655440001 \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -d '{
