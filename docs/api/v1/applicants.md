@@ -10,7 +10,7 @@ The Applicant Tracking API manages the recruitment and application pipeline for 
 ### 1. Create Applicant (Submit Application)
 
 **Description:**  
-Submits a new applicant to the MSC recruitment system. Validates required fields and URL links.
+Submits a new applicant to the MSC recruitment system. Must be preceded by a `POST /api/v1/ocr/verify` call to obtain an `ocrSessionId`. The backend validates the OCR session and sets `manual_application` accordingly.
 
 **Method:** `POST`  
 **Path:** `/api/v1/applicants`
@@ -21,6 +21,10 @@ Submits a new applicant to the MSC recruitment system. Validates required fields
 - `departmentChoice` (string, required): Preferred department (1-100 characters)
 - `resumeLink` (string, required): Valid URL to resume (e.g., Google Drive, GitHub, portfolio)
 - `githubLink` (string, required): Valid GitHub profile or repository URL
+- `studentId` (string, optional): QCU Student ID (YY-NNNN format), extracted from Zonal OCR, forwarded from OCR session
+- `ocrSessionId` (string, optional): OCR session token returned from `POST /api/v1/ocr/verify`
+
+**Security note:** `manual_application` is never client-settable. If the `ocrSessionId` indicates `manualRequired: true`, the backend sets `manual_application: true` regardless of the submitted `studentId` value.
 
 **Response Format:**
 ```json
@@ -33,6 +37,7 @@ Submits a new applicant to the MSC recruitment system. Validates required fields
     "departmentChoice": string,
     "resumeLink": string,
     "githubLink": string,
+    "studentId": string | null,
     "status": "APPLIED",
     "manual_application": boolean,
     "createdAt": string (ISO 8601)
@@ -50,7 +55,9 @@ curl -X POST http://localhost:5000/api/v1/applicants \
     "email": "jane@example.com",
     "departmentChoice": "Software Engineering",
     "resumeLink": "https://drive.google.com/file/d/1234567890",
-    "githubLink": "https://github.com/janesmith"
+    "githubLink": "https://github.com/janesmith",
+    "studentId": "23-5678",
+    "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004"
   }'
 ```
 
@@ -65,6 +72,7 @@ curl -X POST http://localhost:5000/api/v1/applicants \
     "departmentChoice": "Software Engineering",
     "resumeLink": "https://drive.google.com/file/d/1234567890",
     "githubLink": "https://github.com/janesmith",
+    "studentId": "23-5678",
     "status": "APPLIED",
     "manual_application": false,
     "createdAt": "2026-06-15T10:30:00Z"
@@ -96,6 +104,7 @@ Retrieves a specific applicant's details by their ID.
     "departmentChoice": string,
     "resumeLink": string,
     "githubLink": string,
+    "studentId": string | null,
     "status": "APPLIED" | "INTERVIEWING" | "ACCEPTED" | "REJECTED",
     "manual_application": boolean,
     "createdAt": string (ISO 8601),
@@ -122,6 +131,7 @@ curl -X GET http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-4466
     "departmentChoice": "Software Engineering",
     "resumeLink": "https://drive.google.com/file/d/1234567890",
     "githubLink": "https://github.com/janesmith",
+    "studentId": "23-5678",
     "status": "APPLIED",
     "manual_application": false,
     "createdAt": "2026-06-15T10:30:00Z",
@@ -162,6 +172,7 @@ Retrieves all applicants with optional filtering by status or department.
         "name": string,
         "email": string,
         "departmentChoice": string,
+        "studentId": string | null,
         "status": string,
         "manual_application": boolean,
         "createdAt": string
@@ -201,6 +212,7 @@ Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
     "id": string,
     "name": string,
     "email": string,
+    "studentId": string | null,
     "status": "APPLIED" | "INTERVIEWING" | "ACCEPTED" | "REJECTED",
     "manual_application": boolean,
     "updatedAt": string (ISO 8601)
@@ -227,6 +239,7 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
     "id": "660e8400-e29b-41d4-a716-446655440001",
     "name": "Jane Smith",
     "email": "jane@example.com",
+    "studentId": "23-5678",
     "status": "INTERVIEWING",
     "manual_application": false,
     "updatedAt": "2026-06-15T11:00:00Z"
@@ -265,6 +278,7 @@ Updates an applicant's profile details. Only ADMIN_HR users can update applicant
     "departmentChoice": string,
     "resumeLink": string,
     "githubLink": string,
+    "studentId": string | null,
     "status": string,
     "manual_application": boolean,
     "updatedAt": string (ISO 8601)

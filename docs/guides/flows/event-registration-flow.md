@@ -3,25 +3,27 @@
 ## Registration
 
 1. User clicks "Register Now".
-2. User captures an image of their Student ID.
-3. System performs Zonal OCR to extract student information.
-4. **If OCR succeeds:**
-   - Extracted data is used to automatically pre-fill the registration form.
+2. User captures an image of their Student ID using the guided camera overlay.
+3. Frontend sends the captured image to `POST /api/v1/ocr/verify`.
+4. Backend runs **Zonal OCR** on predefined QCU ID card zones.
+5. **If OCR succeeds:**
+   - Backend returns `{ studentId, fullName, manualRequired: false, ocrSessionId }`.
+   - Registration form is automatically pre-filled using extracted data.
    - User reviews and completes any remaining required fields.
-5. **If OCR fails 3 times:**
-   - User uploads a photo of their Student ID manually.
-   - User manually fills out the registration form.
+6. **If OCR fails 3 consecutive times:**
+   - Backend returns `{ manualRequired: true, ocrSessionId }`.
+   - Frontend reveals the manual entry and photo upload form (hidden by default).
    - Registration is flagged as:
      ```json
      {
        "manual_registration": true
      }
      ```
-   - Registration will require manual verification by organizers.
-6. User submits the registration form.
-7. System validates the Student ID against existing attendees to prevent duplicate registrations.
-8. **If validation succeeds:**
-   - User is shown a message instructing them to verify their email.
+7. User submits the registration form via `POST /api/v1/events/:eventId/register` with the `ocrSessionId`.
+8. Backend validates the OCR session and registers the attendee.
+   - If `manualRequired: true`, `manual_registration` is set to `true`.
+   - The system validates the Student ID against existing attendees to prevent duplicate registrations.
+9. User is shown a message instructing them to verify their email.
    - UI provides a "Change Email" option, which returns the user to the registration form.
    - User receives a verification email.
    - User clicks the verification link.
