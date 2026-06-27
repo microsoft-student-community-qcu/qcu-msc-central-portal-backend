@@ -20,7 +20,7 @@ Represents an authenticated user in the system. Users can have different roles t
 | `student_id` | string | QCU-issued student ID (format: YY-NNNN) | Unique, required, matches pattern `^\d{2}-\d{4}$` |
 | `emailVerified` | boolean | Email verification status | Defaults to false |
 | `image` | string \| null | Profile image URL | Optional |
-| `role` | enum: ADMIN_HR \| ADMIN_LOGISTICS \| MEMBER \| STUDENT | User's access level | Defaults to STUDENT |
+| `role` | enum: APPLICANT \| MEMBER \| ADMIN_HR \| ADMIN_LOGISTICS | User's access level | Defaults to APPLICANT |
 | `password` | string \| null | Hashed password | Optional (managed by Better Auth) |
 | `createdAt` | datetime | Account creation timestamp | Auto-generated |
 | `updatedAt` | datetime | Last update timestamp | Auto-updated |
@@ -35,7 +35,8 @@ Represents an authenticated user in the system. Users can have different roles t
 - `ADMIN_HR` (Admin — Management & Dev): Full access to the HR & Recruitment Pipeline — view/export applicant lists, access portfolio links, mutate application statuses, trigger branded emails to candidates.
 - `ADMIN_LOGISTICS` (Admin — Logistics): Full access to Event Logistics & Check-In — create event entries, view attendee rosters, use the QR scanner route (`/admin/events/scan`), perform manual check-in overrides.
 - `MEMBER`: Active QCU MSC student. Can register for all events (Public and Members-Only) and access internal community resources.
-- `STUDENT`: General student body (QCU Student, Non-Member). Can view the landing page and register for Public events only.
+- `APPLICANT`: Prospective QCU MSC member with a system account (created after email verification from the membership application). Can view the landing page, register for Public events, and track their application status.
+- **`Guest` (no User record):** A behavioral role for unauthenticated visitors — both External parties and QCU Students (Non-Member) who have not applied. Can view the landing page, submit sponsorship inquiries, and register for Public events via Zonal OCR without creating an account.
 
 > **Note:** `ADMIN_HR` and `ADMIN_LOGISTICS` are intentionally separate roles, not a single generic `ADMIN`. An HR admin should not have QR scanner access, and a Logistics admin should not be able to mutate applicant statuses — permissions are scoped per the PRD's distinct admin responsibilities.
 
@@ -157,14 +158,18 @@ Represents a student's registration for an event. Each registration generates a 
 | `event` | Event | Event object (relation) | Required |
 | `userId` | UUID \| null | User ID if registered member | Optional, foreign key |
 | `user` | User \| null | User object (relation) | Optional |
-| `email` | string | Attendee's email | Required (non-member registrations) |
-| `name` | string | Attendee's name | Required (non-member registrations) |
+| `studentId` | string \| null | QCU Student ID extracted via Zonal OCR (for guest registrations) | Optional |
+| `email` | string | Attendee's email | Required |
+| `name` | string | Attendee's full name | Required |
+| `status` | enum: APPROVED \| PENDING_REVIEW \| REJECTED \| CANCELLED | Registration lifecycle status | Defaults to APPROVED |
+| `manual_registration` | boolean | Flagged true when OCR fails and manual upload is used | Defaults to false |
 | `qrPayload` | string | Unique UUID for QR code | Unique, auto-generated |
 | `hasAttended` | boolean | Attendance confirmation flag | Defaults to false |
 | `createdAt` | datetime | Registration timestamp | Auto-generated |
 
 **Constraints:**
-- `@@unique([eventId, userId])` — one registration per user per event.
+- `@@unique([eventId, userId])` — one registration per authenticated user per event.
+- `@@unique([eventId, studentId])` — one registration per student ID per event (for guest registrations).
 
 **Example:**
 ```json
@@ -172,8 +177,11 @@ Represents a student's registration for an event. Each registration generates a 
   "id": "880e8400-e29b-41d4-a716-446655440003",
   "eventId": "770e8400-e29b-41d4-a716-446655440002",
   "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "studentId": null,
   "email": "user@example.com",
   "name": "John Member",
+  "status": "APPROVED",
+  "manual_registration": false,
   "qrPayload": "880e8400-e29b-41d4-a716-446655440003",
   "hasAttended": false,
   "createdAt": "2026-06-15T11:00:00Z"
@@ -278,7 +286,7 @@ Event (1) ──→ (Many) Registration
 - Email must be unique across the system
 - Student ID must be unique across the system and follow the format YY-NNNN (e.g., 23-1234)
 - Password handled by Better Auth, not validated/stored directly via the public signup schema
-- Role must be one of: ADMIN_HR, ADMIN_LOGISTICS, MEMBER, STUDENT — **never client-settable on creation**, always defaults to STUDENT server-side
+- Role must be one of: APPLICANT, MEMBER, ADMIN_HR, ADMIN_LOGISTICS — **never client-settable on creation**, always defaults to APPLICANT server-side
 - Name must be 1-100 characters
 
 ### Applicant
@@ -298,10 +306,13 @@ Event (1) ──→ (Many) Registration
 - Only `ADMIN_LOGISTICS` may create or update events
 
 ### Registration
-- Only one registration per user per event (unique constraint on eventId + userId)
-- For non-member registrations: email and name are required
+- Only one registration per authenticated user per event (unique constraint on eventId + userId)
+- Only one registration per student ID per event (unique constraint on eventId + studentId) — covers guest registrations
+- For guest registrations: `studentId` is required (captured via Zonal OCR), `userId` is null
+- Email and name are always required
 - QR payload must be unique (auto-generated UUID)
 - Requests during the Priority Window from non-Members are rejected with 403
+- Registrations with `manual_registration: true` enter Path B (manual review) and have `status: PENDING_REVIEW`
 
 ### SponsorshipInquiry
 - Email must be valid format
@@ -341,3 +352,4 @@ When evolving data models:
 |------|--------|
 | 2026-06-20 | Realigned with PRD-V1: split single `ADMIN` role into `ADMIN_HR`/`ADMIN_LOGISTICS`, added `priorityStartDate`/`generalStartDate` to Event, added `SponsorshipInquiry` model, added `Applicant.userId` link, added `Registration` unique composite constraint |
 | 2026-06-24 | Added `student_id` field to User model (unique identifier, YY-NNNN format) with corresponding schema, type, and Better Auth config updates |
+| 2026-06-27 | Synced with PRD-V1 4-role model: removed `STUDENT` from User role enum, added `APPLICANT`; added `Guest` behavioral role (no User record); added `studentId`, `status`, `manual_registration` to Registration model; updated validation rules |
