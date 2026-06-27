@@ -14,6 +14,8 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default("7d"),
   BETTER_AUTH_SECRET: z.string().min(8),
   BETTER_AUTH_URL: z.string().url(),
+  IMAGE_STORAGE_PATH: z.string().default("./uploads/ocr"),
+  OCR_MAX_FAILURES: z.coerce.number().int().positive().default(3),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

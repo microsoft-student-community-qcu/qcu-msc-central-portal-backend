@@ -111,6 +111,19 @@ Guests have no User record (behavioral role only).
 - `manual_registration: true` means OCR failed → manual upload → enters Path B (admin review)
 - `@@unique([eventId, studentId])` prevents duplicate guest registrations per event
 
+## Zonal OCR Conventions
+
+- The OCR flow follows a two-step pattern:
+  1. `POST /api/v1/ocr/verify` — upload image, backend runs Zonal OCR, returns `ocrSessionId`
+  2. Submission endpoint (e.g., `POST /api/v1/applicants`) — forward `ocrSessionId` for server-side verification
+- The OCR engine lives in `src/services/ocr.service.ts` using Tesseract.js with predefined QCU ID card zones.
+- OCR failures are tracked per client IP in an in-memory store (`src/config/ocrStore.ts`) with a 1-hour TTL.
+- After `OCR_MAX_FAILURES` consecutive failures, the endpoint returns `manualRequired: true` and the frontend must show manual entry.
+- Uploaded ID images (both success and failure) are saved to `IMAGE_STORAGE_PATH` for audit purposes.
+- Rate limit: 10 requests per minute per IP for the OCR endpoint.
+- Public OCR routes are registered BEFORE auth middleware in `src/app.ts`.
+- Zone coordinates for Zonal OCR are defined as absolute pixel values in `src/services/ocr.service.ts` — these must be re-calibrated against an actual QCU Student ID template during testing.
+
 ## Documentation Obligations
 
 - Update `/docs` whenever code changes affect:

@@ -1,12 +1,16 @@
 import express from "express";
 import cors from "cors";
 import { authMiddleware } from "./routes/authMiddleware";
+import ocrRoutes from "./routes/ocr.routes";
 
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Public routes (no auth required)
+app.use("/api/v1/ocr", ocrRoutes);
 
 /**
  * Authentication middleware - extracts JWT token from Authorization header.
