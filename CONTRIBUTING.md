@@ -81,6 +81,7 @@ When adding a new endpoint:
 - [ ] Zod schemas created or updated for new/modified endpoints
 - [ ] API documentation updated in `docs/api/`
 - [ ] Data model docs updated if the Prisma schema changed
+- [ ] RBAC guards match the 4-role model (no bare `"ADMIN"` or `"STUDENT"` checks)
 - [ ] `src/config/env.ts` updated if new environment variables were added
 - [ ] Branch is up-to-date with the target branch
 - [ ] Endpoint tested with HTTP client (POSTMAN, HTTPie, Thunder Client, etc.) against payloads documented in `docs/api/v{N}/`
