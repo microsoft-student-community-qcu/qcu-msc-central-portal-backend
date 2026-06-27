@@ -70,6 +70,19 @@ qcu-msc-central-portal-backend/
 - Deprecation policy: document deprecated endpoints in `/docs/api/` with a deprecation timeline and migration notes.
 - Maintain backward compatibility within a major version; non-breaking additions may be added under the same major version.
 
+## Role-Based Access Control (RBAC)
+
+- Auth middleware lives in `src/routes/authMiddleware.ts`.
+- Use the role-specific guards instead of checking roles inline:
+  - `requireAuth` — any authenticated user (APPLICANT, MEMBER, or admin)
+  - `requireAdminHR` — ADMIN_HR only
+  - `requireAdminLogistics` — ADMIN_LOGISTICS only
+  - `requireAnyAdmin` — ADMIN_HR or ADMIN_LOGISTICS
+  - `requireMemberOrAdmin` — MEMBER, ADMIN_HR, or ADMIN_LOGISTICS
+- Guest endpoints (no auth required) must not use any `require*` guard.
+- APPLICANT-only routes use `requireAuth` alone (no additional guard).
+- Never reference bare `"ADMIN"` or `"STUDENT"` in role checks — those roles do not exist.
+
 ## Database & Schema
 
 - The Prisma schema lives at `prisma/schema.prisma`.
@@ -77,6 +90,26 @@ qcu-msc-central-portal-backend/
 - Create a new migration after schema changes: `npm run prisma:migrate`.
 - Environment variables are validated via Zod in `src/config/env.ts` at startup.
 - All database connection strings use the `DATABASE_URL` env variable.
+
+### UserRole Enum
+
+The system uses a strict 4-role model (no bare `ADMIN` or `STUDENT`):
+
+| Role | Description |
+|------|-------------|
+| `APPLICANT` | Post-account-creation, pending membership approval |
+| `MEMBER` | Active QCU MSC member |
+| `ADMIN_HR` | Management & Dev — applicant pipeline only |
+| `ADMIN_LOGISTICS` | Logistics — event management only |
+
+Guests have no User record (behavioral role only).
+
+### Registration Model Conventions
+
+- `status` uses the `RegistrationStatus` enum: `APPROVED`, `PENDING_REVIEW`, `REJECTED`, `CANCELLED`
+- `studentId` stores the QCU Student ID from Zonal OCR (guest registrations)
+- `manual_registration: true` means OCR failed → manual upload → enters Path B (admin review)
+- `@@unique([eventId, studentId])` prevents duplicate guest registrations per event
 
 ## Documentation Obligations
 
@@ -87,6 +120,7 @@ qcu-msc-central-portal-backend/
   - workflows
 - If a new feature is added, create a corresponding doc file.
 - Keep documentation consistent with actual implementation (no outdated docs allowed).
+- Flow diagrams live in `docs/guides/flows/` — update these when registration, membership, or cancellation logic changes.
 
 ## Testing Expectations
 
