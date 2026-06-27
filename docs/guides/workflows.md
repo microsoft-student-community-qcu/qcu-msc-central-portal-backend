@@ -1,7 +1,7 @@
 # Core Workflows
 
 ## Overview
-This document describes the primary business workflows and user journeys in the QCU MSC Central Portal.
+This document describes the primary business workflows and user journeys in the QCU MSC Central Portal. Detailed step-by-step flow diagrams for key processes are maintained in [docs/guides/flows/](flows/).
 
 ---
 
@@ -78,31 +78,19 @@ User authenticated ✓
 
 ### Application Submission
 
-```
-Prospective member visits applicant portal
-	↓
-User fills application form:
-  - Name, Email, Department choice
-  - Resume URL (Google Drive, GitHub, etc.)
-  - GitHub profile link
-	↓
-System validates input (Zod schema: createApplicantSchema)
-	↓
-Email already exists? → Error: "You've already applied"
-	↓
-URLs valid? (HTTP/HTTPS check)
-	↓
-Create Applicant record with status = "APPLIED"
-	↓
-Send confirmation email to applicant
-	↓
-Applicant dashboard shows "Application Submitted" ✓
-```
+The applicant flow has been significantly updated with Zonal OCR verification and post-submission account creation. See the detailed flow diagram in [flows/membership-application-flow.md](flows/membership-application-flow.md).
+
+**Summary:**
+1. User captures an image of their Student ID for Zonal OCR pre-validation.
+2. On success, the form is auto-filled; after 3 OCR failures, a manual upload fallback is revealed.
+3. User submits the application (portfolio/resume links required).
+4. System sends an email with a password setup link (also serves as email verification).
+5. User sets a password → account activated → redirected to `/portal/tracking`.
 
 **Key Decision Points:**
 - No authentication required for submission (open recruitment)
-- Email uniqueness enforced (one application per person)
-- Status starts as APPLIED
+- Student ID verified via Zonal OCR + Regex
+- Manual fallback applications flagged as `{"manual_application": true}` for admin review
 
 ---
 
@@ -114,6 +102,13 @@ Member/Admin logs in to dashboard
 Accesses "Applicant Tracking" section
 	↓
 Views list of all applications (filtered by status)
+	↓
+Quarantine Queue — Applicants with "Pending ID Verification"
+  flagged with a warning icon
+	↓
+  Click → Specialized view with uploaded ID photo
+           side-by-side with typed student number
+  "Approve ID" → unlocks status mutator
 	↓
 Member views applicant details:
   - Name, email, department choice
@@ -190,82 +185,30 @@ Event appears in event listings
 
 ### Event Registration Workflow
 
-### For Public Events (Non-Member Registration)
+The registration flow now includes Zonal OCR verification, email verification, and two approval paths. See the detailed flow diagram in [flows/event-registration-flow.md](flows/event-registration-flow.md).
 
-```
-Student visits event listing
-	↓
-Clicks on PUBLIC event
-	↓
-Views event details (title, description, date, capacity)
-	↓
-Clicks "Register"
-	↓
-Fills registration form:
-  - Name, email
-  - No authentication needed
-	↓
-System validates input (Zod schema: registerEventSchema)
-	↓
-Check: Event capacity reached?
-	↓ Yes: Error: "Event is at full capacity"
-	↓ No: Continue
-	↓
-Check: Already registered with this email?
-	↓ Yes: Error: "Already registered for this event"
-	↓ No: Continue
-	↓
-Generate unique QR payload (UUID)
-	↓
-Create Registration record:
-  - eventId, name, email
-  - userId = null (non-member)
-  - qrPayload = unique UUID
-  - hasAttended = false
-	↓
-Send confirmation email with QR code
-	↓
-Student receives email with event details and QR
-	↓
-Registration complete ✓
-```
+**Summary:**
+1. User clicks "Register Now" and captures an image of their Student ID.
+2. System performs Zonal OCR to extract and validate the student number.
+3. After 3 OCR failures, a manual upload fallback is revealed.
+4. User submits the registration form (Name + Email).
+5. System validates the student number against existing attendees to prevent duplicates.
+6. User receives an email verification link.
+7. After verification, the system follows one of two paths:
 
-### For Members-Only Events (Authenticated)
+**Path A — Automatic Approval** (`manual_registration: false`):
+- QR Ticket / QR Pass is immediately dispatched via email.
+- Status: `approved`
 
-```
-Authenticated member logs in
-	↓
-Clicks on MEMBERS_ONLY event
-	↓
-User role check:
-  ├─→ ADMIN or MEMBER: Can register ✓
-  ├─→ STUDENT: Error: "Members only event"
-  └─→ Not authenticated: Error: "Please login"
-	↓
-Clicks "Register"
-	↓
-System auto-fills name, email from user profile
-	↓
-Check: Event capacity reached?
-	↓ Yes: Error: "Event is at full capacity"
-	↓ No: Continue
-	↓
-Check: Already registered (userId + eventId)?
-	↓ Yes: Error: "You're already registered for this event"
-	↓ No: Continue
-	↓
-Generate unique QR payload (UUID)
-	↓
-Create Registration record:
-  - eventId, userId (from session)
-  - name, email (from User record)
-  - qrPayload = unique UUID
-  - hasAttended = false
-	↓
-Send confirmation email with QR code
-	↓
-Registration complete ✓
-```
+**Path B — Manual Review** (`manual_registration: true`):
+- Registration enters a pending review queue.
+- Admin reviews the uploaded ID and submitted information.
+- On approval: QR Ticket dispatched, status → `approved`.
+- On rejection: status → `rejected` with optional reason.
+
+**For Members-Only Events (Authenticated):**
+- Authenticated members bypass the Zonal OCR entirely — credentials are auto-pulled.
+- System checks role (ADMIN/MEMBER only) and capacity, then dispatches the QR ticket directly.
 
 ---
 
@@ -302,6 +245,7 @@ Attendance recorded ✓
 
 ### Event Cancellation Workflow
 
+#### Admin-Driven (Whole Event)
 ```
 Event date approaching
 	↓
@@ -326,6 +270,10 @@ Cancellation data retained in audit logs
 - Deletion is permanent (no soft delete for events currently)
 - All registrations for the event are removed
 - Registrants notified of cancellation
+
+#### User-Driven (Individual Registration)
+
+Attendees can cancel their own registration via a unique cancellation link. See [flows/registration-cancellation-flow.md](flows/registration-cancellation-flow.md) for the detailed flow.
 
 ---
 
@@ -431,6 +379,8 @@ POST /api/events/:eventId/attendance/:qrCode
 
 **Completion:** The system verifies the student number against the current attendee roster to prevent duplicate registration, generates a unique QR payload, and dispatches the digital ticket via website and email.
 
+> **Detailed flow:** [flows/event-registration-flow.md](flows/event-registration-flow.md)
+
 ### 3. The Applicant (Prospective Member)
 
 **Goal:** Apply for official membership in the QCU Microsoft Student Community.
@@ -444,6 +394,8 @@ POST /api/events/:eventId/attendance/:qrCode
 **Account Creation:** Immediately upon submission, creates a secure account by setting a password paired with their verified QCU email.
 
 **Completion:** Is routed to `/portal/tracking` (the Applicant Dashboard) to view their application status tracker, update timeline, and check the notification inbox for messages from the M&D team.
+
+> **Detailed flow:** [flows/membership-application-flow.md](flows/membership-application-flow.md)
 
 ### 4. The Member (Active QCU MSC Student)
 
