@@ -34,7 +34,7 @@ Account activated ✓
 ```
 
 **Key Decision Points:**
-- Role assignment: Defaults to APPLICANT (admin assigns to MEMBER, ADMIN_HR, or ADMIN_LOGISTICS via admin panel)
+- Role assignment: Defaults to APPLICANT (admin assigns to ADMIN_HR, or ADMIN_LOGISTICS via admin panel)
 - Email verification: Required before full access
 
 ---
@@ -94,10 +94,10 @@ The applicant flow has been significantly updated with Zonal OCR verification an
 
 ---
 
-### Applicant Pipeline Management (Admin/Member)
+### Applicant Pipeline Management (ADMIN_HR or MEMBER)
 
 ```
-Member/Admin logs in to dashboard
+MEMBER or ADMIN_HR logs in to dashboard
 	↓
 Accesses "Applicant Tracking" section
 	↓
@@ -144,7 +144,7 @@ APPLIED (initial)
 ```
 
 **Key Decision Points:**
-- Only ADMIN_HR and MEMBER can update status
+- Only ADMIN_HR can update status
 - Accepted applicants automatically become MEMBER users
 - Email notifications sent at each status transition
 
@@ -152,10 +152,10 @@ APPLIED (initial)
 
 ## 3. Event Management Workflow
 
-### Create Event (Admin/Member)
+### Create Event (ADMIN_LOGISTICS)
 
 ```
-Member/Admin logs in
+ADMIN_LOGISTICS logs in
 	↓
 Clicks "Create Event"
 	↓
@@ -208,7 +208,7 @@ The registration flow now includes Zonal OCR verification, email verification, a
 
 **For Members-Only Events (Authenticated):**
 - Authenticated members bypass the Zonal OCR entirely — credentials are auto-pulled.
-- System checks role (ADMIN/MEMBER only) and capacity, then dispatches the QR ticket directly.
+- System checks role (ADMIN_LOGISTICS/MEMBER only) and capacity, then dispatches the QR ticket directly.
 
 ---
 
@@ -217,7 +217,7 @@ The registration flow now includes Zonal OCR verification, email verification, a
 ```
 Event day arrives
 	↓
-Member/Admin opens check-in dashboard
+MEMBER or ADMIN_LOGISTICS opens check-in dashboard
 	↓
 Views event and list of registrations
 	↓
@@ -300,7 +300,7 @@ ADMIN_HR / ADMIN_LOGISTICS (highest privilege)
 
 MEMBER (medium privilege)
   ├─ All APPLICANT permissions
-  ├─ Create/Edit events
+  ├─ Create/Update events
   ├─ View applicant tracking
   ├─ Update applicant statuses (excluding final accept)
   ├─ View event registrations
@@ -332,7 +332,7 @@ GET /api/v1/users/me
 
 POST /api/v1/events/:eventId/register
   ├─ Unauthenticated (Guest): Allowed ✓ (account-free registration via Zonal OCR, studentId required)
-  ├─ APPLICANT/MEMBER/ADMIN: Allowed ✓ (auto-pulls credentials, no studentId needed)
+  ├─ APPLICANT/MEMBER/ADMIN_LOGISTICS: Allowed ✓ (auto-pulls credentials, no studentId needed)
   └─ Already registered: Error 409 (Conflict)
 
 GET /api/v1/applicants/:id

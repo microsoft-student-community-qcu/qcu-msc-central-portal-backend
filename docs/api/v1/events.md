@@ -312,12 +312,12 @@ curl -X POST http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-4466554
 ### 7. Get Event Registrations
 
 **Description:**  
-Retrieves all registrations for a specific event. Only ADMIN_LOGISTICS and MEMBER users can view.
+Retrieves all registrations for a specific event. Only ADMIN_LOGISTICS can view.
 
 **Method:** `GET`  
 **Path:** `/api/v1/events/:eventId/registrations`
 
-**Authentication:** Required (Bearer token, ADMIN_LOGISTICS or MEMBER)
+**Authentication:** Required (Bearer token, ADMIN_LOGISTICS)
 
 **Query Parameters:**
 - `hasAttended` (optional): Filter by attendance status (true/false)
