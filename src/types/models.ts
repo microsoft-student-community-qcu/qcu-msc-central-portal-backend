@@ -11,8 +11,9 @@
 
 /**
  * Strict union of all user roles defined in the PRD.
+ * Guest is a behavioral role (no User record) — not included here.
  */
-export type UserRole = "ADMIN" | "MEMBER" | "STUDENT";
+export type UserRole = "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS";
 
 /**
  * Strict union of all applicant pipeline statuses.
@@ -44,11 +45,15 @@ export interface User {
 }
 
 /**
- * Narrowed Admin type — a User whose role is strictly 'ADMIN'.
- * Use this type in admin-only controllers and middleware guards.
+ * Narrowed Admin types — a User whose role is strictly one of the admin roles.
+ * Use these types in admin-only controllers and middleware guards.
  */
-export interface Admin extends Omit<User, "role"> {
-  role: "ADMIN";
+export interface AdminHR extends Omit<User, "role"> {
+  role: "ADMIN_HR";
+}
+
+export interface AdminLogistics extends Omit<User, "role"> {
+  role: "ADMIN_LOGISTICS";
 }
 
 // ---------------------------------------------------------------------------
@@ -97,17 +102,27 @@ export interface Event {
 // ---------------------------------------------------------------------------
 
 /**
+ * Registration lifecycle status — mirrors Prisma RegistrationStatus.
+ */
+export type RegistrationStatus = "APPROVED" | "PENDING_REVIEW" | "REJECTED" | "CANCELLED";
+
+/**
  * Domain model for a student's event registration ticket.
- * Supports both authenticated Members and unauthenticated Students.
+ * Supports both authenticated Members and unauthenticated Guests.
  */
 export interface Registration {
   id: string;
   eventId: string;
-  /** Null for non-member walk-in registrations. */
+  /** Null for guest registrations (no User record). */
   userId: string | null;
-  /** Stored for non-member registrations that have no User record. */
+  /** QCU Student ID from Zonal OCR — used for guest registrations. */
+  studentId: string | null;
   email: string;
   name: string;
+  /** Registration lifecycle status. */
+  status: RegistrationStatus;
+  /** Flagged true when OCR fails and manual upload is used. */
+  manualRegistration: boolean;
   /** Unique UUID payload embedded in the generated QR code. */
   qrPayload: string;
   hasAttended: boolean;

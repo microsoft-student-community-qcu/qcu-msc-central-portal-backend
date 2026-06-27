@@ -50,10 +50,39 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 
 /**
- * Middleware to require admin role.
+ * Middleware to require ADMIN_HR role.
  */
-export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  if ((req as any).userRole !== "ADMIN") {
+export function requireAdminHR(req: Request, res: Response, next: NextFunction): void {
+  if ((req as any).userRole !== "ADMIN_HR") {
+    res.status(403).json({
+      success: false,
+      error: "Forbidden - ADMIN_HR access required",
+    });
+    return;
+  }
+  next();
+}
+
+/**
+ * Middleware to require ADMIN_LOGISTICS role.
+ */
+export function requireAdminLogistics(req: Request, res: Response, next: NextFunction): void {
+  if ((req as any).userRole !== "ADMIN_LOGISTICS") {
+    res.status(403).json({
+      success: false,
+      error: "Forbidden - ADMIN_LOGISTICS access required",
+    });
+    return;
+  }
+  next();
+}
+
+/**
+ * Middleware to require ADMIN_HR or ADMIN_LOGISTICS (any admin sub-type).
+ */
+export function requireAnyAdmin(req: Request, res: Response, next: NextFunction): void {
+  const userRole = (req as any).userRole;
+  if (!["ADMIN_HR", "ADMIN_LOGISTICS"].includes(userRole)) {
     res.status(403).json({
       success: false,
       error: "Forbidden - admin access required",
@@ -64,14 +93,14 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
 }
 
 /**
- * Middleware to require admin or member role.
+ * Middleware to require MEMBER, ADMIN_HR, or ADMIN_LOGISTICS role.
  */
-export function requireAdminOrMember(req: Request, res: Response, next: NextFunction): void {
+export function requireMemberOrAdmin(req: Request, res: Response, next: NextFunction): void {
   const userRole = (req as any).userRole;
-  if (!["ADMIN", "MEMBER"].includes(userRole)) {
+  if (!["MEMBER", "ADMIN_HR", "ADMIN_LOGISTICS"].includes(userRole)) {
     res.status(403).json({
       success: false,
-      error: "Forbidden - ADMIN or MEMBER access required",
+      error: "Forbidden - MEMBER or admin access required",
     });
     return;
   }
