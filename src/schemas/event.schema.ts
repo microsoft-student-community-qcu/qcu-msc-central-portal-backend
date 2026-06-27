@@ -6,6 +6,13 @@ export const eventTypeEnum = z.enum(["PUBLIC", "MEMBERS_ONLY"], {
   error: "Event type must be PUBLIC or MEMBERS_ONLY",
 });
 
+// Zod enum for RegistrationStatus values.
+// Mirrors Prisma RegistrationStatus exactly.
+export const registrationStatusEnum = z.enum(
+  ["APPROVED", "PENDING_REVIEW", "REJECTED", "CANCELLED"],
+  { error: "Status must be APPROVED, PENDING_REVIEW, REJECTED, or CANCELLED" }
+);
+
 // Schema for creating a new event.
 // Restricted to ADMIN_LOGISTICS routes per PRD-V1: only Admin (Logistics)
 // can create event entries.
@@ -44,19 +51,25 @@ export const createEventSchema = z
 // Schema for updating an event's details.
 export const updateEventSchema = createEventSchema.partial();
 
-// Schema for registering a student or guest to an event.
-// userId is optional — populated for member registrations, null for
-// non-member registrations (name/email used instead).
+// Schema for registering a guest (account-free) or authenticated member to an event.
+// studentId is required for guest registrations (captured via Zonal OCR);
+// userId is auto-attached from JWT for authenticated members, not client-settable.
+// manual_registration is set server-side when OCR fails (3 attempts).
 export const registerEventSchema = z.object({
   name: z
     .string()
     .min(1, "Name is required")
     .max(100, "Name must be less than 100 characters"),
   email: z.string().email("Invalid email address format"),
-  userId: z.string().uuid("User ID must be a valid UUID").optional().nullable(),
+  studentId: z
+    .string()
+    .regex(/^\d{2}-\d{4}$/, "Student ID must be in format YY-NNNN (e.g., 23-1234)")
+    .optional()
+    .nullable(),
 });
 
 export type CreateEventSchema = z.infer<typeof createEventSchema>;
 export type UpdateEventSchema = z.infer<typeof updateEventSchema>;
 export type RegisterEventSchema = z.infer<typeof registerEventSchema>;
 export type EventTypeEnum = z.infer<typeof eventTypeEnum>;
+export type RegistrationStatusEnum = z.infer<typeof registrationStatusEnum>;

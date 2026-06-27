@@ -15,10 +15,10 @@ generator client {
 // Split ADMIN into domain-specific admins per PRD-V1 Section 2:
 // Admin (Management & Dev) and Admin (Logistics) have distinct permissions.
 enum UserRole {
+  APPLICANT
+  MEMBER
   ADMIN_HR
   ADMIN_LOGISTICS
-  MEMBER
-  STUDENT
 }
 
 // Applicant status enumeration for tracking recruitment pipeline.
@@ -33,6 +33,15 @@ enum ApplicantStatus {
 enum EventType {
   PUBLIC
   MEMBERS_ONLY
+}
+
+// Registration lifecycle status for event registrations.
+// Supports Path A (auto-approve) and Path B (manual review) flows per PRD-V1.
+enum RegistrationStatus {
+  APPROVED
+  PENDING_REVIEW
+  REJECTED
+  CANCELLED
 }
 
 // Sponsorship inquiry status enumeration for Relations Office tracking.
@@ -54,7 +63,7 @@ model User {
   studentId     String         @unique
   emailVerified Boolean        @default(false)
   image         String?
-  role          UserRole       @default(STUDENT)
+  role          UserRole       @default(APPLICANT)
   password      String?        // Optional password field (managed by Better Auth in Account table)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -132,18 +141,22 @@ model Event {
 }
 
 model Registration {
-  id          String   @id @default(uuid())
-  eventId     String
-  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  userId      String?
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  email       String // For non-members registering
-  name        String // For non-members registering
-  qrPayload   String   @unique // Unique UUID for QR code verification
-  hasAttended Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id                 String             @id @default(uuid())
+  eventId            String
+  event              Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId             String?
+  user               User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  studentId          String?            // QCU Student ID from Zonal OCR (guest registrations)
+  email              String
+  name               String
+  status             RegistrationStatus @default(APPROVED)
+  manual_registration Boolean           @default(false) // Flagged true when OCR fails → manual upload
+  qrPayload          String             @unique // Unique UUID for QR code verification
+  hasAttended        Boolean            @default(false)
+  createdAt          DateTime           @default(now())
 
-  @@unique([eventId, userId]) // One registration per user per event
+  @@unique([eventId, userId])    // One registration per authenticated user per event
+  @@unique([eventId, studentId]) // One registration per student ID per event (guests)
 }
 
 // Sponsorship inquiry capture — PRD-V1: Guest (External) can submit

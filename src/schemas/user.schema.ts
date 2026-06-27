@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const userRoleEnum = z.enum(
-  ["ADMIN_HR", "ADMIN_LOGISTICS", "MEMBER", "STUDENT"],
-  { error: "Role must be ADMIN_HR, ADMIN_LOGISTICS, MEMBER, or STUDENT" }
+  ["APPLICANT", "MEMBER", "ADMIN_HR", "ADMIN_LOGISTICS"],
+  { error: "Role must be APPLICANT, MEMBER, ADMIN_HR, or ADMIN_LOGISTICS" }
 );
 
 export const createUserSchema = z.object({
