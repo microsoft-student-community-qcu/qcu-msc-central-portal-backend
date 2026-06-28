@@ -261,7 +261,9 @@ Registers a guest (no account required) or authenticated member for an event. Gu
 **Path:** `/api/v1/events/:eventId/register`
 
 **Request Parameters:**
-- `name` (string, required): Attendee's name (1-100 characters)
+- `lastName` (string, required): Attendee's last name (1-100 characters)
+- `firstName` (string, required): Attendee's first name (1-100 characters)
+- `middleInitial` (string, optional): Middle initial, single letter optionally followed by a dot
 - `email` (string, required): Attendee's email address
 - `studentId` (string, optional): QCU Student ID (YY-NNNN format), required for guest registrations (extracted via Zonal OCR, forwarded from OCR session), auto-pulled for authenticated members
 - `ocrSessionId` (string, optional): OCR session token returned from `POST /api/v1/ocr/verify`
@@ -274,7 +276,9 @@ Registers a guest (no account required) or authenticated member for an event. Gu
   "data": {
     "registrationId": string,
     "eventId": string,
-    "name": string,
+    "lastName": string,
+    "firstName": string,
+    "middleInitial": string | null,
     "email": string,
     "status": "APPROVED" | "PENDING_REVIEW",
     "manual_registration": boolean,
@@ -343,7 +347,9 @@ Retrieves all registrations for a specific event. Only ADMIN_LOGISTICS can view.
     "registrations": [
       {
         "registrationId": string,
-        "name": string,
+        "lastName": string,
+    "firstName": string,
+    "middleInitial": string | null,
         "email": string,
         "hasAttended": boolean,
         "createdAt": string

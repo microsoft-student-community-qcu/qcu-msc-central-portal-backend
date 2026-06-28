@@ -16,7 +16,9 @@ Represents an authenticated user in the system. Users can have different roles t
 |-------|------|-------------|-------------|
 | `id` | UUID | Unique identifier (auto-generated) | Primary key, auto-generated |
 | `email` | string | User's email address | Unique, required, valid email format |
-| `name` | string | User's full name | Required, 1-100 characters |
+| `lastName` | string | User's last name | Required, 1-100 characters |
+| `firstName` | string | User's first name | Required, 1-100 characters |
+| `middleInitial` | string \| null | User's middle initial (single letter, with or without dot) | Optional |
 | `student_id` | string | QCU-issued student ID (format: YY-NNNN) | Unique, required, matches pattern `^\d{2}-\d{4}$` |
 | `emailVerified` | boolean | Email verification status | Defaults to false |
 | `image` | string \| null | Profile image URL | Optional |
@@ -45,7 +47,9 @@ Represents an authenticated user in the system. Users can have different roles t
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "email": "hr.officer@qcu.edu",
-  "name": "HR Officer",
+  "lastName": "Officer",
+  "firstName": "HR",
+  "middleInitial": null,
   "student_id": "23-1234",
   "emailVerified": true,
   "image": null,
@@ -65,7 +69,9 @@ Represents a prospective MSC member who has submitted an application through the
 | Field | Type | Description | Constraints |
 |-------|------|-------------|-------------|
 | `id` | UUID | Unique identifier (auto-generated) | Primary key, auto-generated |
-| `name` | string | Applicant's full name | Required, 1-100 characters |
+| `lastName` | string | Applicant's last name | Required, 1-100 characters |
+| `firstName` | string | Applicant's first name | Required, 1-100 characters |
+| `middleInitial` | string \| null | Applicant's middle initial (single letter, with or without dot) | Optional |
 | `email` | string | Applicant's email | Unique, required, valid email |
 | `departmentChoice` | string | Preferred department/specialization | Required, 1-100 characters |
 | `resumeLink` | string | URL to applicant's resume | Required, valid URL (must be HTTP/HTTPS) |
@@ -95,7 +101,9 @@ Represents a prospective MSC member who has submitted an application through the
 ```json
 {
   "id": "660e8400-e29b-41d4-a716-446655440001",
-  "name": "Jane Smith",
+  "lastName": "Smith",
+  "firstName": "Jane",
+  "middleInitial": null,
   "email": "jane@example.com",
   "departmentChoice": "Software Engineering",
   "resumeLink": "https://drive.google.com/file/d/1234567890",
@@ -170,7 +178,9 @@ Represents a student's registration for an event. Each registration generates a 
 | `user` | User \| null | User object (relation) | Optional |
 | `studentId` | string \| null | QCU Student ID extracted via Zonal OCR (for guest registrations) | Optional |
 | `email` | string | Attendee's email | Required |
-| `name` | string | Attendee's full name | Required |
+| `lastName` | string | Attendee's last name | Required |
+| `firstName` | string | Attendee's first name | Required |
+| `middleInitial` | string \| null | Attendee's middle initial (single letter, with or without dot) | Optional |
 | `status` | enum: APPROVED \| PENDING_REVIEW \| REJECTED \| CANCELLED | Registration lifecycle status | Defaults to APPROVED |
 | `manual_registration` | boolean | Flagged true when OCR fails and manual upload is used | Defaults to false |
 | `qrPayload` | string | Unique UUID for QR code | Unique, auto-generated |
@@ -195,7 +205,9 @@ Represents a student's registration for an event. Each registration generates a 
   "userId": "550e8400-e29b-41d4-a716-446655440000",
   "studentId": null,
   "email": "user@example.com",
-  "name": "John Member",
+  "lastName": "Member",
+  "firstName": "John",
+  "middleInitial": null,
   "status": "APPROVED",
   "manual_registration": false,
   "qrPayload": "880e8400-e29b-41d4-a716-446655440003",

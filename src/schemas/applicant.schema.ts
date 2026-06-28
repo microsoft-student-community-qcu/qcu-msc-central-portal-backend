@@ -27,10 +27,23 @@ export const applicantStatusEnum = z.enum(
  * OCR session returned studentId: null with manualRequired: true.
  */
 export const createApplicantSchema = z.object({
-  name: z
-    .string({ message: "Full name is required" })
-    .min(1, "Full name cannot be empty")
-    .max(100, "Full name must be under 100 characters"),
+  lastName: z
+    .string({ message: "Last name is required" })
+    .min(1, "Last name cannot be empty")
+    .max(100, "Last name must be under 100 characters"),
+
+  firstName: z
+    .string({ message: "First name is required" })
+    .min(1, "First name cannot be empty")
+    .max(100, "First name must be under 100 characters"),
+
+  middleInitial: z
+    .string({ message: "Middle initial must be a text value" })
+    .regex(
+      /^[A-Za-z]\.?$/,
+      "Middle initial must be a single letter, optionally followed by a dot (e.g., B or B.)"
+    )
+    .optional(),
 
   email: z
     .string({ message: "Email address is required" })

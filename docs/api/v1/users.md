@@ -17,7 +17,9 @@ Creates a new user account in the system. Supports both admin creation and self-
 
 **Request Parameters:**
 - `student_id` (string, required): The QCU-issued student ID in the format YY-NNNN (e.g., 23-1234), where YY represents the enrollment year and NNNN is the assigned student number.
-- `name` (string, required): User's full name (1-100 characters)
+- `lastName` (string, required): User's last name (1-100 characters)
+- `firstName` (string, required): User's first name (1-100 characters)
+- `middleInitial` (string, optional): Middle initial, single letter optionally followed by a dot
 - `email` (string, required): Valid email address (must be unique)
 - `password` (string, required): Password (minimum 8 characters)
 - `role` (enum, optional): User role — `APPLICANT`, `MEMBER`, `ADMIN_HR`, or `ADMIN_LOGISTICS`. Defaults to `APPLICANT`
@@ -30,7 +32,9 @@ Creates a new user account in the system. Supports both admin creation and self-
     "id": string (UUID),
     "student_id": string,
     "email": string,
-    "name": string,
+    "lastName": string,
+    "firstName": string,
+    "middleInitial": string | null,
     "role": "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS",
     "emailVerified": boolean,
     "createdAt": string (ISO 8601 timestamp)
@@ -45,7 +49,9 @@ curl -X POST http://localhost:5000/api/v1/users \
   -H "Content-Type: application/json" \
   -d '{
     "student_id": "23-1234",
-    "name": "John Doe",
+    "lastName": "Doe",
+    "firstName": "John",
+    "middleInitial": null,
     "email": "john@example.com",
     "password": "SecurePass123",
     "role": "APPLICANT"
@@ -60,7 +66,9 @@ curl -X POST http://localhost:5000/api/v1/users \
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "student_id": "23-1234",
     "email": "john@example.com",
-    "name": "John Doe",
+    "lastName": "Doe",
+    "firstName": "John",
+    "middleInitial": null,
     "role": "APPLICANT",
     "emailVerified": false,
     "createdAt": "2026-06-15T10:30:00Z"
@@ -92,7 +100,9 @@ Authenticates a user and returns a JWT token for subsequent requests.
     "user": {
       "id": string,
       "email": string,
-      "name": string,
+      "lastName": string,
+    "firstName": string,
+    "middleInitial": string | null,
       "role": "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS"
     }
   },
@@ -119,7 +129,9 @@ curl -X POST http://localhost:5000/api/v1/users/login \
     "user": {
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "email": "john@example.com",
-      "name": "John Doe",
+      "lastName": "Doe",
+    "firstName": "John",
+    "middleInitial": null,
       "role": "APPLICANT"
     }
   },
@@ -146,7 +158,9 @@ Retrieves the authenticated user's profile information.
   "data": {
     "id": string,
     "email": string,
-    "name": string,
+    "lastName": string,
+    "firstName": string,
+    "middleInitial": string | null,
     "role": "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS",
     "emailVerified": boolean,
     "image": string | null,
@@ -170,7 +184,9 @@ curl -X GET http://localhost:5000/api/v1/users/me \
   "data": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "email": "john@example.com",
-    "name": "John Doe",
+    "lastName": "Doe",
+    "firstName": "John",
+    "middleInitial": null,
     "role": "APPLICANT",
     "emailVerified": false,
     "image": null,
@@ -203,7 +219,9 @@ Updates a user's role. Only accessible to users with `ADMIN_HR` role.
   "data": {
     "id": string,
     "email": string,
-    "name": string,
+    "lastName": string,
+    "firstName": string,
+    "middleInitial": string | null,
     "role": "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS",
     "updatedAt": string (ISO 8601)
   },
@@ -228,7 +246,9 @@ curl -X PATCH http://localhost:5000/api/v1/users/550e8400-e29b-41d4-a716-4466554
   "data": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "email": "john@example.com",
-    "name": "John Doe",
+    "lastName": "Doe",
+    "firstName": "John",
+    "middleInitial": null,
     "role": "MEMBER",
     "updatedAt": "2026-06-15T11:00:00Z"
   },
