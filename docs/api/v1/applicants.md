@@ -10,7 +10,7 @@ The Applicant Tracking API manages the recruitment and application pipeline for 
 ### 1. Create Applicant (Submit Application)
 
 **Description:**  
-Submits a new applicant to the MSC recruitment system. Must be preceded by a `POST /api/v1/ocr/verify` call to obtain an `ocrSessionId`. The backend validates the OCR session and sets `manual_application` accordingly.
+Submits a new applicant to the MSC recruitment system. **Must** be preceded by a `POST /api/v1/ocr/verify` call to obtain an `ocrSessionId` — this enforces the two-step verification flow (see [membership-application-flow.md](../../guides/flows/membership-application-flow.md)). The backend validates the OCR session and sets `manual_application` accordingly.
 
 **Method:** `POST`  
 **Path:** `/api/v1/applicants`
@@ -21,10 +21,10 @@ Submits a new applicant to the MSC recruitment system. Must be preceded by a `PO
 - `departmentChoice` (string, required): Preferred department (1-100 characters)
 - `resumeLink` (string, required): Valid URL to resume (e.g., Google Drive, GitHub, portfolio)
 - `githubLink` (string, required): Valid GitHub profile or repository URL
-- `studentId` (string, optional): QCU Student ID (YY-NNNN format), extracted from Zonal OCR, forwarded from OCR session
-- `ocrSessionId` (string, optional): OCR session token returned from `POST /api/v1/ocr/verify`
+- `ocrSessionId` (string, required): OCR session token returned from `POST /api/v1/ocr/verify`
+- `studentId` (string, optional): QCU Student ID (YY-NNNN format). Only needed in the manual entry fallback — when the OCR session has `studentId: null` (OCR failed after max attempts)
 
-**Security note:** `manual_application` is never client-settable. If the `ocrSessionId` indicates `manualRequired: true`, the backend sets `manual_application: true` regardless of the submitted `studentId` value.
+**Security note:** `manual_application` is never client-settable. If the OCR session indicates `manualRequired: true`, the backend sets `manual_application: true` regardless of the submitted `studentId` value.
 
 **Response Format:**
 ```json
@@ -40,13 +40,20 @@ Submits a new applicant to the MSC recruitment system. Must be preceded by a `PO
     "studentId": string | null,
     "status": "APPLIED",
     "manual_application": boolean,
-    "createdAt": string (ISO 8601)
+    "createdAt": string (ISO 8601),
+    "updatedAt": string (ISO 8601)
   },
   "message": string
 }
 ```
 
-**Example Request:**
+**Status Codes:**
+- `201`: Applicant created successfully
+- `400`: Validation error (invalid fields, missing studentId, expired OCR session)
+- `409`: Conflict (email already exists)
+- `500`: Internal server error
+
+**Example Request (OCR success):**
 ```bash
 curl -X POST http://localhost:5000/api/v1/applicants \
   -H "Content-Type: application/json" \
@@ -56,8 +63,22 @@ curl -X POST http://localhost:5000/api/v1/applicants \
     "departmentChoice": "Software Engineering",
     "resumeLink": "https://drive.google.com/file/d/1234567890",
     "githubLink": "https://github.com/janesmith",
-    "studentId": "23-5678",
     "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004"
+  }'
+```
+
+**Example Request (manual entry — after OCR failed 3×):**
+```bash
+curl -X POST http://localhost:5000/api/v1/applicants \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "departmentChoice": "Software Engineering",
+    "resumeLink": "https://drive.google.com/file/d/1234567890",
+    "githubLink": "https://github.com/janesmith",
+    "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004",
+    "studentId": "23-5678"
   }'
 ```
 
@@ -75,7 +96,8 @@ curl -X POST http://localhost:5000/api/v1/applicants \
     "studentId": "23-5678",
     "status": "APPLIED",
     "manual_application": false,
-    "createdAt": "2026-06-15T10:30:00Z"
+    "createdAt": "2026-06-15T10:30:00Z",
+    "updatedAt": "2026-06-15T10:30:00Z"
   },
   "message": "Application submitted successfully"
 }
@@ -300,11 +322,178 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
 
 ---
 
+## Validation Errors
+
+All validation errors return `400` with the following shape:
+
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": {
+    "<field>": ["<human-readable message>"]
+  }
+}
+```
+
+**Example — missing `ocrSessionId`:**
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": {
+    "ocrSessionId": [
+      "OCR session ID is required. Call POST /api/v1/ocr/verify first."
+    ]
+  }
+}
+```
+
+**Example — invalid UUID format for `ocrSessionId`:**
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": {
+    "ocrSessionId": [
+      "OCR session ID format is invalid. Provide a valid session ID from POST /api/v1/ocr/verify."
+    ]
+  }
+}
+```
+
+**Example — invalid `studentId` format:**
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": {
+    "studentId": [
+      "Student ID format must be YY-NNNN (e.g., 23-1234)"
+    ]
+  }
+}
+```
+
+---
+
+## Replication / Testing
+
+### Scenario A — OCR success (normal flow)
+
+```bash
+# Step 1: Verify a valid Student ID image
+curl -X POST http://localhost:5000/api/v1/ocr/verify \
+  -F "image=@valid_student_id.jpg"
+
+# → Response (200):
+# {
+#   "data": {
+#     "ocrSessionId": "abc-123-...",
+#     "studentId": "23-5678",
+#     "fullName": "Jane Smith",
+#     "manualRequired": false,
+#     "attemptsRemaining": 3
+#   }
+# }
+
+# Step 2: Submit application with the ocrSessionId (no studentId needed)
+curl -X POST http://localhost:5000/api/v1/applicants \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "departmentChoice": "Software Engineering",
+    "resumeLink": "https://drive.google.com/file/d/1234567890",
+    "githubLink": "https://github.com/janesmith",
+    "ocrSessionId": "abc-123-..."
+  }'
+
+# → Response (201):
+# {
+#   "success": true,
+#   "data": { "manual_application": false, ... },
+#   "message": "Application submitted successfully"
+# }
+```
+
+### Scenario B — Manual entry after 3 OCR failures
+
+```bash
+# Step 1: Send a non-ID image 3 times
+curl -X POST http://localhost:5000/api/v1/ocr/verify \
+  -F "image=@random_photo.jpg"
+# → 422, manualRequired: false, attemptsRemaining: 2
+
+curl -X POST http://localhost:5000/api/v1/ocr/verify \
+  -F "image=@random_photo.jpg"
+# → 422, manualRequired: false, attemptsRemaining: 1
+
+curl -X POST http://localhost:5000/api/v1/ocr/verify \
+  -F "image=@random_photo.jpg"
+# → 422, manualRequired: true, attemptsRemaining: 0
+# Response:
+# {
+#   "data": {
+#     "ocrSessionId": "def-456-...",
+#     "studentId": null,
+#     "fullName": null,
+#     "manualRequired": true,
+#     "attemptsRemaining": 0
+#   }
+# }
+
+# Step 2: Submit application with studentId manually provided
+curl -X POST http://localhost:5000/api/v1/applicants \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "departmentChoice": "Software Engineering",
+    "resumeLink": "https://drive.google.com/file/d/1234567890",
+    "githubLink": "https://github.com/janesmith",
+    "ocrSessionId": "def-456-...",
+    "studentId": "23-5678"
+  }'
+
+# → Response (201):
+# {
+#   "success": true,
+#   "data": { "manual_application": true, ... },
+#   "message": "Application submitted successfully"
+# }
+```
+
+### Scenario C — Missing ocrSessionId (error)
+
+```bash
+curl -X POST http://localhost:5000/api/v1/applicants \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "departmentChoice": "Software Engineering",
+    "resumeLink": "https://drive.google.com/file/d/1234567890",
+    "githubLink": "https://github.com/janesmith"
+  }'
+
+# → Response (400):
+# {
+#   "success": false,
+#   "message": "Validation error",
+#   "errors": {
+#     "ocrSessionId": [
+#       "OCR session ID is required. Call POST /api/v1/ocr/verify first."
+#     ]
+#   }
+# }
+```
+
 ## Error Responses
 
 All endpoints return appropriate HTTP status codes:
 
-- `400`: Bad request (validation error)
+- `400`: Bad request — see [Validation Errors](#validation-errors) above for examples
 - `401`: Unauthorized (missing or invalid token)
 - `403`: Forbidden (insufficient permissions)
 - `404`: Not found (applicant ID doesn't exist)

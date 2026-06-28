@@ -13,6 +13,9 @@ Engineering standards for all contributors — both human and automated.
 - Avoid duplicating logic; extract reusable utilities instead.
 - Check `src/utils/` before writing new shared logic.
 - TypeScript throughout; Zod schemas for all input validation.
+- All Zod schemas must use custom human-readable error messages via `{ message: "..." }`.
+  Generic Zod internals like `"Expected string, received undefined"` must never reach the client.
+  Every field must have a clear, actionable error message suitable for frontend display.
 
 ## Architecture & File Organization
 
