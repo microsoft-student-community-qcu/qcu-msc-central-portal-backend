@@ -24,9 +24,9 @@
 
 | Task ID | Activity | Responsibility |
 | :--- | :--- | :--- |
-| **2.1** | **Recruitment Portal:** Build multi-step `/apply` form with client-side validation (GitHub/Drive links) and recruitment API routes. | Frontend & Backend |
-| **2.2** | **Ticketing System:** Create dynamic `/events` feed, registration UI, and registration routes with ticket generation logic. | Frontend & Backend |
-| **2.3** | **Cross-Team Integration:** Verify payload integrity between frontend and local backend server without cross-origin or type errors. | Head Dev |
+| **2.1** | **Recruitment Portal & Account Creation:** Build multi-step `/apply` form with Zonal OCR camera validation, client-side validation, recruitment API routes, and the immediate post-submission Account Registration flow. | Frontend & Backend |
+| **2.2** | **Ticketing System:** Create dynamic `/events` feed, account-free registration UI with Zonal OCR gateway, the Provisional Fallback queue logic, and ticket generation logic. | Frontend & Backend |
+| **2.3** | **Cross-Team Integration:** Verify payload integrity between frontend and local backend server without cross-origin errors. | Head Dev |
 
 ---
 
@@ -34,9 +34,10 @@
 
 | Task ID | Activity | Responsibility |
 | :--- | :--- | :--- |
-| **3.1** | **Security & Auth:** Implement auth protocols, password hashing for Core Team, and secure API endpoints via middleware. | Backend Team |
-| **3.2** | **HR & Logistics Dashboards:** Build protected data tables (`/admin/hr` and `/admin/events`) and Event Creation Form using component libraries. | Frontend & Backend |
-| **3.3** | **Data & Scanner:** Implement CSV export with UPPERCASE naming (e.g., `STATUS`), QR scanner integration, and manual check-in override. | Full Stack Team |
+| **3.1** | **Security & Auth:** Implement auth protocols, password hashing for Core Team, Applicants, and Members, and secure API endpoints via JWT middleware. | Backend Team |
+| **3.2** | **Authenticated User Portals:** Build role-based routing, the Applicant Tracking UI (`/portal/tracking`), and the Member Dashboard (`/portal/dashboard`) featuring the event "Fast-Pass". | Frontend & Backend |
+| **3.3** | **HR & Logistics Dashboards:** Build protected data tables (`/admin/hr` and `/admin/events`), the Event Creation Form, and the Manual ID Override UI for provisional registrations. | Frontend & Backend |
+| **3.4** | **Data & Scanner:** Implement CSV export with UPPERCASE naming (e.g., `STATUS`), QR scanner integration, and manual check-in override. | Full Stack Team |
 
 ---
 
