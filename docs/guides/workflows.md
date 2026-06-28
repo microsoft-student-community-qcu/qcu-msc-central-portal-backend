@@ -84,7 +84,7 @@ The applicant flow has been significantly updated with Zonal OCR verification an
 1. User captures an image of their Student ID using the guided camera overlay.
 2. Frontend sends the image to `POST /api/v1/ocr/verify` — backend runs Zonal OCR.
 3. On success, the form is auto-filled; after 3 OCR failures, a manual upload fallback is revealed (determined by `manualRequired` in the OCR response).
-4. User submits the application via `POST /api/v1/applicants` with the `ocrSessionId`.
+4. User submits the application via `POST /api/v1/applicants` with the **required** `ocrSessionId` (no direct submission without a prior OCR call is allowed).
 5. System sends an email with a password setup link (also serves as email verification).
 6. User sets a password → account activated → redirected to `/portal/tracking`.
 

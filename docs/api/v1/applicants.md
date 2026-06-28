@@ -10,7 +10,7 @@ The Applicant Tracking API manages the recruitment and application pipeline for 
 ### 1. Create Applicant (Submit Application)
 
 **Description:**  
-Submits a new applicant to the MSC recruitment system. Must be preceded by a `POST /api/v1/ocr/verify` call to obtain an `ocrSessionId`. The backend validates the OCR session and sets `manual_application` accordingly.
+Submits a new applicant to the MSC recruitment system. **Must** be preceded by a `POST /api/v1/ocr/verify` call to obtain an `ocrSessionId` — this enforces the two-step verification flow (see [membership-application-flow.md](../../guides/flows/membership-application-flow.md)). The backend validates the OCR session and sets `manual_application` accordingly.
 
 **Method:** `POST`  
 **Path:** `/api/v1/applicants`
@@ -322,11 +322,178 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
 
 ---
 
+## Validation Errors
+
+All validation errors return `400` with the following shape:
+
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": {
+    "<field>": ["<human-readable message>"]
+  }
+}
+```
+
+**Example — missing `ocrSessionId`:**
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": {
+    "ocrSessionId": [
+      "OCR session ID is required. Call POST /api/v1/ocr/verify first."
+    ]
+  }
+}
+```
+
+**Example — invalid UUID format for `ocrSessionId`:**
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": {
+    "ocrSessionId": [
+      "OCR session ID format is invalid. Provide a valid session ID from POST /api/v1/ocr/verify."
+    ]
+  }
+}
+```
+
+**Example — invalid `studentId` format:**
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": {
+    "studentId": [
+      "Student ID format must be YY-NNNN (e.g., 23-1234)"
+    ]
+  }
+}
+```
+
+---
+
+## Replication / Testing
+
+### Scenario A — OCR success (normal flow)
+
+```bash
+# Step 1: Verify a valid Student ID image
+curl -X POST http://localhost:5000/api/v1/ocr/verify \
+  -F "image=@valid_student_id.jpg"
+
+# → Response (200):
+# {
+#   "data": {
+#     "ocrSessionId": "abc-123-...",
+#     "studentId": "23-5678",
+#     "fullName": "Jane Smith",
+#     "manualRequired": false,
+#     "attemptsRemaining": 3
+#   }
+# }
+
+# Step 2: Submit application with the ocrSessionId (no studentId needed)
+curl -X POST http://localhost:5000/api/v1/applicants \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "departmentChoice": "Software Engineering",
+    "resumeLink": "https://drive.google.com/file/d/1234567890",
+    "githubLink": "https://github.com/janesmith",
+    "ocrSessionId": "abc-123-..."
+  }'
+
+# → Response (201):
+# {
+#   "success": true,
+#   "data": { "manual_application": false, ... },
+#   "message": "Application submitted successfully"
+# }
+```
+
+### Scenario B — Manual entry after 3 OCR failures
+
+```bash
+# Step 1: Send a non-ID image 3 times
+curl -X POST http://localhost:5000/api/v1/ocr/verify \
+  -F "image=@random_photo.jpg"
+# → 422, manualRequired: false, attemptsRemaining: 2
+
+curl -X POST http://localhost:5000/api/v1/ocr/verify \
+  -F "image=@random_photo.jpg"
+# → 422, manualRequired: false, attemptsRemaining: 1
+
+curl -X POST http://localhost:5000/api/v1/ocr/verify \
+  -F "image=@random_photo.jpg"
+# → 422, manualRequired: true, attemptsRemaining: 0
+# Response:
+# {
+#   "data": {
+#     "ocrSessionId": "def-456-...",
+#     "studentId": null,
+#     "fullName": null,
+#     "manualRequired": true,
+#     "attemptsRemaining": 0
+#   }
+# }
+
+# Step 2: Submit application with studentId manually provided
+curl -X POST http://localhost:5000/api/v1/applicants \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "departmentChoice": "Software Engineering",
+    "resumeLink": "https://drive.google.com/file/d/1234567890",
+    "githubLink": "https://github.com/janesmith",
+    "ocrSessionId": "def-456-...",
+    "studentId": "23-5678"
+  }'
+
+# → Response (201):
+# {
+#   "success": true,
+#   "data": { "manual_application": true, ... },
+#   "message": "Application submitted successfully"
+# }
+```
+
+### Scenario C — Missing ocrSessionId (error)
+
+```bash
+curl -X POST http://localhost:5000/api/v1/applicants \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "departmentChoice": "Software Engineering",
+    "resumeLink": "https://drive.google.com/file/d/1234567890",
+    "githubLink": "https://github.com/janesmith"
+  }'
+
+# → Response (400):
+# {
+#   "success": false,
+#   "message": "Validation error",
+#   "errors": {
+#     "ocrSessionId": [
+#       "OCR session ID is required. Call POST /api/v1/ocr/verify first."
+#     ]
+#   }
+# }
+```
+
 ## Error Responses
 
 All endpoints return appropriate HTTP status codes:
 
-- `400`: Bad request (validation error)
+- `400`: Bad request — see [Validation Errors](#validation-errors) above for examples
 - `401`: Unauthorized (missing or invalid token)
 - `403`: Forbidden (insufficient permissions)
 - `404`: Not found (applicant ID doesn't exist)
