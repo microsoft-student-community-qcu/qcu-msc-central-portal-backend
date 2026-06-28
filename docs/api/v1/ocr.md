@@ -108,6 +108,57 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
 
 ---
 
+## Understanding the OCR Session
+
+### What is `ocrSessionId`?
+
+`ocrSessionId` is a **server-generated UUID** that represents the result of a single OCR verification attempt. It is the glue between the two-step flow:
+
+```
+POST /api/v1/ocr/verify   →   returns ocrSessionId + manualRequired
+                                   ↓
+POST /api/v1/[submit]     →   forwards ocrSessionId
+                                   ↓
+                              Backend looks up session:
+                              ├── manualRequired=true  → sets flag (manual_application / manual_registration)
+                              ├── manualRequired=false → uses extracted studentId
+                              └── session expired      → rejects (must re-verify)
+```
+
+### Why is it needed?
+
+Without `ocrSessionId`, a client could bypass OCR entirely by calling `POST /api/v1/applicants` directly with a fake `studentId` and claim OCR passed. The session token ensures the `manualRequired` flag is **authoritative from the backend** — the client cannot lie about whether OCR succeeded or failed.
+
+### Where is it stored?
+
+**In memory only** — not in the database. The backend holds all active sessions in a simple JavaScript `Map<string, OcrSession>` inside the running Node.js process (`src/config/ocrStore.ts`). This means:
+
+| Characteristic | Behavior |
+|----------------|----------|
+| **Persistence** | Lost when the Node.js process stops (crash, restart, deploy) |
+| **TTL** | 10 minutes — expired sessions are pruned automatically |
+| **Data stored** | `{ studentId, fullName, manualRequired, imagePath }` — nothing sensitive |
+| **Scaling** | Single-process only. Multiple server instances cannot share sessions |
+
+### Why in-memory is fine for development
+
+- Sessions are **extremely short-lived** (10 min). If the server restarts, the user just sees "Session expired, please re-verify" — no data loss or crash.
+- No sensitive information is held — just extracted ID fields and an image path.
+- Avoids database writes for a transient token that lives only minutes.
+- Simple to replace with Redis later when needed.
+
+### When to upgrade to a persistent store (Redis)
+
+| Requirement | Solution |
+|-------------|----------|
+| Multiple Node.js instances (load balancing) | Shared Redis instance so sessions survive across servers |
+| Crash resilience in production | Redis persistence so OCR results survive a restart |
+| High-traffic metric tracking | Redis with TTL for accurate failure rate analytics |
+
+The architecture is designed so that swapping the in-memory `Map` for a Redis client requires no changes to the controller or route — only `src/config/ocrStore.ts`.
+
+---
+
 ## OCR Failure Tracking
 
 - Failure count is tracked server-side per client IP using an in-memory store with a 1-hour TTL.
@@ -121,14 +172,14 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
 
 ## Zonal OCR Details
 
-The Zonal OCR engine extracts data from predefined rectangular zones on the QCU Student ID card:
+The Zonal OCR engine extracts data from predefined rectangular zones on the QCU Student ID card. Zones are defined as percentages of the image dimensions (x%, y%, width%, height%) for resolution independence.
 
-| Field | Zone | Expected Format |
-|-------|------|-----------------|
-| `studentId` | Configurable (placeholder TBD) | `YY-NNNN` (e.g., `23-5678`) |
-| `fullName` | Configurable (placeholder TBD) | Full name as printed on card |
+| Field | Zone (x%, y%, w%, h%) | Expected Format |
+|-------|----------------------|-----------------|
+| `studentNumber` | 15%, 58%, 40%, 8% | `YY-NNNN` (e.g., `23-5678`) |
+| `fullNameBlock` | 15%, 75%, 50%, 12% | Full name as printed on card |
 
-Zone coordinates are expressed as percentages relative to image dimensions (x%, y%, width%, height%) for resolution independence. Actual zone coordinates will be configured once a reference QCU Student ID template is available.
+> **Note:** These zones were calibrated against a physical QCU Student ID card scan (355×550px reference). If the card design changes or a different orientation is used, zone coordinates must be re-calibrated in `src/services/ocr.service.ts`.
 
 ---
 
@@ -144,5 +195,6 @@ All OCR endpoints return appropriate HTTP status codes:
 ## Integration Notes
 
 - **Frontend:** Must capture the image using the guided camera overlay before calling this endpoint. Do not run any OCR client-side.
+- **ocrSessionId is required for submission:** The `ocrSessionId` returned by this endpoint must be forwarded to the submission endpoint (`POST /api/v1/applicants` or `POST /api/v1/events/:eventId/register`). Without it, the backend cannot determine whether the ID was verified or if manual entry was required, and the submission will be rejected.
 - **Image Storage:** Both successful and failed OCR images are saved to the configured storage path (placeholder — TBD) for audit and admin review purposes.
 - **OCR Session TTL:** Sessions expire after 10 minutes. If the user does not submit the application/registration within that window, they must re-verify.
