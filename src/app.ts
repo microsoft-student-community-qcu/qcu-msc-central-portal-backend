@@ -3,12 +3,14 @@ import cors from "cors";
 import { authMiddleware } from "./routes/authMiddleware";
 import ocrRoutes from "./routes/ocr.routes";
 import applicantRoutes from "./routes/applicant.routes";
+import eventRoutes from "./routes/event.routes";
 
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use("/api/v1/events", eventRoutes);
 
 // Public routes (no auth required)
 app.use("/api/v1/ocr", ocrRoutes);
