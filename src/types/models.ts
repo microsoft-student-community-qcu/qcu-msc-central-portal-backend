@@ -74,6 +74,10 @@ export interface Applicant {
   githubLink: string;
   /** Strict pipeline status — never a raw string. */
   status: ApplicantStatus;
+  /** QCU Student ID (YY-NNNN), extracted from Zonal OCR. */
+  studentId: string | null;
+  /** Filesystem path to uploaded Student ID image. */
+  idImagePath: string | null;
   /** Flagged true when OCR fails and applicant manually enters credentials. */
   manualApplication: boolean;
   createdAt: Date;

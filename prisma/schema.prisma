@@ -120,6 +120,8 @@ model Applicant {
   githubLink       String
   status           ApplicantStatus @default(APPLIED)
   manual_application Boolean       @default(false) // Flagged true when OCR fails → manual upload
+  studentId        String?         // QCU Student ID (YY-NNNN), extracted from Zonal OCR
+  idImagePath      String?         // Filesystem path to uploaded Student ID image
   userId           String?         @unique // Nullable one-to-one link to User when applicant becomes a member
   user             User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt        DateTime        @default(now())
