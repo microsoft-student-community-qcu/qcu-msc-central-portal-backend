@@ -73,20 +73,10 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
     );
 
     if (attemptsRemaining > 0) {
-      const session = ocrStore.createSession({
-        studentId: null,
-        lastName: null,
-        firstName: null,
-        middleInitial: null,
-        manualRequired: false,
-        attemptsRemaining,
-        imagePath,
-      });
-
       res.status(422).json({
         success: false,
         data: {
-          ocrSessionId: session.ocrSessionId,
+          ocrSessionId: null,
           studentId: null,
           fullName: null,
           lastName: null,
