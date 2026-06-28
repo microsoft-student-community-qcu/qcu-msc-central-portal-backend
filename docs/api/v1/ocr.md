@@ -63,7 +63,7 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
 {
   "success": false,
   "data": {
-    "ocrSessionId": "990e8400-e29b-41d4-a716-446655440005",
+    "ocrSessionId": null,
     "studentId": null,
     "fullName": null,
     "lastName": null,
@@ -105,18 +105,26 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
 ## Usage Flow
 
 ### For Membership Applications
-1. Frontend captures Student ID image via camera overlay.
-2. Frontend sends image to `POST /api/v1/ocr/verify`.
-3. Backend runs Zonal OCR, tracks failures per IP in memory.
-4. **Success:** Backend stores session in memory (10-min TTL) with `{ studentId, lastName, firstName, middleInitial, manualRequired: false }`. Frontend pre-fills form with extracted data.
-5. **Failure (3 attempts):** Backend stores session with `{ manualRequired: true }`. Frontend shows manual entry form.
-6. Frontend submits `POST /api/v1/applicants` with the `ocrSessionId` and any user-filled fields.
+
+1. **Capture:** User takes a photo of their Student ID via the guided camera overlay. The overlay should frame the card and minimize glare/angle.
+2. **Send to OCR:** Frontend sends the captured image to `POST /api/v1/ocr/verify` as multipart/form-data.
+3. **Backend processes:** Runs Zonal OCR on the predefined card zones and tracks failures per client IP.
+4. **On success (200):**
+   - Session stored with `manualRequired: false` and all extracted fields.
+   - **Frontend behavior:** Pre-fill the form with `lastName`, `firstName`, and `middleInitial`. Keep these fields **editable** so the user can correct any OCR mistakes. Set the `studentId` field as **read-only** — it is authoritative from the server. Show the raw `fullName` text nearby as a reference.
+   - Proceed to step 6.
+5. **On failure:**
+   - **Retries remaining (422, `attemptsRemaining > 0`):** No session is created. `ocrSessionId` is `null`. Show the error message and a retry prompt. Allow the user to retake the photo. Do **not** show the submit form yet — the user must succeed OCR or exhaust retries first.
+   - **Exhausted (422, `attemptsRemaining = 0`):** Session stored with `manualRequired: true` and all fields `null`. Show the manual entry form with **all fields editable**, including `studentId`. The user fills everything by hand.
+6. **Submit:** Frontend sends `POST /api/v1/applicants` with the `ocrSessionId` and the form fields. The backend resolves `manual_application` from the session.
 
 ### For Event Registrations
-1. Frontend captures Student ID image.
-2. Frontend sends to `POST /api/v1/ocr/verify` (same endpoint).
-3. Same OCR + fallback logic applies.
-4. Frontend submits `POST /api/v1/events/:eventId/register` with the `ocrSessionId`.
+
+1. Same capture and OCR verification flow as above.
+2. On success → pre-fill as described.
+3. On failure with retries → prompt retake.
+4. On exhausted → show full manual entry form.
+5. Frontend submits `POST /api/v1/events/:eventId/register` with the `ocrSessionId`.
 
 ---
 
@@ -202,6 +210,26 @@ The `fullNameBlock` is parsed server-side:
 
 ---
 
+## Extraction Limitations & Accuracy
+
+Zonal OCR operates on fixed-position rectangles over the ID card image. Real-world conditions can reduce extraction accuracy:
+
+| Factor | Impact |
+|--------|--------|
+| **Signature overlap** | The cardholder's printed signature sits close to the name block and can bleed into the `fullNameBlock` zone, adding stray marks or partial letter fragments to the OCR output. |
+| **Name format variance** | Some QCU ID card issuances may use slightly different typography, letter spacing, or name ordering (e.g., missing comma, all-caps only, mixed case). |
+| **Image quality** | Blurry photos, lens glare, harsh shadows, or skewed angles reduce Tesseract.js recognition confidence. |
+| **Zone drift** | If the card is not centered, is rotated, or is cropped differently than expected, the fixed percentage-based zones may miss their targets. |
+
+### Frontend Recommendations
+
+- **Pre-fill but keep editable** — Populate `lastName`, `firstName`, and `middleInitial` from the OCR response, but allow the user to correct any field before submission. The raw `fullName` field is provided as a reference to help the user spot OCR errors.
+- **Student ID is read-only** — The `studentNumber` zone targets numeric text with a clear `YY-NNNN` pattern, making it significantly more reliable than the name zone. Once extracted, display `studentId` as read-only. It will be validated server-side against the OCR session anyway.
+- **Fallback to `fullName`** — If the parsed fields (`lastName`/`firstName`/`middleInitial`) look wrong, display the `fullName` value so the user can see exactly what the OCR engine read and correct accordingly.
+- **Manual entry unlocks everything** — When `manualRequired: true`, all fields including `studentId` become editable. The user enters their details by hand.
+
+---
+
 ## Error Responses
 
 All OCR endpoints return appropriate HTTP status codes:
@@ -213,7 +241,27 @@ All OCR endpoints return appropriate HTTP status codes:
 
 ## Integration Notes
 
-- **Frontend:** Must capture the image using the guided camera overlay before calling this endpoint. Do not run any OCR client-side.
-- **ocrSessionId is required for submission:** The `ocrSessionId` returned by this endpoint must be forwarded to the submission endpoint (`POST /api/v1/applicants` or `POST /api/v1/events/:eventId/register`). Without it, the backend cannot determine whether the ID was verified or if manual entry was required, and the submission will be rejected.
-- **Image Storage:** Both successful and failed OCR images are saved to the configured storage path (placeholder — TBD) for audit and admin review purposes.
-- **OCR Session TTL:** Sessions expire after 10 minutes. If the user does not submit the application/registration within that window, they must re-verify.
+### Camera & Image Requirements
+
+- Use a **guided camera overlay** that frames the ID card and prompts the user to keep the card flat, centered, and glare-free.
+- Supported formats: JPEG, PNG. Maximum file size: 5 MB.
+- Do **not** run OCR client-side. Always send the raw image to the server for processing.
+
+### Submitting with an OCR Session
+
+- The `ocrSessionId` returned by a successful or exhausted-attempt response **must** be forwarded to the submission endpoint (`POST /api/v1/applicants` or `POST /api/v1/events/:eventId/register`). Without it, the backend cannot determine whether the ID was verified or manual entry was used, and the submission will be rejected.
+- The `ocrSessionId` is a UUID. The frontend should store it in-memory (not localStorage) and attach it to the submission payload. If the page is refreshed before submission, the user must re-verify.
+
+### Retry UX
+
+- When `attemptsRemaining > 0` but OCR failed (422), no session is created (`ocrSessionId: null`). The form/submit button should **not** be shown. Instead, display the error message and a "Retake Photo" button.
+- After 3 consecutive failures, `attemptsRemaining: 0` and the session will have `manualRequired: true`. At this point, show the manual entry form. The frontend does not need to call `/ocr/verify` again for this session.
+
+### Session Expiry
+
+- OCR sessions expire after **10 minutes**. If the user takes too long to fill out the form, the submission will be rejected with "OCR session expired or invalid". The user must call `/ocr/verify` again to get a fresh session.
+- The failure counter resets on **successful** OCR. A successful read wipes the previous failure count for that IP.
+
+### Image Storage
+
+- Both successful and failed OCR images are saved to the configured storage path (placeholder — TBD) for audit and admin review purposes. No action is needed from the frontend regarding image handling.
