@@ -391,7 +391,8 @@ curl -X POST http://localhost:5000/api/v1/ocr/verify \
 #   "data": {
 #     "ocrSessionId": "abc-123-...",
 #     "studentId": "23-5678",
-#     "fullName": "Jane Smith",
+#     "lastName": "SMITH",
+#     "firstName": "Jane",
 #     "manualRequired": false,
 #     "attemptsRemaining": 3
 #   }
@@ -437,7 +438,8 @@ curl -X POST http://localhost:5000/api/v1/ocr/verify \
 #   "data": {
 #     "ocrSessionId": "def-456-...",
 #     "studentId": null,
-#     "fullName": null,
+#     "lastName": null,
+#     "firstName": null,
 #     "manualRequired": true,
 #     "attemptsRemaining": 0
 #   }
