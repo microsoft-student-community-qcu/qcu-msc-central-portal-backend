@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { authMiddleware } from "./routes/authMiddleware";
 import ocrRoutes from "./routes/ocr.routes";
+import applicantRoutes from "./routes/applicant.routes";
 
 const app = express();
 
@@ -15,8 +16,17 @@ app.use("/api/v1/ocr", ocrRoutes);
 /**
  * Authentication middleware - extracts JWT token from Authorization header.
  * Attaches user info to request for protected endpoints.
+ *
+ * Note: This middleware does NOT block unauthenticated requests — it sets
+ * req.userId / req.userRole to null and continues. Routes registered after
+ * this point can be either public (no guard) or protected (use require* guard).
  */
 app.use(authMiddleware);
+
+// Applicant routes — registered after auth middleware.
+// POST /api/v1/applicants is public (no requireAuth guard used in the route).
+// Future GET/PATCH routes can use requireAdminHR for admin-only access.
+app.use("/api/v1/applicants", applicantRoutes);
 
 /**
  * Base route
@@ -26,7 +36,8 @@ app.get("/", (_req, res) => {
     message: "QCU MSC Central Portal API is running.",
     version: "1.0.0",
     endpoints: {
-        // CRUD endpoints removed
+      ocr: "POST /api/v1/ocr/verify",
+      applicants: "POST /api/v1/applicants",
     },
     docs: "/docs/api/",
   });
