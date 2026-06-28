@@ -5,6 +5,7 @@ interface OcrSession {
   studentId: string | null;
   lastName: string | null;
   firstName: string | null;
+  middleInitial: string | null;
   manualRequired: boolean;
   attemptsRemaining: number;
   imagePath: string | null;
@@ -47,6 +48,7 @@ export const ocrStore = {
     studentId: string | null;
     lastName: string | null;
     firstName: string | null;
+    middleInitial: string | null;
     manualRequired: boolean;
     attemptsRemaining: number;
     imagePath: string | null;
