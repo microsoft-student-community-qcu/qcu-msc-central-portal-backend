@@ -40,11 +40,18 @@ Submits a new applicant to the MSC recruitment system. Must be preceded by a `PO
     "studentId": string | null,
     "status": "APPLIED",
     "manual_application": boolean,
-    "createdAt": string (ISO 8601)
+    "createdAt": string (ISO 8601),
+    "updatedAt": string (ISO 8601)
   },
   "message": string
 }
 ```
+
+**Status Codes:**
+- `201`: Applicant created successfully
+- `400`: Validation error (invalid fields, missing studentId, expired OCR session)
+- `409`: Conflict (email already exists)
+- `500`: Internal server error
 
 **Example Request:**
 ```bash
@@ -75,7 +82,8 @@ curl -X POST http://localhost:5000/api/v1/applicants \
     "studentId": "23-5678",
     "status": "APPLIED",
     "manual_application": false,
-    "createdAt": "2026-06-15T10:30:00Z"
+    "createdAt": "2026-06-15T10:30:00Z",
+    "updatedAt": "2026-06-15T10:30:00Z"
   },
   "message": "Application submitted successfully"
 }

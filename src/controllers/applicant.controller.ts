@@ -121,6 +121,7 @@ export async function createApplicant(
         status: applicant.status,
         manual_application: applicant.manual_application,
         createdAt: applicant.createdAt,
+        updatedAt: applicant.updatedAt,
       },
       message: "Application submitted successfully",
     });
