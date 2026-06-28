@@ -9,42 +9,63 @@ export const applicantStatusEnum = z.enum(
   }
 );
 
-// Schema for public applicant submissions.
-// Does not allow status, userId, manual_application to be set by applicants — all are
-// controlled server-side (status defaults to APPLIED; manual_application is derived
-// from the ocrSessionId at submission time; userId is only set once HR accepts the
-// applicant and links them to a Member account).
-//
-// ocrSessionId is optional — ties this submission to prior OCR verification.
-// If provided, the backend looks up the session in ocrStore to determine
-// manual_application and retrieve the extracted studentId + image path.
-// If omitted, the backend treats the submission as a direct apply (no OCR).
+/**
+ * Schema for public applicant submissions.
+ *
+ * All fields are validated with explicit user-facing error messages suitable
+ * for rendering directly in the frontend (no raw Zod internals).
+ *
+ * Does not allow status, userId, manual_application to be set by applicants —
+ * all are controlled server-side (status defaults to APPLIED; manual_application
+ * is derived from the ocrSessionId; userId is only set once HR accepts the
+ * applicant and links them to a Member account).
+ *
+ * ocrSessionId is required — every submission must be preceded by a call to
+ * POST /api/v1/ocr/verify.
+ *
+ * studentId is optional — only needed in the manual entry fallback when the
+ * OCR session returned studentId: null with manualRequired: true.
+ */
 export const createApplicantSchema = z.object({
   name: z
-    .string()
-    .min(1, "Name is required")
-    .max(100, "Name must be less than 100 characters"),
-  email: z.string().email("Invalid email address format"),
+    .string({ message: "Full name is required" })
+    .min(1, "Full name cannot be empty")
+    .max(100, "Full name must be under 100 characters"),
+
+  email: z
+    .string({ message: "Email address is required" })
+    .email("Email address format is invalid (e.g., user@example.com)"),
+
   departmentChoice: z
-    .string()
-    .min(1, "Department choice is required")
-    .max(100, "Department choice must be less than 100 characters"),
+    .string({ message: "Department choice is required" })
+    .min(1, "Department choice cannot be empty")
+    .max(100, "Department choice must be under 100 characters"),
+
   resumeLink: z
-    .string()
-    .url("Resume link must be a valid URL (e.g. https://drive.google.com/...)"),
+    .string({ message: "Resume link is required" })
+    .url("Resume link must be a valid URL (e.g., https://drive.google.com/...)"),
+
   githubLink: z
-    .string()
-    .url("GitHub link must be a valid URL (e.g. https://github.com/...)"),
-  // QCU Student ID in YY-NNNN format, extracted from Zonal OCR.
-  // Required only when the applicant did NOT go through OCR (no ocrSessionId).
+    .string({ message: "GitHub link is required" })
+    .url("GitHub link must be a valid URL (e.g., https://github.com/...)"),
+
+  // QCU Student ID in YY-NNNN format — only needed when the OCR session
+  // returned studentId: null with manualRequired: true (manual entry fallback).
   studentId: z
-    .string()
-    .regex(/^\d{2}-\d{4}$/, "Student ID must be in format YY-NNNN (e.g., 23-1234)")
+    .string({ message: "Student ID must be a text value" })
+    .regex(
+      /^\d{2}-\d{4}$/,
+      "Student ID format must be YY-NNNN (e.g., 23-1234)"
+    )
     .optional(),
-  // OCR session token returned from POST /api/v1/ocr/verify.
-  // When present, the backend validates the session and pulls the extracted
-  // studentId + manual_application state instead of trusting the body fields.
-  ocrSessionId: z.string().uuid("Invalid OCR session format").optional(),
+
+  // OCR session token from POST /api/v1/ocr/verify.
+  // Required — enforces the two-step verification flow.
+  ocrSessionId: z
+    .string({ message: "OCR session ID is required. Call POST /api/v1/ocr/verify first." })
+    .uuid(
+      "OCR session ID format is invalid. Provide a valid session ID from POST /api/v1/ocr/verify."
+    ),
 });
 
 // Schema for HR-only applicant status updates.

@@ -21,10 +21,10 @@ Submits a new applicant to the MSC recruitment system. Must be preceded by a `PO
 - `departmentChoice` (string, required): Preferred department (1-100 characters)
 - `resumeLink` (string, required): Valid URL to resume (e.g., Google Drive, GitHub, portfolio)
 - `githubLink` (string, required): Valid GitHub profile or repository URL
-- `studentId` (string, optional): QCU Student ID (YY-NNNN format), extracted from Zonal OCR, forwarded from OCR session
-- `ocrSessionId` (string, optional): OCR session token returned from `POST /api/v1/ocr/verify`
+- `ocrSessionId` (string, required): OCR session token returned from `POST /api/v1/ocr/verify`
+- `studentId` (string, optional): QCU Student ID (YY-NNNN format). Only needed in the manual entry fallback — when the OCR session has `studentId: null` (OCR failed after max attempts)
 
-**Security note:** `manual_application` is never client-settable. If the `ocrSessionId` indicates `manualRequired: true`, the backend sets `manual_application: true` regardless of the submitted `studentId` value.
+**Security note:** `manual_application` is never client-settable. If the OCR session indicates `manualRequired: true`, the backend sets `manual_application: true` regardless of the submitted `studentId` value.
 
 **Response Format:**
 ```json
@@ -53,7 +53,7 @@ Submits a new applicant to the MSC recruitment system. Must be preceded by a `PO
 - `409`: Conflict (email already exists)
 - `500`: Internal server error
 
-**Example Request:**
+**Example Request (OCR success):**
 ```bash
 curl -X POST http://localhost:5000/api/v1/applicants \
   -H "Content-Type: application/json" \
@@ -63,8 +63,22 @@ curl -X POST http://localhost:5000/api/v1/applicants \
     "departmentChoice": "Software Engineering",
     "resumeLink": "https://drive.google.com/file/d/1234567890",
     "githubLink": "https://github.com/janesmith",
-    "studentId": "23-5678",
     "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004"
+  }'
+```
+
+**Example Request (manual entry — after OCR failed 3×):**
+```bash
+curl -X POST http://localhost:5000/api/v1/applicants \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Smith",
+    "email": "jane@example.com",
+    "departmentChoice": "Software Engineering",
+    "resumeLink": "https://drive.google.com/file/d/1234567890",
+    "githubLink": "https://github.com/janesmith",
+    "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004",
+    "studentId": "23-5678"
   }'
 ```
 

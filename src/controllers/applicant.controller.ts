@@ -6,17 +6,19 @@ import { ocrStore } from "../config/ocrStore";
 /**
  * POST /api/v1/applicants
  *
- * Creates a new applicant record. Supports two paths:
+ * Creates a new applicant record. Every submission must be preceded by a
+ * call to POST /api/v1/ocr/verify. The backend resolves manual_application
+ * exclusively from the OCR session's manualRequired flag.
  *
- * 1. OCR path (recommended):
- *    Caller first calls POST /api/v1/ocr/verify, then forwards the
- *    ocrSessionId here. The backend looks up the OCR session to determine
- *    manual_application and retrieve the extracted studentId + image path.
+ * Two paths within the OCR flow:
  *
- * 2. Direct path:
- *    Caller submits studentId manually (no OCR). manual_application defaults
- *    to false. Used when the applicant bypasses OCR (e.g., admin submits on
- *    behalf of the applicant).
+ * 1. OCR success path:
+ *    The OCR session has studentId and manualRequired: false.
+ *    The backend uses the session's extracted studentId.
+ *
+ * 2. Manual entry path (OCR failed after max attempts):
+ *    The OCR session has studentId: null and manualRequired: true.
+ *    The backend falls back to the body's studentId for manual entry.
  *
  * Security note: manual_application is NEVER client-settable. It is derived
  * exclusively from the OCR session's manualRequired flag. If the session
@@ -43,41 +45,35 @@ export async function createApplicant(
       parsed.data;
     let { studentId, ocrSessionId } = parsed.data;
 
-    // ── 2. Resolve OCR session (if provided) ──────────────────────────────
-    let manualApplication = false;
+    // ── 2. Resolve OCR session ────────────────────────────────────────────
     let idImagePath: string | null = null;
+    const session = ocrStore.getSession(ocrSessionId);
 
-    if (ocrSessionId) {
-      const session = ocrStore.getSession(ocrSessionId);
-
-      if (!session) {
-        res.status(400).json({
-          success: false,
-          message:
-            "OCR session expired or invalid. Please re-verify your Student ID via POST /api/v1/ocr/verify.",
-        });
-        return;
-      }
-
-      // The OCR session is the single source of truth for manual_application.
-      // Even if the body says manual_application: true, we ignore it.
-      manualApplication = session.manualRequired;
-
-      // Use the studentId extracted by the OCR service (if available).
-      // Falls back to the body's studentId if the session has none
-      // (e.g., manual entry case where the user typed it in).
-      if (session.studentId) {
-        studentId = session.studentId;
-      }
-      idImagePath = session.imagePath;
+    if (!session) {
+      res.status(400).json({
+        success: false,
+        message:
+          "OCR session expired or invalid. Please re-verify your Student ID via POST /api/v1/ocr/verify.",
+      });
+      return;
     }
 
-    // studentId is required at this point — either from OCR or from body.
+    // The OCR session is the single source of truth for manual_application.
+    const manualApplication = session.manualRequired;
+
+    // If OCR successfully extracted a studentId, prefer it over the body.
+    // Otherwise fall back to the body's studentId (manual entry case).
+    if (session.studentId) {
+      studentId = session.studentId;
+    }
+    idImagePath = session.imagePath;
+
+    // studentId must be resolved from either the OCR session or the body.
     if (!studentId) {
       res.status(400).json({
         success: false,
         message:
-          "Student ID is required. Either forward an ocrSessionId or provide studentId directly.",
+          "Student ID is required. If OCR could not extract it, provide studentId in the request body.",
       });
       return;
     }
