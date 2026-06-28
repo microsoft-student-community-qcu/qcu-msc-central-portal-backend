@@ -3,7 +3,9 @@ import { v4 as uuidv4 } from "uuid";
 interface OcrSession {
   ocrSessionId: string;
   studentId: string | null;
-  fullName: string | null;
+  lastName: string | null;
+  firstName: string | null;
+  middleInitial: string | null;
   manualRequired: boolean;
   attemptsRemaining: number;
   imagePath: string | null;
@@ -44,7 +46,9 @@ export const ocrStore = {
 
   createSession(data: {
     studentId: string | null;
-    fullName: string | null;
+    lastName: string | null;
+    firstName: string | null;
+    middleInitial: string | null;
     manualRequired: boolean;
     attemptsRemaining: number;
     imagePath: string | null;

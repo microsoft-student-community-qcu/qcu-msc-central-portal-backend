@@ -41,7 +41,9 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
 
       const session = ocrStore.createSession({
         studentId: result.studentId,
-        fullName: result.fullName,
+        lastName: result.lastName,
+        firstName: result.firstName,
+        middleInitial: result.middleInitial,
         manualRequired: false,
         attemptsRemaining: env.OCR_MAX_FAILURES,
         imagePath,
@@ -53,6 +55,9 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
           ocrSessionId: session.ocrSessionId,
           studentId: result.studentId,
           fullName: result.fullName,
+          lastName: result.lastName,
+          firstName: result.firstName,
+          middleInitial: result.middleInitial,
           manualRequired: false,
           attemptsRemaining: env.OCR_MAX_FAILURES,
         },
@@ -70,7 +75,9 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
     if (attemptsRemaining > 0) {
       const session = ocrStore.createSession({
         studentId: null,
-        fullName: null,
+        lastName: null,
+        firstName: null,
+        middleInitial: null,
         manualRequired: false,
         attemptsRemaining,
         imagePath,
@@ -82,6 +89,9 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
           ocrSessionId: session.ocrSessionId,
           studentId: null,
           fullName: null,
+          lastName: null,
+          firstName: null,
+          middleInitial: null,
           manualRequired: false,
           attemptsRemaining,
         },
@@ -92,7 +102,9 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
 
     const session = ocrStore.createSession({
       studentId: null,
-      fullName: null,
+      lastName: null,
+      firstName: null,
+      middleInitial: null,
       manualRequired: true,
       attemptsRemaining: 0,
       imagePath,
@@ -104,6 +116,9 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
         ocrSessionId: session.ocrSessionId,
         studentId: null,
         fullName: null,
+        lastName: null,
+        firstName: null,
+        middleInitial: null,
         manualRequired: true,
         attemptsRemaining: 0,
       },

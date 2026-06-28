@@ -30,6 +30,9 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
     "ocrSessionId": string (UUID),
     "studentId": string | null,
     "fullName": string | null,
+    "lastName": string | null,
+    "firstName": string | null,
+    "middleInitial": string | null,
     "manualRequired": boolean,
     "attemptsRemaining": number
   },
@@ -44,9 +47,12 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
   "data": {
     "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004",
     "studentId": "23-5678",
-    "fullName": "Alex Johnson",
+    "fullName": "BUSTILLO, Mark Ian B.",
+    "lastName": "Bustillo",
+    "firstName": "Mark Ian",
+    "middleInitial": "B.",
     "manualRequired": false,
-    "attemptsRemaining": 2
+    "attemptsRemaining": 3
   },
   "message": "Student ID verified successfully"
 }
@@ -60,6 +66,9 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
     "ocrSessionId": "990e8400-e29b-41d4-a716-446655440005",
     "studentId": null,
     "fullName": null,
+    "lastName": null,
+    "firstName": null,
+    "middleInitial": null,
     "manualRequired": false,
     "attemptsRemaining": 1
   },
@@ -75,6 +84,9 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
     "ocrSessionId": "990e8400-e29b-41d4-a716-446655440006",
     "studentId": null,
     "fullName": null,
+    "lastName": null,
+    "firstName": null,
+    "middleInitial": null,
     "manualRequired": true,
     "attemptsRemaining": 0
   },
@@ -96,7 +108,7 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
 1. Frontend captures Student ID image via camera overlay.
 2. Frontend sends image to `POST /api/v1/ocr/verify`.
 3. Backend runs Zonal OCR, tracks failures per IP in memory.
-4. **Success:** Backend stores session in memory (10-min TTL) with `{ studentId, fullName, manualRequired: false }`. Frontend pre-fills form with extracted data.
+4. **Success:** Backend stores session in memory (10-min TTL) with `{ studentId, lastName, firstName, middleInitial, manualRequired: false }`. Frontend pre-fills form with extracted data.
 5. **Failure (3 attempts):** Backend stores session with `{ manualRequired: true }`. Frontend shows manual entry form.
 6. Frontend submits `POST /api/v1/applicants` with the `ocrSessionId` and any user-filled fields.
 
@@ -137,7 +149,7 @@ Without `ocrSessionId`, a client could bypass OCR entirely by calling `POST /api
 |----------------|----------|
 | **Persistence** | Lost when the Node.js process stops (crash, restart, deploy) |
 | **TTL** | 10 minutes — expired sessions are pruned automatically |
-| **Data stored** | `{ studentId, fullName, manualRequired, imagePath }` — nothing sensitive |
+ | **Data stored** | `{ studentId, lastName, firstName, middleInitial, manualRequired, imagePath }` — nothing sensitive |
 | **Scaling** | Single-process only. Multiple server instances cannot share sessions |
 
 ### Why in-memory is fine for development
@@ -177,7 +189,14 @@ The Zonal OCR engine extracts data from predefined rectangular zones on the QCU 
 | Field | Zone (x%, y%, w%, h%) | Expected Format |
 |-------|----------------------|-----------------|
 | `studentNumber` | 15%, 58%, 40%, 8% | `YY-NNNN` (e.g., `23-5678`) |
-| `fullNameBlock` | 15%, 75%, 50%, 12% | Full name as printed on card |
+| `fullNameBlock` | 15%, 75%, 50%, 12% | Full name as printed on card (e.g., `BUSTILLO, Mark Ian B.`) |
+
+The `fullNameBlock` is parsed server-side:
+- If a comma is present, the left side becomes `lastName` and the right side becomes `firstName`.
+- If no comma, the first word is treated as the last name and the rest is the first name.
+- If the last word of the first name is a single letter (optionally followed by a dot, e.g. `B.`), it is extracted into `middleInitial`.
+- `lastName` is formatted in Title Case (e.g. `DELA CRUZ` → `Dela Cruz`).
+- The original combined text is returned as `fullName` for frontend display.
 
 > **Note:** These zones were calibrated against a physical QCU Student ID card scan (355×550px reference). If the card design changes or a different orientation is used, zone coordinates must be re-calibrated in `src/services/ocr.service.ts`.
 
