@@ -41,7 +41,7 @@ export async function createApplicant(
       return;
     }
 
-    const { name, email, departmentChoice, resumeLink, githubLink } =
+    const { lastName, firstName, middleInitial, email, departmentChoice, resumeLink, githubLink } =
       parsed.data;
     let { studentId, ocrSessionId } = parsed.data;
 
@@ -81,7 +81,9 @@ export async function createApplicant(
     // ── 3. Create applicant record ────────────────────────────────────────
     const applicant = await prisma.applicant.create({
       data: {
-        name,
+        lastName,
+        firstName,
+        middleInitial,
         email,
         departmentChoice,
         resumeLink,
@@ -108,7 +110,9 @@ export async function createApplicant(
       success: true,
       data: {
         id: applicant.id,
-        name: applicant.name,
+        lastName: applicant.lastName,
+        firstName: applicant.firstName,
+        middleInitial: applicant.middleInitial,
         email: applicant.email,
         departmentChoice: applicant.departmentChoice,
         resumeLink: applicant.resumeLink,

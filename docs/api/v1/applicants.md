@@ -16,7 +16,9 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
 **Path:** `/api/v1/applicants`
 
 **Request Parameters:**
-- `name` (string, required): Applicant's full name (1-100 characters)
+- `lastName` (string, required): Applicant's last name (1-100 characters)
+- `firstName` (string, required): Applicant's first name (1-100 characters)
+- `middleInitial` (string, optional): Middle initial, single letter optionally followed by a dot (e.g., B or B.)
 - `email` (string, required): Valid email address (must be unique)
 - `departmentChoice` (string, required): Preferred department (1-100 characters)
 - `resumeLink` (string, required): Valid URL to resume (e.g., Google Drive, GitHub, portfolio)
@@ -32,7 +34,9 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
   "success": boolean,
   "data": {
     "id": string (UUID),
-    "name": string,
+    "lastName": string,
+    "firstName": string,
+    "middleInitial": string | null,
     "email": string,
     "departmentChoice": string,
     "resumeLink": string,
@@ -58,7 +62,9 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
 curl -X POST http://localhost:5000/api/v1/applicants \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Jane Smith",
+    "lastName": "Smith",
+    "firstName": "Jane",
+    "middleInitial": null,
     "email": "jane@example.com",
     "departmentChoice": "Software Engineering",
     "resumeLink": "https://drive.google.com/file/d/1234567890",
@@ -72,7 +78,9 @@ curl -X POST http://localhost:5000/api/v1/applicants \
 curl -X POST http://localhost:5000/api/v1/applicants \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Jane Smith",
+    "lastName": "Smith",
+    "firstName": "Jane",
+    "middleInitial": null,
     "email": "jane@example.com",
     "departmentChoice": "Software Engineering",
     "resumeLink": "https://drive.google.com/file/d/1234567890",
@@ -88,7 +96,9 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   "success": true,
   "data": {
     "id": "660e8400-e29b-41d4-a716-446655440001",
-    "name": "Jane Smith",
+    "lastName": "Smith",
+    "firstName": "Jane",
+    "middleInitial": null,
     "email": "jane@example.com",
     "departmentChoice": "Software Engineering",
     "resumeLink": "https://drive.google.com/file/d/1234567890",
@@ -121,7 +131,9 @@ Retrieves a specific applicant's details by their ID.
   "success": boolean,
   "data": {
     "id": string,
-    "name": string,
+    "lastName": string,
+    "firstName": string,
+    "middleInitial": string | null,
     "email": string,
     "departmentChoice": string,
     "resumeLink": string,
@@ -148,7 +160,9 @@ curl -X GET http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-4466
   "success": true,
   "data": {
     "id": "660e8400-e29b-41d4-a716-446655440001",
-    "name": "Jane Smith",
+    "lastName": "Smith",
+    "firstName": "Jane",
+    "middleInitial": null,
     "email": "jane@example.com",
     "departmentChoice": "Software Engineering",
     "resumeLink": "https://drive.google.com/file/d/1234567890",
@@ -191,7 +205,9 @@ Retrieves all applicants with optional filtering by status or department.
     "applicants": [
       {
         "id": string,
-        "name": string,
+        "lastName": string,
+    "firstName": string,
+    "middleInitial": string | null,
         "email": string,
         "departmentChoice": string,
         "studentId": string | null,
@@ -232,7 +248,9 @@ Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
   "success": boolean,
   "data": {
     "id": string,
-    "name": string,
+    "lastName": string,
+    "firstName": string,
+    "middleInitial": string | null,
     "email": string,
     "studentId": string | null,
     "status": "APPLIED" | "INTERVIEWING" | "ACCEPTED" | "REJECTED",
@@ -259,7 +277,9 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
   "success": true,
   "data": {
     "id": "660e8400-e29b-41d4-a716-446655440001",
-    "name": "Jane Smith",
+    "lastName": "Smith",
+    "firstName": "Jane",
+    "middleInitial": null,
     "email": "jane@example.com",
     "studentId": "23-5678",
     "status": "INTERVIEWING",
@@ -283,7 +303,9 @@ Updates an applicant's profile details. Only ADMIN_HR users can update applicant
 **Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Request Parameters:**
-- `name` (string, optional): Updated name
+- `lastName` (string, required if manual): Updated last name
+- `firstName` (string, required if manual): Updated first name
+- `middleInitial` (string, optional): Updated middle initial
 - `email` (string, optional): Updated email (must be unique)
 - `departmentChoice` (string, optional): Updated department choice
 - `resumeLink` (string, optional): Updated resume URL
@@ -295,7 +317,9 @@ Updates an applicant's profile details. Only ADMIN_HR users can update applicant
   "success": boolean,
   "data": {
     "id": string,
-    "name": string,
+    "lastName": string,
+    "firstName": string,
+    "middleInitial": string | null,
     "email": string,
     "departmentChoice": string,
     "resumeLink": string,
@@ -402,7 +426,9 @@ curl -X POST http://localhost:5000/api/v1/ocr/verify \
 curl -X POST http://localhost:5000/api/v1/applicants \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Jane Smith",
+    "lastName": "Smith",
+    "firstName": "Jane",
+    "middleInitial": null,
     "email": "jane@example.com",
     "departmentChoice": "Software Engineering",
     "resumeLink": "https://drive.google.com/file/d/1234567890",
@@ -449,7 +475,9 @@ curl -X POST http://localhost:5000/api/v1/ocr/verify \
 curl -X POST http://localhost:5000/api/v1/applicants \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Jane Smith",
+    "lastName": "Smith",
+    "firstName": "Jane",
+    "middleInitial": null,
     "email": "jane@example.com",
     "departmentChoice": "Software Engineering",
     "resumeLink": "https://drive.google.com/file/d/1234567890",
@@ -472,7 +500,9 @@ curl -X POST http://localhost:5000/api/v1/applicants \
 curl -X POST http://localhost:5000/api/v1/applicants \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Jane Smith",
+    "lastName": "Smith",
+    "firstName": "Jane",
+    "middleInitial": null,
     "email": "jane@example.com",
     "departmentChoice": "Software Engineering",
     "resumeLink": "https://drive.google.com/file/d/1234567890",

@@ -87,7 +87,9 @@ export async function registerForEvent(
     }
 
     // ── 5. Resolve identity — Member path vs Guest path ──────────────────
-    let name: string;
+    let lastName: string;
+    let firstName: string;
+    let middleInitial: string | null = null;
     let email: string;
     let studentId: string | null = null;
     let manualRegistration = false;
@@ -101,7 +103,9 @@ export async function registerForEvent(
         return;
       }
 
-      name = user.name;
+      lastName = user.lastName;
+      firstName = user.firstName;
+      middleInitial = user.middleInitial;
       email = user.email;
       resolvedUserId = user.id;
 
@@ -127,7 +131,7 @@ export async function registerForEvent(
         return;
       }
 
-      const { name: bodyName, email: bodyEmail, ocrSessionId } = parsed.data;
+      const { lastName: bodyLastName, firstName: bodyFirstName, middleInitial: bodyMiddleInitial, email: bodyEmail, ocrSessionId } = parsed.data;
 
       if (!ocrSessionId) {
         res
@@ -146,7 +150,9 @@ export async function registerForEvent(
         return;
       }
 
-      name = bodyName;
+      lastName = bodyLastName;
+      firstName = bodyFirstName;
+      middleInitial = bodyMiddleInitial ?? null;
       email = bodyEmail;
       studentId = session.studentId;
       manualRegistration = session.manualRequired;
@@ -186,7 +192,9 @@ export async function registerForEvent(
         eventId,
         userId: resolvedUserId,
         studentId,
-        name,
+        lastName,
+        firstName,
+        middleInitial,
         email,
         qrPayload,
         manual_registration: manualRegistration,

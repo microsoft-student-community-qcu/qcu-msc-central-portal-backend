@@ -35,7 +35,9 @@ export type EventType = "PUBLIC" | "MEMBERS_ONLY";
 export interface User {
   id: string;
   email: string;
-  name: string;
+  lastName: string;
+  firstName: string;
+  middleInitial: string | null;
   studentId: string;
   emailVerified: boolean;
   image: string | null;
@@ -67,7 +69,9 @@ export interface AdminLogistics extends Omit<User, "role"> {
  */
 export interface Applicant {
   id: string;
-  name: string;
+  lastName: string;
+  firstName: string;
+  middleInitial: string | null;
   email: string;
   departmentChoice: string;
   resumeLink: string;
@@ -125,7 +129,9 @@ export interface Registration {
   /** QCU Student ID from Zonal OCR — used for guest registrations. */
   studentId: string | null;
   email: string;
-  name: string;
+  lastName: string;
+  firstName: string;
+  middleInitial: string | null;
   /** Registration lifecycle status. */
   status: RegistrationStatus;
   /** Flagged true when OCR fails and manual upload is used. */

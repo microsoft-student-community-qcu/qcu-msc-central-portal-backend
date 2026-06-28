@@ -59,7 +59,9 @@ enum SponsorshipStatus {
 model User {
   id            String         @id @default(uuid())
   email         String         @unique
-  name          String
+  lastName      String
+  firstName     String
+  middleInitial String?
   studentId     String         @unique
   emailVerified Boolean        @default(false)
   image         String?
@@ -113,7 +115,9 @@ model Verification {
 
 model Applicant {
   id               String          @id @default(uuid())
-  name             String
+  lastName         String         @default("")
+  firstName        String         @default("")
+  middleInitial    String?
   email            String          @unique
   departmentChoice String
   resumeLink       String
@@ -151,7 +155,9 @@ model Registration {
   user               User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
   studentId          String?            // QCU Student ID from Zonal OCR (guest registrations)
   email              String
-  name               String
+  lastName           String           @default("")
+  firstName          String           @default("")
+  middleInitial      String?
   status             RegistrationStatus @default(APPROVED)
   manual_registration Boolean           @default(false) // Flagged true when OCR fails → manual upload
   qrPayload          String             @unique // Unique UUID for QR code verification
