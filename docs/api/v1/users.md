@@ -2,34 +2,25 @@
 
 ## Overview
 
-Authentication is handled by **Better Auth** — registration, login, OAuth, and session management go through `/api/auth/*`. Custom user profile and admin role management are at `/api/v1/users/*`.
+Authentication is handled by **Better Auth** — OAuth, login, session management, and account creation go through `/api/auth/*`. Custom user profile and admin role management are at `/api/v1/users/*`.
 
 Users have one of four roles: `APPLICANT`, `MEMBER`, `ADMIN_HR`, or `ADMIN_LOGISTICS`. Unauthenticated visitors are Guests (no User record).
 
-> **Note:** The login email can be **any** email (Gmail, Yahoo, etc.). The `qcuMscEmail` field on the Applicant model is a separate credential/verification email and is never used for authentication.
+> **Note:** There is **no public registration**. User accounts are created exclusively through the **membership application pipeline** (see [applicant activation flow](../guides/workflows/auth-workflow.md#applicant-account-activation-flow)). The sign-up endpoint below is called by the frontend password-setup page after an applicant receives the email link.
 
 ---
 
 ## Better Auth Endpoints (`/api/auth/*`)
 
-Better Auth manages registration, login, OAuth, and session retrieval. These endpoints are auto-handled and return Better Auth's standard response format.
+Better Auth manages account creation (via applicant activation), login, OAuth, and session retrieval. These endpoints are auto-handled and return Better Auth's standard response format.
 
-### 1. Sign Up (Email + Password)
+### 1. Create Account (via Applicant Activation)
 
 **Method:** `POST`  
 **Path:** `/api/auth/sign-up/email`
 
-**Minimal Request (required fields only):**
-```json
-{
-  "email": "juan@gmail.com",
-  "password": "SecurePass123",
-  "name": "Juan Dela Cruz",
-  "studentId": "23-1234"
-}
-```
+Used by the frontend `/auth/setup-password` page when an applicant clicks the password-setup link from their email. **Not a public registration endpoint.**
 
-**Full Request (with optional fields):**
 ```json
 {
   "email": "juan@gmail.com",
@@ -69,7 +60,7 @@ Access the authenticated session from the response headers/cookies for subsequen
 **Method:** `POST`  
 **Path:** `/api/auth/sign-in/google`
 
-Redirects the user to Google's OAuth consent screen.
+Redirects the user to Google's OAuth consent screen. Available to existing users who want to link OAuth to their account. OAuth can also be used during the applicant activation flow.
 
 ---
 
@@ -78,7 +69,7 @@ Redirects the user to Google's OAuth consent screen.
 **Method:** `POST`  
 **Path:** `/api/auth/sign-in/github`
 
-Redirects the user to GitHub's OAuth consent screen.
+Redirects the user to GitHub's OAuth consent screen. Available to existing users who want to link OAuth to their account.
 
 ---
 
