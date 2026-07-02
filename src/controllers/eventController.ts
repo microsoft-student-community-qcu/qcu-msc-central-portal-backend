@@ -85,8 +85,8 @@ export async function registerForEvent(
     }
 
     // ── 5. Resolve identity — Member path vs Guest path ──────────────────
-    let lastName: string;
-    let firstName: string;
+    let lastName: string | null = null;
+    let firstName: string | null = null;
     let middleInitial: string | null = null;
     let email: string;
     let studentId: string | null = null;
@@ -186,8 +186,8 @@ export async function registerForEvent(
         eventId,
         userId: resolvedUserId,
         studentId,
-        lastName,
-        firstName,
+        lastName: lastName ?? "",
+        firstName: firstName ?? "",
         middleInitial,
         email,
         qrPayload,

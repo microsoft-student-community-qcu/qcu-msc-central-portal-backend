@@ -3,9 +3,9 @@ import { z } from "zod";
 // ── Enums ────────────────────────────────────────────────────────────────
 
 export const applicantStatusEnum = z.enum(
-  ["APPLIED", "INTERVIEWING", "ACCEPTED", "REJECTED"],
+  ["APPROVED", "PENDING_REVIEW", "REJECTED", "CANCELLED"],
   {
-    error: "Status must be APPLIED, INTERVIEWING, ACCEPTED, or REJECTED",
+    error: "Status must be APPROVED, PENDING_REVIEW, REJECTED, or CANCELLED",
   }
 );
 

@@ -158,11 +158,14 @@ export async function createApplicant(
     });
 
     // ── 5. Email stub (placeholder — integrate with Better Auth email) ────
+    const fullName = [applicant.firstName, applicant.middleInitial, applicant.lastName]
+      .filter(Boolean)
+      .join(" ");
     console.log(
       `[EMAIL STUB] Applicant created: ${applicant.email}`
     );
     console.log(
-      `[EMAIL STUB] Password setup link: http://localhost:5173/auth/setup-password?email=${encodeURIComponent(applicant.email)}&applicantId=${applicant.id}`
+      `[EMAIL STUB] Password setup link: http://localhost:5173/auth/setup-password?email=${encodeURIComponent(applicant.email)}&applicantId=${applicant.id}&name=${encodeURIComponent(fullName)}&studentId=${encodeURIComponent(applicant.studentId ?? "")}`
     );
 
     // ── 6. Return created applicant ───────────────────────────────────────
@@ -412,6 +415,13 @@ export async function updateApplicantStatus(
       where: { id: applicantId },
       data: { status },
     });
+
+    if (status === "APPROVED" && applicant.userId) {
+      await prisma.user.update({
+        where: { id: applicant.userId },
+        data: { role: "MEMBER" },
+      });
+    }
 
     res.status(200).json({
       success: true,
