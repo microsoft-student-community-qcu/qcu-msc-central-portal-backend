@@ -29,6 +29,21 @@ enum ApplicantStatus {
   REJECTED
 }
 
+// Gender enumeration for membership application.
+enum Gender {
+  MALE
+  FEMALE
+  LGBTQIA
+  PREFER_NOT_TO_SAY
+}
+
+// Campus enumeration for QCU campuses.
+enum Campus {
+  SAN_BARTOLOME_MAIN
+  SAN_FRANCISCO
+  BATASAN
+}
+
 // Event visibility and access control type.
 enum EventType {
   PUBLIC
@@ -114,22 +129,38 @@ model Verification {
 }
 
 model Applicant {
-  id               String          @id @default(uuid())
-  lastName         String         @default("")
-  firstName        String         @default("")
-  middleInitial    String?
-  email            String          @unique
-  departmentChoice String
-  resumeLink       String
-  githubLink       String
-  status           ApplicantStatus @default(APPLIED)
-  manual_application Boolean       @default(false) // Flagged true when OCR fails → manual upload
-  studentId        String?         // QCU Student ID (YY-NNNN), extracted from Zonal OCR
-  idImagePath      String?         // Filesystem path to uploaded Student ID image
-  userId           String?         @unique // Nullable one-to-one link to User when applicant becomes a member
-  user             User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id                          String          @id @default(uuid())
+  lastName                    String          @default("")
+  firstName                   String          @default("")
+  middleInitial               String?
+  email                       String          @unique
+  college                     String
+  program                     String
+  section                     String
+  campus                      Campus
+  studentId                   String?         // QCU Student ID (YY-NNNN), extracted from Zonal OCR
+  dateOfBirth                 DateTime
+  placeOfBirth                String
+  gender                      Gender
+  membershipRole              String
+  certificateOfRegistration   String          // Filesystem path to uploaded Certificate of Registration
+  curriculumVitae             String          // Filesystem path to uploaded Curriculum Vitae
+  houseAddress                String
+  cellphoneNumber             String
+  qcuMscEmail                 String          @unique
+  facebookLink                String
+  interestsSkillsHobbies      String          @db.Text
+  organizationHistory         String          @db.Text
+  portfolio                   String?         // Optional — URL to portfolio
+  githubOrProjectLinks        String?         // Optional — URL to GitHub or project links
+  previousWorksAchievements   String?         @db.Text // Optional — previous works or achievements
+  status                      ApplicantStatus @default(APPLIED)
+  manual_application          Boolean         @default(false) // Flagged true when OCR fails → manual upload
+  idImagePath                 String?         // Filesystem path to uploaded Student ID image
+  userId                      String?         @unique // Nullable one-to-one link to User when applicant becomes a member
+  user                        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
 }
 
 model Event {

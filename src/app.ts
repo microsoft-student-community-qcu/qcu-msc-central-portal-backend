@@ -36,10 +36,10 @@ app.use("/api/v1/applicants", applicantRoutes);
 app.get("/", (_req, res) => {
   res.json({
     message: "QCU MSC Central Portal API is running.",
-    version: "1.0.0",
+    version: "1.1.0",
     endpoints: {
       ocr: "POST /api/v1/ocr/verify",
-      applicants: "POST /api/v1/applicants",
+      applicants: "POST /api/v1/applicants (multipart/form-data)",
     },
     docs: "/docs/api/",
   });

@@ -15,6 +15,7 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(8),
   BETTER_AUTH_URL: z.string().url(),
   IMAGE_STORAGE_PATH: z.string().default("./uploads/ocr"),
+  DOCUMENT_STORAGE_PATH: z.string().default("./uploads/documents"),
   OCR_MAX_FAILURES: z.coerce.number().int().positive().default(3),
 });
 

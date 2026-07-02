@@ -5,4 +5,5 @@ dist/
 *.db-journal
 
 /uploads/ocr
+/uploads/documents
 eng.traineddata

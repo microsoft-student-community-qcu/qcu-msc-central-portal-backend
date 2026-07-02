@@ -21,6 +21,16 @@ export type UserRole = "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS";
 export type ApplicantStatus = "APPLIED" | "INTERVIEWING" | "ACCEPTED" | "REJECTED";
 
 /**
+ * Strict union of gender options for membership application.
+ */
+export type Gender = "MALE" | "FEMALE" | "LGBTQIA" | "PREFER_NOT_TO_SAY";
+
+/**
+ * Strict union of QCU campus locations.
+ */
+export type Campus = "SAN_BARTOLOME_MAIN" | "SAN_FRANCISCO" | "BATASAN";
+
+/**
  * Strict union of event visibility types.
  */
 export type EventType = "PUBLIC" | "MEMBERS_ONLY";
@@ -73,17 +83,39 @@ export interface Applicant {
   firstName: string;
   middleInitial: string | null;
   email: string;
-  departmentChoice: string;
-  resumeLink: string;
-  githubLink: string;
-  /** Strict pipeline status — never a raw string. */
-  status: ApplicantStatus;
+  /** Personal Information */
+  college: string;
+  program: string;
+  section: string;
+  campus: Campus;
   /** QCU Student ID (YY-NNNN), extracted from Zonal OCR. */
   studentId: string | null;
-  /** Filesystem path to uploaded Student ID image. */
-  idImagePath: string | null;
+  dateOfBirth: Date;
+  placeOfBirth: string;
+  gender: Gender;
+  membershipRole: string;
+  /** Filesystem path to uploaded Certificate of Registration. */
+  certificateOfRegistration: string;
+  /** Filesystem path to uploaded Curriculum Vitae. */
+  curriculumVitae: string;
+  /** Contact Information */
+  houseAddress: string;
+  cellphoneNumber: string;
+  qcuMscEmail: string;
+  facebookLink: string;
+  /** Additional Information */
+  interestsSkillsHobbies: string;
+  organizationHistory: string;
+  /** Supporting Requirements (Optional) */
+  portfolio: string | null;
+  githubOrProjectLinks: string | null;
+  previousWorksAchievements: string | null;
+  /** Strict pipeline status — never a raw string. */
+  status: ApplicantStatus;
   /** Flagged true when OCR fails and applicant manually enters credentials. */
   manualApplication: boolean;
+  /** Filesystem path to uploaded Student ID image. */
+  idImagePath: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
