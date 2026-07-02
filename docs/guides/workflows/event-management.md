@@ -1,6 +1,39 @@
-# Event Registration Flow
+# Workflow — Event Management
 
-## Registration
+## Create Event (ADMIN_LOGISTICS)
+
+```
+ADMIN_LOGISTICS logs in
+	↓
+Clicks "Create Event"
+	↓
+Fills event details:
+  - Title, description
+  - Date/time (future date)
+  - Type: PUBLIC or MEMBERS_ONLY
+  - Max capacity
+	↓
+System validates input (Zod schema: createEventSchema)
+	↓
+Date in past? → Error: "Event date must be in future"
+	↓
+Create Event record in database
+	↓
+Event published ✓
+	↓
+Event appears in event listings
+```
+
+**Key Decision Points:**
+- Only ADMIN_LOGISTICS can create events
+- PUBLIC events visible to all, MEMBERS_ONLY restricted
+- Capacity limits enforce registration cutoff
+
+---
+
+## Event Registration
+
+### Registration
 
 1. User clicks "Register Now".
 2. User captures an image of their Student ID using the guided camera overlay.
@@ -31,7 +64,7 @@
 
 ---
 
-## Path A — Automatic Registration Approval
+### Path A — Automatic Registration Approval
 
 **Condition:** `manual_registration = false`
 
@@ -52,7 +85,7 @@
 
 ---
 
-## Path B — Manual Registration Review
+### Path B — Manual Registration Review
 
 **Condition:** `manual_registration = true`
 
@@ -96,3 +129,95 @@
     }
     ```
   - System sends a rejection email with the reason (optional).
+
+---
+
+### Members-Only Events (Authenticated)
+
+- Authenticated members bypass the Zonal OCR entirely — credentials are auto-pulled.
+- System checks role (MEMBER only) and capacity, then dispatches the QR ticket directly.
+
+---
+
+## Event Check-In
+
+```
+Event day arrives
+	↓
+ADMIN_LOGISTICS opens check-in dashboard
+	↓
+Views event and list of registrations
+	↓
+Student arrives at event
+	↓
+Student shows QR code (from email or phone)
+	↓
+Admin scans/enters QR code
+	↓
+System looks up Registration by qrPayload
+	↓
+Check: Already marked attended?
+	↓ Yes: Error: "Already checked in"
+	↓ No: Continue
+	↓
+Update Registration record:
+  - hasAttended = true
+	↓
+Display: "✓ {Name} checked in successfully"
+	↓
+Attendance recorded ✓
+```
+
+---
+
+## Event Cancellation
+
+### Admin-Driven (Whole Event)
+
+```
+Event date approaching
+	↓
+Admin decides to cancel event (e.g., low registrations, unexpected issue)
+	↓
+Admin clicks "Delete Event"
+	↓
+System confirms deletion warning
+	↓
+Delete Event record (cascade delete)
+	↓
+Cascade: All Registrations for this event deleted
+	↓
+Send cancellation email to all registered attendees
+	↓
+Event removed from listings ✓
+	↓
+Cancellation data retained in audit logs
+```
+
+**Key Decision Points:**
+- Deletion is permanent (no soft delete for events currently)
+- All registrations for the event are removed
+- Registrants notified of cancellation
+
+### User-Driven (Individual Registration)
+
+1. User clicks the cancellation link from their email.
+2. User is routed to a secure, unique URL generated specifically for their registration.
+3. System displays:
+   - Event details.
+   - Registered attendee information.
+   - Cancellation confirmation page.
+4. User chooses:
+   - **Cancel Registration**
+   - **Keep Registration**
+
+#### If Cancelled
+
+- Registration status becomes:
+  ```json
+  {
+    "status": "cancelled"
+  }
+  ```
+- QR ticket is invalidated.
+- User receives a cancellation confirmation email.
