@@ -3,6 +3,8 @@
 ## Overview
 The Applicant Tracking API manages the recruitment and application pipeline for prospective MSC members. It tracks applications from submission through final hiring decision (APPLIED → INTERVIEWING → ACCEPTED/REJECTED).
 
+The submission endpoint accepts **multipart/form-data** to support file uploads (Certificate of Registration, Curriculum Vitae).
+
 ---
 
 ## Endpoints
@@ -10,21 +12,56 @@ The Applicant Tracking API manages the recruitment and application pipeline for 
 ### 1. Create Applicant (Submit Application)
 
 **Description:**  
-Submits a new applicant to the MSC recruitment system. **Must** be preceded by a `POST /api/v1/ocr/verify` call to obtain an `ocrSessionId` — this enforces the two-step verification flow (see [membership-application-flow.md](../../guides/flows/membership-application-flow.md)). The backend validates the OCR session and sets `manual_application` accordingly.
+Submits a new applicant to the MSC recruitment system. **Must** be preceded by a `POST /api/v1/ocr/verify` call to obtain an `ocrSessionId` — this enforces the two-step verification flow (see [applicant-tracking.md](../../guides/workflows/applicant-tracking.md)). The backend validates the OCR session and sets `manual_application` accordingly.
 
 **Method:** `POST`  
-**Path:** `/api/v1/applicants`
+**Path:** `/api/v1/applicants`  
+**Content-Type:** `multipart/form-data`
 
-**Request Parameters:**
-- `lastName` (string, required): Applicant's last name (1-100 characters)
-- `firstName` (string, required): Applicant's first name (1-100 characters)
-- `middleInitial` (string, optional): Middle initial, single letter optionally followed by a dot (e.g., B or B.)
-- `email` (string, required): Valid email address (must be unique)
-- `departmentChoice` (string, required): Preferred department (1-100 characters)
-- `resumeLink` (string, required): Valid URL to resume (e.g., Google Drive, GitHub, portfolio)
-- `githubLink` (string, required): Valid GitHub profile or repository URL
-- `ocrSessionId` (string, required): OCR session token returned from `POST /api/v1/ocr/verify`
-- `studentId` (string, optional): QCU Student ID (YY-NNNN format). Only needed in the manual entry fallback — when the OCR session has `studentId: null` (OCR failed after max attempts)
+**Rate Limit:** 5 requests per minute per IP
+
+**Request Fields:**
+
+#### Personal Information
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `lastName` | string | Yes | 1-100 characters |
+| `firstName` | string | Yes | 1-100 characters |
+| `middleInitial` | string | No | Single letter, optionally followed by a dot (e.g., B or B.) |
+| `email` | string | Yes | Valid email address (must be unique — account/login email) |
+| `college` | string | Yes | 1-200 characters |
+| `program` | string | Yes | 1-200 characters |
+| `section` | string | Yes | 1-100 characters |
+| `campus` | enum | Yes | `SAN_BARTOLOME_MAIN`, `SAN_FRANCISCO`, or `BATASAN` |
+| `studentId` | string | No* | YY-NNNN format (e.g., 23-1234) — only needed for manual entry fallback |
+| `dateOfBirth` | string | Yes | YYYY-MM-DD format (e.g., 2000-01-15) |
+| `placeOfBirth` | string | Yes | 1-300 characters |
+| `gender` | enum | Yes | `MALE`, `FEMALE`, `LGBTQIA`, or `PREFER_NOT_TO_SAY` |
+| `membershipRole` | string | Yes | 1-200 characters |
+| `certificateOfRegistration` | file | Yes | PDF, JPEG, PNG, or DOCX — max 10MB |
+| `curriculumVitae` | file | Yes | PDF, JPEG, PNG, or DOCX — max 10MB |
+
+#### Contact Information
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `houseAddress` | string | Yes | 1-500 characters |
+| `cellphoneNumber` | string | Yes | 11 digits starting with 09 (e.g., 09123456789) |
+| `qcuMscEmail` | string | Yes | Must end with @qcu.edu.ph (must be unique) |
+| `facebookLink` | string | Yes | Valid URL (e.g., https://facebook.com/...) |
+
+#### Additional Information
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `interestsSkillsHobbies` | string | Yes | Text area |
+| `organizationHistory` | string | Yes | Text area — specify organization details or "N/A" |
+
+#### Supporting Requirements (Optional)
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `portfolio` | string | No | Valid URL |
+| `githubOrProjectLinks` | string | No | Valid URL |
+| `previousWorksAchievements` | string | No | Text area |
+| `ocrSessionId` | string | Yes | UUID — received from `POST /api/v1/ocr/verify` |
 
 **Security note:** `manual_application` is never client-settable. If the OCR session indicates `manualRequired: true`, the backend sets `manual_application: true` regardless of the submitted `studentId` value.
 
@@ -38,10 +75,24 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
     "firstName": string,
     "middleInitial": string | null,
     "email": string,
-    "departmentChoice": string,
-    "resumeLink": string,
-    "githubLink": string,
-    "studentId": string | null,
+    "college": string,
+    "program": string,
+    "section": string,
+    "campus": "SAN_BARTOLOME_MAIN" | "SAN_FRANCISCO" | "BATASAN",
+    "studentId": string,
+    "dateOfBirth": string (ISO 8601),
+    "placeOfBirth": string,
+    "gender": "MALE" | "FEMALE" | "LGBTQIA" | "PREFER_NOT_TO_SAY",
+    "membershipRole": string,
+    "houseAddress": string,
+    "cellphoneNumber": string,
+    "qcuMscEmail": string,
+    "facebookLink": string,
+    "interestsSkillsHobbies": string,
+    "organizationHistory": string,
+    "portfolio": string | null,
+    "githubOrProjectLinks": string | null,
+    "previousWorksAchievements": string | null,
     "status": "APPLIED",
     "manual_application": boolean,
     "createdAt": string (ISO 8601),
@@ -53,41 +104,61 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
 
 **Status Codes:**
 - `201`: Applicant created successfully
-- `400`: Validation error (invalid fields, missing studentId, expired OCR session)
-- `409`: Conflict (email already exists)
+- `400`: Validation error (invalid fields, missing studentId, missing files, expired OCR session)
+- `409`: Conflict (email or qcuMscEmail already exists)
+- `429`: Rate limit exceeded
 - `500`: Internal server error
 
 **Example Request (OCR success):**
 ```bash
 curl -X POST http://localhost:5000/api/v1/applicants \
-  -H "Content-Type: application/json" \
-  -d '{
-    "lastName": "Smith",
-    "firstName": "Jane",
-    "middleInitial": null,
-    "email": "jane@example.com",
-    "departmentChoice": "Software Engineering",
-    "resumeLink": "https://drive.google.com/file/d/1234567890",
-    "githubLink": "https://github.com/janesmith",
-    "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004"
-  }'
+  -F "lastName=Smith" \
+  -F "firstName=Jane" \
+  -F "middleInitial=B" \
+  -F "email=jane@example.com" \
+  -F "college=College of Engineering" \
+  -F "program=BS Computer Engineering" \
+  -F "section=CPE-3A" \
+  -F "campus=SAN_BARTOLOME_MAIN" \
+  -F "dateOfBirth=2002-05-15" \
+  -F "placeOfBirth=Quezon City" \
+  -F "gender=FEMALE" \
+  -F "membershipRole=Active Member" \
+  -F "houseAddress=123 Mabini St., Brgy. San Jose, Quezon City" \
+  -F "cellphoneNumber=09123456789" \
+  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
+  -F "facebookLink=https://facebook.com/janesmith" \
+  -F "interestsSkillsHobbies=Programming, photography, badminton" \
+  -F "organizationHistory=Former VP of CCS Student Government" \
+  -F "ocrSessionId=990e8400-e29b-41d4-a716-446655440004" \
+  -F "certificateOfRegistration=@cor.pdf" \
+  -F "curriculumVitae=@cv.pdf"
 ```
 
 **Example Request (manual entry — after OCR failed 3×):**
 ```bash
 curl -X POST http://localhost:5000/api/v1/applicants \
-  -H "Content-Type: application/json" \
-  -d '{
-    "lastName": "Smith",
-    "firstName": "Jane",
-    "middleInitial": null,
-    "email": "jane@example.com",
-    "departmentChoice": "Software Engineering",
-    "resumeLink": "https://drive.google.com/file/d/1234567890",
-    "githubLink": "https://github.com/janesmith",
-    "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004",
-    "studentId": "23-5678"
-  }'
+  -F "lastName=Smith" \
+  -F "firstName=Jane" \
+  -F "email=jane@example.com" \
+  -F "college=College of Engineering" \
+  -F "program=BS Computer Engineering" \
+  -F "section=CPE-3A" \
+  -F "campus=SAN_BARTOLOME_MAIN" \
+  -F "dateOfBirth=2002-05-15" \
+  -F "placeOfBirth=Quezon City" \
+  -F "gender=FEMALE" \
+  -F "membershipRole=Active Member" \
+  -F "houseAddress=123 Mabini St., Brgy. San Jose, Quezon City" \
+  -F "cellphoneNumber=09123456789" \
+  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
+  -F "facebookLink=https://facebook.com/janesmith" \
+  -F "interestsSkillsHobbies=Programming, photography, badminton" \
+  -F "organizationHistory=Former VP of CCS Student Government" \
+  -F "studentId=23-5678" \
+  -F "ocrSessionId=990e8400-e29b-41d4-a716-446655440004" \
+  -F "certificateOfRegistration=@cor.pdf" \
+  -F "curriculumVitae=@cv.pdf"
 ```
 
 **Example Response:**
@@ -98,12 +169,26 @@ curl -X POST http://localhost:5000/api/v1/applicants \
     "id": "660e8400-e29b-41d4-a716-446655440001",
     "lastName": "Smith",
     "firstName": "Jane",
-    "middleInitial": null,
+    "middleInitial": "B",
     "email": "jane@example.com",
-    "departmentChoice": "Software Engineering",
-    "resumeLink": "https://drive.google.com/file/d/1234567890",
-    "githubLink": "https://github.com/janesmith",
+    "college": "College of Engineering",
+    "program": "BS Computer Engineering",
+    "section": "CPE-3A",
+    "campus": "SAN_BARTOLOME_MAIN",
     "studentId": "23-5678",
+    "dateOfBirth": "2002-05-15T00:00:00.000Z",
+    "placeOfBirth": "Quezon City",
+    "gender": "FEMALE",
+    "membershipRole": "Active Member",
+    "houseAddress": "123 Mabini St., Brgy. San Jose, Quezon City",
+    "cellphoneNumber": "09123456789",
+    "qcuMscEmail": "jane.smith@qcu.edu.ph",
+    "facebookLink": "https://facebook.com/janesmith",
+    "interestsSkillsHobbies": "Programming, photography, badminton",
+    "organizationHistory": "Former VP of CCS Student Government",
+    "portfolio": null,
+    "githubOrProjectLinks": null,
+    "previousWorksAchievements": null,
     "status": "APPLIED",
     "manual_application": false,
     "createdAt": "2026-06-15T10:30:00Z",
@@ -135,10 +220,24 @@ Retrieves a specific applicant's details by their ID.
     "firstName": string,
     "middleInitial": string | null,
     "email": string,
-    "departmentChoice": string,
-    "resumeLink": string,
-    "githubLink": string,
+    "college": string,
+    "program": string,
+    "section": string,
+    "campus": "SAN_BARTOLOME_MAIN" | "SAN_FRANCISCO" | "BATASAN",
     "studentId": string | null,
+    "dateOfBirth": string (ISO 8601),
+    "placeOfBirth": string,
+    "gender": "MALE" | "FEMALE" | "LGBTQIA" | "PREFER_NOT_TO_SAY",
+    "membershipRole": string,
+    "houseAddress": string,
+    "cellphoneNumber": string,
+    "qcuMscEmail": string,
+    "facebookLink": string,
+    "interestsSkillsHobbies": string,
+    "organizationHistory": string,
+    "portfolio": string | null,
+    "githubOrProjectLinks": string | null,
+    "previousWorksAchievements": string | null,
     "status": "APPLIED" | "INTERVIEWING" | "ACCEPTED" | "REJECTED",
     "manual_application": boolean,
     "createdAt": string (ISO 8601),
@@ -162,12 +261,26 @@ curl -X GET http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-4466
     "id": "660e8400-e29b-41d4-a716-446655440001",
     "lastName": "Smith",
     "firstName": "Jane",
-    "middleInitial": null,
+    "middleInitial": "B",
     "email": "jane@example.com",
-    "departmentChoice": "Software Engineering",
-    "resumeLink": "https://drive.google.com/file/d/1234567890",
-    "githubLink": "https://github.com/janesmith",
+    "college": "College of Engineering",
+    "program": "BS Computer Engineering",
+    "section": "CPE-3A",
+    "campus": "SAN_BARTOLOME_MAIN",
     "studentId": "23-5678",
+    "dateOfBirth": "2002-05-15T00:00:00.000Z",
+    "placeOfBirth": "Quezon City",
+    "gender": "FEMALE",
+    "membershipRole": "Active Member",
+    "houseAddress": "123 Mabini St., Brgy. San Jose, Quezon City",
+    "cellphoneNumber": "09123456789",
+    "qcuMscEmail": "jane.smith@qcu.edu.ph",
+    "facebookLink": "https://facebook.com/janesmith",
+    "interestsSkillsHobbies": "Programming, photography, badminton",
+    "organizationHistory": "Former VP of CCS Student Government",
+    "portfolio": null,
+    "githubOrProjectLinks": null,
+    "previousWorksAchievements": null,
     "status": "APPLIED",
     "manual_application": false,
     "createdAt": "2026-06-15T10:30:00Z",
@@ -182,7 +295,7 @@ curl -X GET http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-4466
 ### 3. List All Applicants (with filtering)
 
 **Description:**  
-Retrieves all applicants with optional filtering by status or department.
+Retrieves all applicants with optional filtering by status, campus, or gender.
 
 **Method:** `GET`  
 **Path:** `/api/v1/applicants`
@@ -190,8 +303,9 @@ Retrieves all applicants with optional filtering by status or department.
 **Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Query Parameters:**
-- `status` (optional): Filter by status - `APPLIED`, `INTERVIEWING`, `ACCEPTED`, `REJECTED`
-- `departmentChoice` (optional): Filter by department choice
+- `status` (optional): Filter by status — `APPLIED`, `INTERVIEWING`, `ACCEPTED`, `REJECTED`
+- `campus` (optional): Filter by campus — `SAN_BARTOLOME_MAIN`, `SAN_FRANCISCO`, `BATASAN`
+- `gender` (optional): Filter by gender — `MALE`, `FEMALE`, `LGBTQIA`, `PREFER_NOT_TO_SAY`
 - `manual_application` (optional): Filter by manual application flag — `true` or `false`
 - `limit` (optional): Number of records to return (default: 50)
 - `offset` (optional): Pagination offset (default: 0)
@@ -206,11 +320,16 @@ Retrieves all applicants with optional filtering by status or department.
       {
         "id": string,
         "lastName": string,
-    "firstName": string,
-    "middleInitial": string | null,
+        "firstName": string,
+        "middleInitial": string | null,
         "email": string,
-        "departmentChoice": string,
+        "college": string,
+        "program": string,
+        "section": string,
+        "campus": string,
         "studentId": string | null,
+        "gender": string,
+        "membershipRole": string,
         "status": string,
         "manual_application": boolean,
         "createdAt": string
@@ -223,7 +342,7 @@ Retrieves all applicants with optional filtering by status or department.
 
 **Example Request:**
 ```bash
-curl -X GET "http://localhost:5000/api/v1/applicants?status=APPLIED&limit=20" \
+curl -X GET "http://localhost:5000/api/v1/applicants?status=APPLIED&campus=SAN_BARTOLOME_MAIN&limit=20" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
@@ -240,7 +359,7 @@ Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
 **Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Request Parameters:**
-- `status` (enum, required): New status - `APPLIED`, `INTERVIEWING`, `ACCEPTED`, or `REJECTED`
+- `status` (enum, required): New status — `APPLIED`, `INTERVIEWING`, `ACCEPTED`, or `REJECTED`
 
 **Response Format:**
 ```json
@@ -279,7 +398,7 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
     "id": "660e8400-e29b-41d4-a716-446655440001",
     "lastName": "Smith",
     "firstName": "Jane",
-    "middleInitial": null,
+    "middleInitial": "B",
     "email": "jane@example.com",
     "studentId": "23-5678",
     "status": "INTERVIEWING",
@@ -303,13 +422,7 @@ Updates an applicant's profile details. Only ADMIN_HR users can update applicant
 **Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Request Parameters:**
-- `lastName` (string, required if manual): Updated last name
-- `firstName` (string, required if manual): Updated first name
-- `middleInitial` (string, optional): Updated middle initial
-- `email` (string, optional): Updated email (must be unique)
-- `departmentChoice` (string, optional): Updated department choice
-- `resumeLink` (string, optional): Updated resume URL
-- `githubLink` (string, optional): Updated GitHub URL
+All fields from the create schema are available as optional parameters. See [Create Applicant](#1-create-applicant-submit-application) for the full field list. File re-upload for `certificateOfRegistration` and `curriculumVitae` also supported.
 
 **Response Format:**
 ```json
@@ -321,10 +434,24 @@ Updates an applicant's profile details. Only ADMIN_HR users can update applicant
     "firstName": string,
     "middleInitial": string | null,
     "email": string,
-    "departmentChoice": string,
-    "resumeLink": string,
-    "githubLink": string,
+    "college": string,
+    "program": string,
+    "section": string,
+    "campus": string,
     "studentId": string | null,
+    "dateOfBirth": string (ISO 8601),
+    "placeOfBirth": string,
+    "gender": string,
+    "membershipRole": string,
+    "houseAddress": string,
+    "cellphoneNumber": string,
+    "qcuMscEmail": string,
+    "facebookLink": string,
+    "interestsSkillsHobbies": string,
+    "organizationHistory": string,
+    "portfolio": string | null,
+    "githubOrProjectLinks": string | null,
+    "previousWorksAchievements": string | null,
     "status": string,
     "manual_application": boolean,
     "updatedAt": string (ISO 8601)
@@ -339,8 +466,8 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -d '{
-    "departmentChoice": "Data Science",
-    "resumeLink": "https://drive.google.com/file/d/9876543210"
+    "program": "BS Data Science",
+    "membershipRole": "Senior Member"
   }'
 ```
 
@@ -373,27 +500,27 @@ All validation errors return `400` with the following shape:
 }
 ```
 
-**Example — invalid UUID format for `ocrSessionId`:**
+**Example — invalid `cellphoneNumber`:**
 ```json
 {
   "success": false,
   "message": "Validation error",
   "errors": {
-    "ocrSessionId": [
-      "OCR session ID format is invalid. Provide a valid session ID from POST /api/v1/ocr/verify."
+    "cellphoneNumber": [
+      "Cellphone number must be 11 digits starting with 09 (e.g., 09123456789)"
     ]
   }
 }
 ```
 
-**Example — invalid `studentId` format:**
+**Example — invalid `qcuMscEmail`:**
 ```json
 {
   "success": false,
   "message": "Validation error",
   "errors": {
-    "studentId": [
-      "Student ID format must be YY-NNNN (e.g., 23-1234)"
+    "qcuMscEmail": [
+      "QCU MSC email must end with @qcu.edu.ph"
     ]
   }
 }
@@ -422,103 +549,90 @@ curl -X POST http://localhost:5000/api/v1/ocr/verify \
 #   }
 # }
 
-# Step 2: Submit application with the ocrSessionId (no studentId needed)
+# Step 2: Submit application with all fields + files
 curl -X POST http://localhost:5000/api/v1/applicants \
-  -H "Content-Type: application/json" \
-  -d '{
-    "lastName": "Smith",
-    "firstName": "Jane",
-    "middleInitial": null,
-    "email": "jane@example.com",
-    "departmentChoice": "Software Engineering",
-    "resumeLink": "https://drive.google.com/file/d/1234567890",
-    "githubLink": "https://github.com/janesmith",
-    "ocrSessionId": "abc-123-..."
-  }'
+  -F "lastName=Smith" \
+  -F "firstName=Jane" \
+  -F "email=jane@example.com" \
+  -F "college=College of Engineering" \
+  -F "program=BS Computer Engineering" \
+  -F "section=CPE-3A" \
+  -F "campus=SAN_BARTOLOME_MAIN" \
+  -F "dateOfBirth=2002-05-15" \
+  -F "placeOfBirth=Quezon City" \
+  -F "gender=FEMALE" \
+  -F "membershipRole=Active Member" \
+  -F "houseAddress=123 Mabini St." \
+  -F "cellphoneNumber=09123456789" \
+  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
+  -F "facebookLink=https://facebook.com/janesmith" \
+  -F "interestsSkillsHobbies=Programming, photography" \
+  -F "organizationHistory=N/A" \
+  -F "ocrSessionId=abc-123-..." \
+  -F "certificateOfRegistration=@cor.pdf" \
+  -F "curriculumVitae=@cv.pdf"
 
-# → Response (201):
-# {
-#   "success": true,
-#   "data": { "manual_application": false, ... },
-#   "message": "Application submitted successfully"
-# }
+# → Response (201): { "success": true, "data": { "manual_application": false, ... } }
 ```
 
 ### Scenario B — Manual entry after 3 OCR failures
 
 ```bash
-# Step 1: Send a non-ID image 3 times
-curl -X POST http://localhost:5000/api/v1/ocr/verify \
-  -F "image=@random_photo.jpg"
-# → 422, manualRequired: false, attemptsRemaining: 2
-
-curl -X POST http://localhost:5000/api/v1/ocr/verify \
-  -F "image=@random_photo.jpg"
-# → 422, manualRequired: false, attemptsRemaining: 1
-
-curl -X POST http://localhost:5000/api/v1/ocr/verify \
-  -F "image=@random_photo.jpg"
-# → 422, manualRequired: true, attemptsRemaining: 0
-# Response:
-# {
-#   "data": {
-#     "ocrSessionId": "def-456-...",
-#     "studentId": null,
-#     "lastName": null,
-#     "firstName": null,
-#     "manualRequired": true,
-#     "attemptsRemaining": 0
-#   }
-# }
+# Step 1: Send a non-ID image 3 times (same as before)
+# → 3rd failure returns manualRequired: true, ocrSessionId: "def-456-..."
 
 # Step 2: Submit application with studentId manually provided
 curl -X POST http://localhost:5000/api/v1/applicants \
-  -H "Content-Type: application/json" \
-  -d '{
-    "lastName": "Smith",
-    "firstName": "Jane",
-    "middleInitial": null,
-    "email": "jane@example.com",
-    "departmentChoice": "Software Engineering",
-    "resumeLink": "https://drive.google.com/file/d/1234567890",
-    "githubLink": "https://github.com/janesmith",
-    "ocrSessionId": "def-456-...",
-    "studentId": "23-5678"
-  }'
+  -F "lastName=Smith" \
+  -F "firstName=Jane" \
+  -F "email=jane@example.com" \
+  -F "college=College of Engineering" \
+  -F "program=BS Computer Engineering" \
+  -F "section=CPE-3A" \
+  -F "campus=SAN_BARTOLOME_MAIN" \
+  -F "dateOfBirth=2002-05-15" \
+  -F "placeOfBirth=Quezon City" \
+  -F "gender=FEMALE" \
+  -F "membershipRole=Active Member" \
+  -F "houseAddress=123 Mabini St." \
+  -F "cellphoneNumber=09123456789" \
+  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
+  -F "facebookLink=https://facebook.com/janesmith" \
+  -F "interestsSkillsHobbies=Programming, photography" \
+  -F "organizationHistory=N/A" \
+  -F "studentId=23-5678" \
+  -F "ocrSessionId=def-456-..." \
+  -F "certificateOfRegistration=@cor.pdf" \
+  -F "curriculumVitae=@cv.pdf"
 
-# → Response (201):
-# {
-#   "success": true,
-#   "data": { "manual_application": true, ... },
-#   "message": "Application submitted successfully"
-# }
+# → Response (201): { "success": true, "data": { "manual_application": true, ... } }
 ```
 
 ### Scenario C — Missing ocrSessionId (error)
 
 ```bash
 curl -X POST http://localhost:5000/api/v1/applicants \
-  -H "Content-Type: application/json" \
-  -d '{
-    "lastName": "Smith",
-    "firstName": "Jane",
-    "middleInitial": null,
-    "email": "jane@example.com",
-    "departmentChoice": "Software Engineering",
-    "resumeLink": "https://drive.google.com/file/d/1234567890",
-    "githubLink": "https://github.com/janesmith"
-  }'
+  -F "lastName=Smith" \
+  -F "firstName=Jane" \
+  -F "email=jane@example.com" \
+  -F "college=College of Engineering" \
+  -F "program=BS Computer Engineering" \
+  -F "section=CPE-3A" \
+  -F "campus=SAN_BARTOLOME_MAIN" \
+  -F "dateOfBirth=2002-05-15" \
+  -F "placeOfBirth=Quezon City" \
+  -F "gender=FEMALE" \
+  -F "membershipRole=Active Member" \
+  -F "houseAddress=123 Mabini St." \
+  -F "cellphoneNumber=09123456789" \
+  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
+  -F "facebookLink=https://facebook.com/janesmith" \
+  -F "interestsSkillsHobbies=Programming" \
+  -F "organizationHistory=N/A" \
+  -F "certificateOfRegistration=@cor.pdf" \
+  -F "curriculumVitae=@cv.pdf"
 
-# → Response (400):
-# {
-#   "success": false,
-#   "message": "Validation error",
-#   "errors": {
-#     "ocrSessionId": [
-#       "OCR session ID is required. Call POST /api/v1/ocr/verify first."
-#     ]
-#   }
-# }
+# → Response (400): { "success": false, "errors": { "ocrSessionId": [...] } }
 ```
 
 ## Error Responses
@@ -529,5 +643,6 @@ All endpoints return appropriate HTTP status codes:
 - `401`: Unauthorized (missing or invalid token)
 - `403`: Forbidden (insufficient permissions)
 - `404`: Not found (applicant ID doesn't exist)
-- `409`: Conflict (email already exists)
+- `409`: Conflict (email or qcuMscEmail already exists)
+- `429`: Rate limit exceeded (5 req/min/IP)
 - `500`: Internal server error
