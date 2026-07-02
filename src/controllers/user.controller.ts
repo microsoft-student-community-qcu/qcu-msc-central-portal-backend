@@ -1,9 +1,14 @@
 import { Request, Response } from "express";
 import { prisma } from "../config/database";
+import { z } from "zod";
 
 export async function getMe(req: Request, res: Response): Promise<void> {
   try {
     const userId = (req as any).userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -88,6 +93,89 @@ export async function updateUserRole(req: Request, res: Response): Promise<void>
     });
   } catch (error) {
     console.error("Failed to update user role:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+const linkApplicantSchema = z.object({
+  applicantId: z.string(),
+});
+
+export async function linkApplicant(req: Request, res: Response): Promise<void> {
+  try {
+    const userId = (req as any).userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+
+    const parsed = linkApplicantSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const { applicantId } = parsed.data;
+
+    const applicant = await prisma.applicant.findUnique({
+      where: { id: applicantId },
+    });
+
+    if (!applicant) {
+      res.status(404).json({
+        success: false,
+        message: "Applicant not found",
+      });
+      return;
+    }
+
+    if (applicant.userId) {
+      res.status(409).json({
+        success: false,
+        message: "Applicant is already linked to a user account",
+      });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+      return;
+    }
+
+    if (user.email !== applicant.email) {
+      res.status(400).json({
+        success: false,
+        message: "The authenticated user's email does not match the applicant's email",
+      });
+      return;
+    }
+
+    await prisma.applicant.update({
+      where: { id: applicantId },
+      data: { userId },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Applicant linked to user account successfully",
+    });
+  } catch (error) {
+    console.error("Failed to link applicant:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error",
