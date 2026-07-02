@@ -136,7 +136,7 @@ Guests have no User record (behavioral role only).
   - workflows
 - If a new feature is added, create a corresponding doc file.
 - Keep documentation consistent with actual implementation (no outdated docs allowed).
-- Flow diagrams live in `docs/guides/flows/` — update these when registration, membership, or cancellation logic changes.
+- Workflow documentation lives in `docs/guides/workflows/` — update these when registration, membership, or cancellation logic changes.
 
 ## Testing Expectations
 

@@ -15,7 +15,7 @@ import { prisma } from "../config/database";
  * ("top 3 upcoming active events") without role-based hiding at the
  * feed level.
  */
-export async function getEvents(req: Request, res: Response): Promise<void> {
+export async function getEvents(_req: Request, res: Response): Promise<void> {
   try {
     const now = new Date();
 

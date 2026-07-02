@@ -56,8 +56,6 @@ export async function registerForEvent(
     const now = new Date();
     const inPriorityWindow =
       now >= event.priorityStartDate && now < event.generalStartDate;
-    const generalAdmissionOpen = now >= event.generalStartDate;
-
     if (!isMemberPath) {
       if (now < event.priorityStartDate) {
         res
@@ -94,8 +92,6 @@ export async function registerForEvent(
     let studentId: string | null = null;
     let manualRegistration = false;
     let resolvedUserId: string | null = null;
-    let ocrSessionIdUsed: string | null = null;
-
     if (isMemberPath) {
       const user = await prisma.user.findUnique({ where: { id: userId! } });
       if (!user) {
@@ -156,8 +152,6 @@ export async function registerForEvent(
       email = bodyEmail;
       studentId = session.studentId;
       manualRegistration = session.manualRequired;
-      ocrSessionIdUsed = ocrSessionId;
-
       if (!studentId && !manualRegistration) {
         // Defensive — shouldn't happen given ocrStore's own logic, but
         // guards against an inconsistent session state.
@@ -204,8 +198,7 @@ export async function registerForEvent(
 
     // ── 7. TODO: consume OCR session ─────────────────────────────────────
     // ocrStore currently has no consumeSession()/delete method — flagged
-    // with the team (same gap exists in applicantController.ts). Once
-    // added: if (ocrSessionIdUsed) ocrStore.consumeSession(ocrSessionIdUsed);
+    // with the team (same gap exists in applicantController.ts).
 
     // ── 8. Email stub (placeholder — same pattern as applicantController) ─
     if (registration.status === "APPROVED") {

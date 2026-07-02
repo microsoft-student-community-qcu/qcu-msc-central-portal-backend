@@ -62,6 +62,8 @@ All environment variables are validated via Zod in `src/config/env.ts` at startu
 | `JWT_EXPIRES_IN` | Token lifespan | `7d` |
 | `BETTER_AUTH_SECRET` | Better Auth secret (min 8 chars) | `better-auth-secret-change-in-production` |
 | `BETTER_AUTH_URL` | Auth service base URL | `http://localhost:5000` |
+| `IMAGE_STORAGE_PATH` | OCR ID card image storage directory | `./uploads/images` |
+| `DOCUMENT_STORAGE_PATH` | Applicant document (CoR, CV) storage directory | `./uploads/documents` |
 
 ---
 
@@ -72,6 +74,7 @@ qcu-msc-central-portal-backend/
 ├── docs/           # API docs, guides, specs
 ├── prisma/         # Schema + migrations
 ├── src/            # Application source
+├── uploads/        # Uploaded files (images, documents)
 ├── .env.example
 ├── AGENTS.md
 ├── CONTRIBUTING.md
