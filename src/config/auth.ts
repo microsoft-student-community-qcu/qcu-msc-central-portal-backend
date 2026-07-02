@@ -1,22 +1,28 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "@better-auth/prisma-adapter";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./database";
 import { env } from "./env";
 
-const prisma = new PrismaClient();
-
-/**
- * Better Auth instance configured with the Prisma adapter.
- * Uses a shared PrismaClient for a unified connection pool.
- * The custom `role` field is declared so Better Auth includes
- * it in session and user responses with full type inference.
- */
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "mysql",
   }),
   emailAndPassword: {
     enabled: true,
+  },
+  socialProviders: {
+    google: env.GOOGLE_CLIENT_ID
+      ? {
+          clientId: env.GOOGLE_CLIENT_ID,
+          clientSecret: env.GOOGLE_CLIENT_SECRET!,
+        }
+      : undefined,
+    github: env.GITHUB_CLIENT_ID
+      ? {
+          clientId: env.GITHUB_CLIENT_ID,
+          clientSecret: env.GITHUB_CLIENT_SECRET!,
+        }
+      : undefined,
   },
   user: {
     additionalFields: {
@@ -25,9 +31,9 @@ export const auth = betterAuth({
         required: false,
         defaultValue: "APPLICANT",
       },
-      student_id: {
+      studentId: {
         type: "string",
-        required: true,
+        required: false,
       },
     },
   },

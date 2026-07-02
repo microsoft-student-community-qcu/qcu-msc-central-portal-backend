@@ -157,12 +157,12 @@ export async function createApplicant(
       },
     });
 
-    // ── 5. Email stub (placeholder for Week 4.1) ──────────────────────────
+    // ── 5. Email stub (placeholder — integrate with Better Auth email) ────
     console.log(
       `[EMAIL STUB] Applicant created: ${applicant.email}`
     );
     console.log(
-      `[EMAIL STUB] Password setup link: http://localhost:${process.env.PORT ?? 5000}/api/v1/auth/setup?email=${encodeURIComponent(applicant.email)}&applicantId=${applicant.id}`
+      `[EMAIL STUB] Password setup link: http://localhost:5173/auth/setup-password?email=${encodeURIComponent(applicant.email)}&applicantId=${applicant.id}`
     );
 
     // ── 6. Return created applicant ───────────────────────────────────────

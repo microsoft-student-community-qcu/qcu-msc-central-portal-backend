@@ -1,66 +1,125 @@
 # Workflow — User Authentication
 
-## Registration (New User)
+## Overview
 
-```
-User visits portal
-	↓
-User clicks "Register"
-	↓
-User enters: student_id, name, email, password
-	↓
-System validates input (Zod schema: createUserSchema)
-	↓
-Email already exists? → Error: "Email already registered"
-	↓
-Create User record in database (role defaults to APPLICANT)
-	↓
-Send verification email (managed by Better Auth)
-	↓
-User receives confirmation email
-	↓
-User clicks verification link
-	↓
-emailVerified set to true
-	↓
-Account activated ✓
-```
+Authentication is handled by **Better Auth**, a full-stack auth library. It manages:
 
-**Key Decision Points:**
-- Role assignment: Defaults to APPLICANT (admin assigns to ADMIN_HR or ADMIN_LOGISTICS via admin panel)
-- Email verification: Required before full access
+- Email + Password registration and sign-in
+- Google OAuth (when configured)
+- GitHub OAuth (when configured)
+- Session management (cookies or Bearer tokens)
 
 ---
 
-## Login
+## Registration (Email + Password)
+
+Better Auth handles registration at `POST /api/auth/sign-up/email`:
+
+```
+User clicks "Register"
+	↓
+User enters: name, email, password
+	↓
+Frontend sends POST /api/auth/sign-up/email
+	↓
+Better Auth validates input, hashes password
+	↓
+Email already exists? → Error response
+	↓
+Create User record in database (role defaults to APPLICANT)
+	↓
+Create Account record (provider = "email")
+	↓
+Return session + user data
+	↓
+User authenticated ✓
+```
+
+**Key Decision Points:**
+- Role defaults to APPLICANT (admin promotes via `PATCH /api/v1/users/:userId/role`)
+- Email verification can be enabled via Better Auth configuration
+
+---
+
+## Login (Email + Password)
 
 ```
 User visits login page
 	↓
 User enters email and password
 	↓
-System validates input (Zod schema: loginUserSchema)
+Frontend sends POST /api/auth/sign-in/email
 	↓
-Query User by email
+Better Auth validates credentials
 	↓
-User not found? → Error: "Invalid credentials"
-	↓
-Compare passwords (Better Auth handles hashing)
-	↓
-Password incorrect? → Error: "Invalid credentials"
+Invalid? → Error response
 	↓
 Create Session record
 	↓
-Generate JWT token
+Return session + user data
 	↓
-Return token to client
+User authenticated ✓
+```
+
+---
+
+## OAuth — Google / GitHub
+
+```
+User clicks "Sign in with Google" (or GitHub)
 	↓
-Client stores token (localStorage/sessionStorage)
+Frontend redirects to POST /api/auth/sign-in/google
+	↓
+Better Auth redirects to Google's OAuth consent screen
+	↓
+User approves
+	↓
+Google redirects to /api/auth/callback/google
+	↓
+Better Auth processes callback:
+	  ↓
+  First time? → Create User + Account (provider = "google")
+	  ↓
+  Returning? → Link to existing User session
+	↓
+Return session + user data
 	↓
 User authenticated ✓
 ```
 
 **Key Decision Points:**
-- Authentication type: JWT token-based
-- Session persistence: Token expires after 7 days (JWT_EXPIRES_IN)
-- User role determines accessible endpoints
+- OAuth providers are optional — leave env vars empty to disable
+- An email can have multiple linked accounts (email, Google, GitHub) — all map to the same User
+- OAuth auto-creates a User if one doesn't exist for that OAuth account ID
+
+---
+
+## Session Validation (Middleware)
+
+All protected API routes validate the session via Better Auth's `getSession`:
+
+```
+Request arrives with Authorization: Bearer <token> (or cookie)
+	↓
+authMiddleware calls auth.api.getSession({ headers })
+	↓
+Valid session?
+	↓ Yes: Set req.userId, req.userRole from session.user
+	↓ No:  Set req.userId = null, req.userRole = null
+	↓
+Continue to route handler (next())
+	↓
+Route uses require* guard to block unauthorized requests
+```
+
+## API Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/auth/sign-up/email` | Public | Register with email + password |
+| POST | `/api/auth/sign-in/email` | Public | Sign in with email + password |
+| POST | `/api/auth/sign-in/google` | Public | Sign in with Google (OAuth) |
+| POST | `/api/auth/sign-in/github` | Public | Sign in with GitHub (OAuth) |
+| GET | `/api/auth/session` | Required | Get current session |
+| GET | `/api/v1/users/me` | Required | Get user profile |
+| PATCH | `/api/v1/users/:userId/role` | ADMIN_HR | Update user role |

@@ -33,7 +33,7 @@ qcu-msc-central-portal-backend/
 ├── src/
 │   ├── config/                 # App configuration (auth.ts, env.ts)
 │   ├── controllers/            # Request handlers
-│   ├── routes/                 # Express routes + JWT auth middleware
+│   ├── routes/                 # Express routes + Better Auth middleware
 │   ├── schemas/                # Zod validation schemas
 │   ├── types/                  # TypeScript type definitions
 │   ├── utils/                  # Shared utilities

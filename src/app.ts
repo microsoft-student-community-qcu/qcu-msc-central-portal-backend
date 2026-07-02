@@ -1,33 +1,37 @@
 import express from "express";
 import cors from "cors";
+import { auth } from "./config/auth";
 import { authMiddleware } from "./routes/authMiddleware";
 import ocrRoutes from "./routes/ocr.routes";
 import applicantRoutes from "./routes/applicant.routes";
 import eventRoutes from "./routes/event.routes";
+import userRoutes from "./routes/user.routes";
 
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Better Auth handler — manages sign-up, sign-in, OAuth, sessions
+app.use("/api/auth", auth.handler);
+
 app.use("/api/v1/events", eventRoutes);
 
 // Public routes (no auth required)
 app.use("/api/v1/ocr", ocrRoutes);
 
 /**
- * Authentication middleware - extracts JWT token from Authorization header.
- * Attaches user info to request for protected endpoints.
- *
- * Note: This middleware does NOT block unauthenticated requests — it sets
- * req.userId / req.userRole to null and continues. Routes registered after
- * this point can be either public (no guard) or protected (use require* guard).
+ * Authentication middleware — validates the session via Better Auth.
+ * Sets req.userId / req.userRole to null for unauthenticated requests.
+ * Routes registered after this point can be either public or protected.
  */
 app.use(authMiddleware);
 
-// Applicant routes — registered after auth middleware.
-// POST /api/v1/applicants is public (no requireAuth guard used in the route).
-// Future GET/PATCH routes can use requireAdminHR for admin-only access.
+// User routes
+app.use("/api/v1/users", userRoutes);
+
+// Applicant routes
 app.use("/api/v1/applicants", applicantRoutes);
 
 /**
@@ -36,8 +40,10 @@ app.use("/api/v1/applicants", applicantRoutes);
 app.get("/", (_req, res) => {
   res.json({
     message: "QCU MSC Central Portal API is running.",
-    version: "1.1.0",
+    version: "1.2.0",
     endpoints: {
+      auth: "/api/auth/*",
+      users: "GET /api/v1/users/me",
       ocr: "POST /api/v1/ocr/verify",
       applicants: "POST /api/v1/applicants (multipart/form-data)",
     },
