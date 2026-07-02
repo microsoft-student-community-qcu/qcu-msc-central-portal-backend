@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { bearer } from "better-auth/plugins";
 import { prismaAdapter } from "@better-auth/prisma-adapter";
 import { prisma } from "./database";
 import { env } from "./env";
@@ -33,10 +34,19 @@ export const auth = betterAuth({
       },
       studentId: {
         type: "string",
+        required: true,
+      },
+      firstName: {
+        type: "string",
+        required: false,
+      },
+      lastName: {
+        type: "string",
         required: false,
       },
     },
   },
+  plugins: [bearer()],
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
 });
