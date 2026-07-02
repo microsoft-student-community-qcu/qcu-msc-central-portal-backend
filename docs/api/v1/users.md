@@ -19,14 +19,31 @@ Better Auth manages registration, login, OAuth, and session retrieval. These end
 **Method:** `POST`  
 **Path:** `/api/auth/sign-up/email`
 
-**Request:**
+**Minimal Request (required fields only):**
 ```json
 {
   "email": "juan@gmail.com",
   "password": "SecurePass123",
-  "name": "Juan Dela Cruz"
+  "name": "Juan Dela Cruz",
+  "studentId": "23-1234"
 }
 ```
+
+**Full Request (with optional fields):**
+```json
+{
+  "email": "juan@gmail.com",
+  "password": "SecurePass123",
+  "name": "Juan Dela Cruz",
+  "studentId": "23-1234",
+  "firstName": "Juan",
+  "lastName": "Dela Cruz",
+  "role": "APPLICANT"
+}
+```
+
+**Required fields:** `email`, `password`, `name`, `studentId`
+**Optional fields:** `firstName`, `lastName`, `role` (defaults to `APPLICANT`)
 
 Access the authenticated session from the response headers/cookies for subsequent requests.
 
@@ -68,7 +85,7 @@ Redirects the user to GitHub's OAuth consent screen.
 ### 5. Get Session
 
 **Method:** `GET`  
-**Path:** `/api/auth/session`
+**Path:** `/api/auth/get-session`
 
 Returns the current session and user data if authenticated.
 
@@ -128,7 +145,39 @@ curl -X GET http://localhost:5000/api/v1/users/me \
 
 ---
 
-### 7. Update User Role (Admin Only)
+### 7. Link Applicant to User
+
+**Description:**  
+Links the authenticated user's account to their existing applicant record. Called by the frontend after successful Better Auth sign-up during the membership application flow.
+
+**Method:** `POST`  
+**Path:** `/api/v1/users/link-applicant`
+
+**Authentication:** Required (must be logged in)
+
+**Request:**
+```json
+{
+  "applicantId": "660e8400-e29b-41d4-a716-446655440001"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Applicant linked to user account successfully"
+}
+```
+
+**Validation:**
+- Applicant must exist
+- Applicant must not already be linked to another user
+- Authenticated user's email must match the applicant's email
+
+---
+
+### 9. Update User Role (Admin Only)
 
 **Description:**  
 Updates a user's role. Only accessible to `ADMIN_HR`.

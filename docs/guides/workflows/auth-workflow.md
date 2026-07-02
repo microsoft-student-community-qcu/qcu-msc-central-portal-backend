@@ -41,6 +41,47 @@ User authenticated ✓
 
 ---
 
+## Applicant Account Activation Flow
+
+This flow connects the membership application pipeline to account creation:
+
+```
+User submits membership application
+	↓
+Backend creates Applicant record (status: PENDING_REVIEW)
+	↓
+Backend sends email with password setup link
+  Contains: email, applicantId, name, studentId (as URL params)
+	↓
+User clicks link → frontend /auth/setup-password page
+	↓
+Frontend calls POST /api/auth/sign-up/email with:
+	↓
+  {
+    "email": "juan@gmail.com",
+    "password": "SecurePass123",
+    "name": "Juan Dela Cruz",
+    "studentId": "23-1234",
+    "firstName": "Juan",
+    "lastName": "Dela Cruz",
+    "role": "APPLICANT"
+  }
+	↓
+Better Auth creates User + Account records
+	↓
+Frontend calls POST /api/v1/users/link-applicant
+  Body: { "applicantId": "abc-123" }
+	↓
+Backend sets Applicant.userId = User.id
+	↓
+Admin approves application (PATCH /api/v1/applicants/:id/status)
+  Body: { "status": "APPROVED" }
+	↓
+Backend also updates User.role to "MEMBER"
+	↓
+Account fully activated ✓
+```
+
 ## Login (Email + Password)
 
 ```
@@ -120,6 +161,7 @@ Route uses require* guard to block unauthorized requests
 | POST | `/api/auth/sign-in/email` | Public | Sign in with email + password |
 | POST | `/api/auth/sign-in/google` | Public | Sign in with Google (OAuth) |
 | POST | `/api/auth/sign-in/github` | Public | Sign in with GitHub (OAuth) |
-| GET | `/api/auth/session` | Required | Get current session |
+| GET | `/api/auth/get-session` | Required | Get current session |
 | GET | `/api/v1/users/me` | Required | Get user profile |
+| POST | `/api/v1/users/link-applicant` | Required | Link applicant record to user account |
 | PATCH | `/api/v1/users/:userId/role` | ADMIN_HR | Update user role |
