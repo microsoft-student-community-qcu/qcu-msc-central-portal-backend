@@ -1,17 +1,3 @@
-# Default owner for all files
-* @microsoft-student-community-qcu/backend-team
-
-# Prisma schema & migrations
-/prisma/                           @microsoft-student-community-qcu/backend-team
-
-# Source code
-/src/                              @microsoft-student-community-qcu/backend-team
-
-# Documentation
-/docs/                             @microsoft-student-community-qcu/backend-team
-
-# Repository governance
-/AGENTS.md                         @microsoft-student-community-qcu/backend-team
-/CONTRIBUTING.md                   @microsoft-student-community-qcu/backend-team
-/README.md                         @microsoft-student-community-qcu/backend-team
-/CODEOWNERS                        @microsoft-student-community-qcu/backend-team
+# Branching Conventions & Approval Requirements
+# Target: main
+* @microsoft-student-community-qcu/cloud-team @microsoft-student-community-qcu/qa-team
