@@ -1,3 +1,4 @@
 # Branching Conventions & Approval Requirements
-# Target: main
-* @microsoft-student-community-qcu/cloud-team @microsoft-student-community-qcu/qa-team
+# Main CODEOWNERS - Identical on all branches to avoid merge conflicts
+# Enforced via branch protection rules (approvals required per stage)
+* @microsoft-student-community-qcu/cloud-team @microsoft-student-community-qcu/qa-team @microsoft-student-community-qcu/cybersecurity-team
