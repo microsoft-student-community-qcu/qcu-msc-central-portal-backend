@@ -7,6 +7,7 @@ import { prisma } from "./config/database";
 import { authMiddleware } from "./routes/authMiddleware";
 import ocrRoutes from "./routes/ocr.routes";
 import applicantRoutes from "./routes/applicant.routes";
+import { resendSetupLink } from "./controllers/applicant.controller";
 import eventRoutes from "./routes/event.routes";
 import userRoutes from "./routes/user.routes";
 
@@ -146,6 +147,16 @@ app.use("/api/v1/events", eventRoutes);
 // Public routes (no auth required)
 app.use("/api/v1/ocr", ocrRoutes);
 
+const resendLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 3,
+  message: { success: false, errors: ["Too many requests. Please try again later."] },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.post("/api/v1/applicants/resend-setup-link", resendLimiter, resendSetupLink);
+
 /**
  * Authentication middleware — validates the session via Better Auth.
  * Sets req.userId / req.userRole to null for unauthenticated requests.
@@ -171,6 +182,7 @@ app.get("/", (_req, res) => {
       users: "GET /api/v1/users/me",
       ocr: "POST /api/v1/ocr/verify",
       applicants: "POST /api/v1/applicants (multipart/form-data)",
+      "resend-setup-link": "POST /api/v1/applicants/resend-setup-link",
     },
     docs: "/docs/api/",
   });

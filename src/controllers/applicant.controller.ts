@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { z } from "zod";
 import {
   createApplicantSchema,
   updateApplicantSchema,
@@ -504,6 +505,53 @@ export async function updateApplicant(
     }
 
     console.error("Failed to update applicant:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+const resendSetupLinkSchema = z.object({
+  email: z
+    .string({ message: "Email is required" })
+    .email({ message: "Invalid email format" }),
+});
+
+export async function resendSetupLink(req: Request, res: Response): Promise<void> {
+  try {
+    const parsed = resendSetupLinkSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        errors: parsed.error.issues.map((e: z.ZodIssue) => e.message),
+      });
+      return;
+    }
+
+    const { email } = parsed.data;
+
+    const applicant = await prisma.applicant.findFirst({
+      where: { email, userId: null },
+      select: { id: true, email: true },
+    });
+
+    if (applicant) {
+      const setupToken = await signSetupToken(applicant.id, applicant.email);
+      console.log(
+        `[EMAIL STUB] Resent setup link to: ${applicant.email}`
+      );
+      console.log(
+        `[EMAIL STUB] Password setup link: http://localhost:5173/auth/setup-password?token=${setupToken}`
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "If an account exists, a new setup link has been sent.",
+    });
+  } catch (error) {
+    console.error("Failed to resend setup link:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error",
