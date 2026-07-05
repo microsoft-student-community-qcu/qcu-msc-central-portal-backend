@@ -121,5 +121,6 @@ CANCELLED (can be set from any status)
 
 **Key Decision Points:**
 - Only ADMIN_HR can update status
-- Accepted applicants automatically become MEMBER users (User role updated)
+- Setting status to `APPROVED` **automatically** updates the linked `User.role` to `MEMBER` (server-side)
+- Applicant must first be linked to a User account via `POST /api/v1/users/link-applicant` before approval
 - Email notifications sent at each status transition

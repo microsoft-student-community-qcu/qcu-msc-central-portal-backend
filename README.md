@@ -10,7 +10,7 @@ The core API backend for the QCU Microsoft Student Community digital hub. Built 
 - **Language:** TypeScript
 - **Web Framework:** Express
 - **Database & ORM:** MySQL (XAMPP local dev) with Prisma ORM
-- **Authentication:** Better Auth & jsonwebtoken (JWT)
+- **Authentication:** Better Auth (email/password + Google/GitHub OAuth)
 - **Validation:** Zod
 
 ---
@@ -58,12 +58,14 @@ All environment variables are validated via Zod in `src/config/env.ts` at startu
 | `PORT` | Express server port | `5000` |
 | `NODE_ENV` | Environment state | `development` |
 | `DATABASE_URL` | Prisma MySQL connection string | `mysql://root:password@localhost:3306/qcu_msc_central_portal` |
-| `JWT_SECRET` | JWT signing secret (min 8 chars) | `super-secret-jwt-key-change-in-production` |
-| `JWT_EXPIRES_IN` | Token lifespan | `7d` |
-| `BETTER_AUTH_SECRET` | Better Auth secret (min 8 chars) | `better-auth-secret-change-in-production` |
+| `BETTER_AUTH_SECRET` | Better Auth secret (min 8 chars) | (auto-generated) |
 | `BETTER_AUTH_URL` | Auth service base URL | `http://localhost:5000` |
 | `IMAGE_STORAGE_PATH` | OCR ID card image storage directory | `./uploads/images` |
 | `DOCUMENT_STORAGE_PATH` | Applicant document (CoR, CV) storage directory | `./uploads/documents` |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID | *(optional)* |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | *(optional)* |
+| `GITHUB_CLIENT_ID` | GitHub OAuth client ID | *(optional)* |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth client secret | *(optional)* |
 
 ---
 

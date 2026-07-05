@@ -30,7 +30,8 @@ APPLICANT (post-account-creation)
   ├─ View public events
   ├─ Register for Public events
   ├─ Track own application status (/portal/tracking)
-  └─ View own profile
+  ├─ View own profile (GET /api/v1/users/me)
+  └─ Sign in with Google/GitHub OAuth
 
 ——— (no User record) ———
 
@@ -66,6 +67,9 @@ Defined in `src/routes/authMiddleware.ts`:
 | `/api/v1/applicants/:id` | PATCH | Required | `requireAdminHR` | ADMIN_HR |
 | `/api/v1/applicants/:id/status` | PATCH | Required | `requireAdminHR` | ADMIN_HR |
 | `/api/v1/ocr/verify` | POST | Public | None | Guest (unauthenticated) |
+| `/api/v1/users/me` | GET | Required | `requireAuth` | APPLICANT, MEMBER, ADMIN_HR, ADMIN_LOGISTICS |
+| `/api/v1/users/:userId/role` | PATCH | Required | `requireAdminHR` | ADMIN_HR |
+| `/api/auth/*` | Mixed | Mixed | None | Better Auth manages auth flows |
 | `/api/v1/events/:eventId/register` | POST | Mixed | None / `requireAuth` | Guest or any authenticated |
 | `/api/v1/events` | POST | Required | `requireAdminLogistics` | ADMIN_LOGISTICS |
 | `/api/v1/events/:eventId/attendance` | POST | Required | `requireAdminLogistics` | ADMIN_LOGISTICS |

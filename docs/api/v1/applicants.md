@@ -200,7 +200,44 @@ curl -X POST http://localhost:5000/api/v1/applicants \
 
 ---
 
-### 2. Get Applicant by ID
+### 2. Resend Setup Link
+
+**Description:**  
+Resends the password-setup email for applicants who haven't created an account yet. The endpoint looks up the applicant by email where `userId IS NULL` (not yet linked to a user account). If found, a new signed JWT (48h expiry) is generated and a fresh email is sent.
+
+Always returns the same success message even if the email was not found — this keeps the user's email private and prevents attackers from guessing which emails are registered.
+
+**Rate Limit:** 3 requests per minute per IP
+
+**Method:** `POST`  
+**Path:** `/api/v1/applicants/resend-setup-link`
+
+**Authentication:** None (public)
+
+**Request:**
+```json
+{
+  "email": "juan@gmail.com"
+}
+```
+
+**Response (always, regardless of match):**
+```json
+{
+  "success": true,
+  "message": "If an account exists, a new setup link has been sent."
+}
+```
+
+**Status Codes:**
+- `200`: Success (always the same message — even if email not found or already linked)
+- `400`: Validation error (invalid email format)
+- `429`: Rate limit exceeded
+- `500`: Internal server error
+
+---
+
+### 3. Get Applicant by ID
 
 **Description:**  
 Retrieves a specific applicant's details by their ID.
@@ -348,7 +385,7 @@ curl -X GET "http://localhost:5000/api/v1/applicants?status=APPLIED&campus=SAN_B
 
 ---
 
-### 4. Update Applicant Status
+### 5. Update Applicant Status
 
 **Description:**  
 Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
@@ -411,7 +448,7 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
 
 ---
 
-### 5. Update Applicant Details
+### 6. Update Applicant Details
 
 **Description:**  
 Updates an applicant's profile details. Only ADMIN_HR users can update applicants.

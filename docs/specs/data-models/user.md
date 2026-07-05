@@ -15,16 +15,19 @@ enum UserRole {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  firstName String
-  lastName  String
-  studentId String?  @unique
-  role      UserRole @default(APPLICANT)
-  image     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String     @id @default(uuid())
+  email         String     @unique
+  lastName      String
+  firstName     String
+  middleInitial String?
+  name          String?    // Full name (Better Auth standard field — used during sign-up)
+  studentId     String     @unique
+  emailVerified Boolean    @default(false)
+  image         String?
+  role          UserRole   @default(APPLICANT)
+  password      String?    // Managed by Better Auth in Account table
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   sessions      Session[]
   accounts      Account[]
@@ -37,14 +40,17 @@ model User {
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `id` | String (CUID) | Yes | Primary key |
-| `email` | String | Yes, unique | Login/account email |
-| `password` | String | Yes | Hashed with bcrypt |
+| `id` | String (UUID) | Yes | Primary key |
+| `email` | String | Yes, unique | Login/account email (any email, not necessarily QCU) |
 | `firstName` | String | Yes | |
 | `lastName` | String | Yes | |
-| `studentId` | String? | Unique | QCU Student ID from Zonal OCR verification |
-| `role` | UserRole | Yes | Default: `APPLICANT` |
+| `middleInitial` | String? | No | |
+| `name` | String? | No | Full name (Better Auth standard field) |
+| `studentId` | String | Unique | QCU Student ID |
+| `emailVerified` | Boolean | Yes | Default: `false` |
 | `image` | String? | No | Profile picture URL |
+| `role` | UserRole | Yes | Default: `APPLICANT` |
+| `password` | String? | No | Managed by Better Auth in Account table |
 | `createdAt` | DateTime | Yes | Auto-generated |
 | `updatedAt` | DateTime | Yes | Auto-managed |
 

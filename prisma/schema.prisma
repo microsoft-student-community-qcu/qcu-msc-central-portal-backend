@@ -24,10 +24,10 @@ enum UserRole {
 
 // Applicant status enumeration for tracking recruitment pipeline.
 enum ApplicantStatus {
-  APPLIED
-  INTERVIEWING
-  ACCEPTED
+  APPROVED
+  PENDING_REVIEW
   REJECTED
+  CANCELLED
 }
 
 // Gender enumeration for membership application.
@@ -75,9 +75,10 @@ enum SponsorshipStatus {
 model User {
   id            String         @id @default(uuid())
   email         String         @unique
-  lastName      String
-  firstName     String
+  lastName      String?
+  firstName     String?
   middleInitial String?
+  name          String?        // Full name (Better Auth standard field — used during sign-up)
   studentId     String         @unique
   emailVerified Boolean        @default(false)
   image         String?
@@ -155,7 +156,7 @@ model Applicant {
   portfolio                   String?         // Optional — URL to portfolio
   githubOrProjectLinks        String?         // Optional — URL to GitHub or project links
   previousWorksAchievements   String?         @db.Text // Optional — previous works or achievements
-  status                      ApplicantStatus @default(APPLIED)
+  status                      ApplicantStatus @default(PENDING_REVIEW)
   manual_application          Boolean         @default(false) // Flagged true when OCR fails → manual upload
   idImagePath                 String?         // Filesystem path to uploaded Student ID image
   userId                      String?         @unique // Nullable one-to-one link to User when applicant becomes a member
