@@ -2,21 +2,21 @@
 
 ## Overview
 
-Validates the one-time signed token from the password-setup email link. The frontend calls this endpoint when the user lands on `/auth/setup-password?token=...` to verify the link is valid before showing the password form.
+Checks if the password-setup link from the email is still valid and has not been used yet. The frontend calls this endpoint when the user opens `/auth/setup-password?token=...` to make sure the link works before showing the password form.
 
-The token is a signed JWT (HS256) containing `applicantId`, `email`, and `purpose: "password-setup"`, expiring 48 hours after issuance.
+The token expires 48 hours after it is created.
 
 ---
 
 ## Validate Setup Token
 
 **Description:**  
-Verifies the token signature, checks expiry, and ensures the applicant hasn't already been linked to a user (single-use enforcement).
+Checks if the link is authentic (not fake), not expired, and makes sure it can only be used once.
 
 **Method:** `POST`  
 **Path:** `/api/v1/users/validate-setup-token`
 
-**Authentication:** None (the token itself is the credential)
+**Authentication:** None (the token in the link is the password)
 
 **Request:**
 ```json
@@ -40,7 +40,7 @@ Verifies the token signature, checks expiry, and ensures the applicant hasn't al
 }
 ```
 
-**Response (invalid/expired):**
+**Response (invalid or expired):**
 ```json
 {
   "success": false,
@@ -77,5 +77,5 @@ Verifies the token signature, checks expiry, and ensures the applicant hasn't al
 
 | Status | Meaning |
 |--------|---------|
-| 400 | Token validation failed (invalid, expired, already used, or applicant missing) |
+| 400 | Token check failed (invalid, expired, already used, or applicant not found) |
 | 500 | Internal server error |

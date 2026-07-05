@@ -205,7 +205,7 @@ curl -X POST http://localhost:5000/api/v1/applicants \
 **Description:**  
 Resends the password-setup email for applicants who haven't created an account yet. The endpoint looks up the applicant by email where `userId IS NULL` (not yet linked to a user account). If found, a new signed JWT (48h expiry) is generated and a fresh email is sent.
 
-Always returns a generic success message regardless of whether the email was found — prevents email enumeration.
+Always returns the same success message even if the email was not found — this keeps the user's email private and prevents attackers from guessing which emails are registered.
 
 **Rate Limit:** 3 requests per minute per IP
 
@@ -230,7 +230,7 @@ Always returns a generic success message regardless of whether the email was fou
 ```
 
 **Status Codes:**
-- `200`: Success (generic — even if email not found or already linked)
+- `200`: Success (always the same message — even if email not found or already linked)
 - `400`: Validation error (invalid email format)
 - `429`: Rate limit exceeded
 - `500`: Internal server error

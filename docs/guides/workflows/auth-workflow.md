@@ -2,12 +2,12 @@
 
 ## Overview
 
-Authentication is handled by **Better Auth**, a full-stack auth library. It manages:
+Authentication is handled by **Better Auth**, a library for handling user accounts and logins. It manages:
 
 - Email + Password sign-in for existing users
-- Google OAuth (when configured)
-- GitHub OAuth (when configured)
-- Session management (cookies or Bearer tokens)
+- Google login (when configured)
+- GitHub login (when configured)
+- Session management (cookies or access tokens)
 
 > **Note:** There is no public "Register" page. User accounts are created exclusively through the **membership application pipeline** — an applicant submits → receives a password-setup email → creates their account via the link.
 
@@ -25,7 +25,7 @@ User submits membership application
 Backend creates Applicant record (status: PENDING_REVIEW)
 	↓
 Backend sends email with password setup link
-  Contains: signed JWT token (expires in 48h, single-use)
+  Contains: a secure link that expires in 48 hours and can only be used once
 	↓
 User clicks link → frontend /auth/setup-password?token=<jwt>
 	↓
@@ -56,7 +56,7 @@ Backend sets Applicant.userId = User.id
 Admin approves application (PATCH /api/v1/applicants/:id/status)
   Body: { "status": "APPROVED" }
 	↓
-Backend also updates User.role to "MEMBER"
+Backend also changes User.role to "MEMBER"
 	↓
 Account fully activated ✓
 ```
@@ -95,9 +95,9 @@ Juan is a QCU student who wants to join the Microsoft Student Community. Here's 
 │                                                                      │
 │   → Only applicants who submitted get this email                     │
 │   → Link expires after 48 hours                                      │
-│   → Single-use: once an account is created, the token is rejected    │
-│   → If expired, applicant can request a new link via the             │
-│     resend endpoint (see step 3a)                                    │
+│   → Can only be used once: after creating an account, the link stops │
+│     working                                                          │
+│   → If expired, applicant can ask for a new link (see step 3a)      │
 └──────────────────────────────────────────────────────────────────────┘
                                   │
                                   ▼
@@ -110,11 +110,11 @@ Juan is a QCU student who wants to join the Microsoft Student Community. Here's 
 │ POST /api/v1/users/validate-setup-token                              │
 │   Body: { "token": "<jwt-from-url>" }                                │
 │                                                                      │
-│ Backend verifies:                                                    │
-│   ✓ JWT signature valid?                                             │
-│   ✓ Token not expired? (48h)                                         │
-│   ✓ Applicant still exists?                                          │
-│   ✓ Applicant.userId is null? (not already used)                     │
+│ Backend checks:                                                      │
+│   ✓ Is the link authentic (not fake)?                                │
+│   ✓ Is the link still valid? (not expired, not already used)         │
+│   ✓ Does the applicant still exist?                                  │
+│   ✓ Has the applicant not already created an account?               │
 │                                                                      │
 │ Response: { "success": true, "data": { "applicantId": "app-1",     │
 │            "email": "juan@gmail.com", "name": "Juan Dela Cruz",     │
@@ -144,10 +144,11 @@ Juan is a QCU student who wants to join the Microsoft Student Community. Here's 
 │ If found: generates new JWT, sends fresh email with new link        │
 │ If not found or already linked: silently does nothing               │
 │                                                                      │
-│ Always returns:                                                      │
+│ Always returns the same message:                                     │
 │   { "success": true, "message": "If an account exists, a new        │
 │     setup link has been sent." }                                     │
-│   (generic — prevents email enumeration)                             │
+│   This keeps the user's email private — an attacker cannot tell     │
+│   if an email is registered or not.                                  │
 │                                                                      │
 │ Rate limited: 3 req/min per IP                                      │
 │                                                                      │
@@ -250,7 +251,7 @@ if (status === "APPROVED" && applicant.userId) {
 }
 ```
 
-If `applicant.userId` is null (because link-applicant was never called), the promotion **silently skips**. Juan stays `APPLICANT` forever — even though his application is approved.
+If `applicant.userId` is null (because link-applicant was never called), the role upgrade **does not happen**. Juan stays `APPLICANT` forever — even though his application was approved.
 
 `linkApplicant` is the bridge that connects the two records so the auto-promotion works.
 

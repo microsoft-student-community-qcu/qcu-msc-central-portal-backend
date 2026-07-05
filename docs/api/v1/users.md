@@ -168,13 +168,13 @@ Links the authenticated user's account to their existing applicant record. Calle
 
 ---
 
-### 9. Validate Setup Token
+### 8. Validate Setup Token
 
 **See:** [Setup Token Validation API](./setup-token.md)
 
 ---
 
-### 10. Update User Role (Admin Only)
+### 9. Update User Role (Admin Only)
 
 **Description:**  
 Updates a user's role. Only accessible to `ADMIN_HR`.
