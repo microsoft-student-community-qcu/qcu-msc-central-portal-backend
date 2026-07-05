@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { prisma } from "../config/database";
 import { z } from "zod";
+import { verifySetupToken } from "../utils/token";
 
 export async function getMe(req: Request, res: Response): Promise<void> {
   try {
@@ -93,6 +94,96 @@ export async function updateUserRole(req: Request, res: Response): Promise<void>
     });
   } catch (error) {
     console.error("Failed to update user role:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+const validateSetupTokenSchema = z.object({
+  token: z.string({ message: "Token is required" }),
+});
+
+export async function validateSetupToken(req: Request, res: Response): Promise<void> {
+  try {
+    const parsed = validateSetupTokenSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        errors: parsed.error.issues.map((e: z.ZodIssue) => e.message),
+      });
+      return;
+    }
+
+    let payload: { applicantId: string; email: string };
+    try {
+      payload = await verifySetupToken(parsed.data.token);
+    } catch {
+      res.status(400).json({
+        success: false,
+        errors: ["Invalid or expired setup link. Please request a new one."],
+      });
+      return;
+    }
+
+    const applicant = await prisma.applicant.findUnique({
+      where: { id: payload.applicantId },
+      select: { userId: true },
+    });
+
+    if (!applicant) {
+      res.status(400).json({
+        success: false,
+        errors: ["Application not found. Please submit a new application."],
+      });
+      return;
+    }
+
+    if (applicant.userId) {
+      res.status(400).json({
+        success: false,
+        errors: ["This setup link has already been used. Please sign in instead."],
+      });
+      return;
+    }
+
+    const applicantData = await prisma.applicant.findUnique({
+      where: { id: payload.applicantId },
+      select: {
+        email: true,
+        firstName: true,
+        middleInitial: true,
+        lastName: true,
+        studentId: true,
+      },
+    });
+
+    if (!applicantData) {
+      res.status(400).json({
+        success: false,
+        errors: ["Application not found."],
+      });
+      return;
+    }
+
+    const fullName = [applicantData.firstName, applicantData.middleInitial, applicantData.lastName]
+      .filter(Boolean)
+      .join(" ");
+
+    res.status(200).json({
+      success: true,
+      data: {
+        applicantId: payload.applicantId,
+        email: applicantData.email,
+        name: fullName,
+        firstName: applicantData.firstName,
+        lastName: applicantData.lastName,
+        studentId: applicantData.studentId,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to validate setup token:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error",

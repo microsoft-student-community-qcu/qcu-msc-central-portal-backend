@@ -7,6 +7,7 @@ import {
 import { prisma } from "../config/database";
 import { ocrStore } from "../config/ocrStore";
 import { saveDocument } from "../utils/imageStorage";
+import { signSetupToken } from "../utils/token";
 
 /**
  * POST /api/v1/applicants
@@ -158,14 +159,12 @@ export async function createApplicant(
     });
 
     // ── 5. Email stub (placeholder — integrate with Better Auth email) ────
-    const fullName = [applicant.firstName, applicant.middleInitial, applicant.lastName]
-      .filter(Boolean)
-      .join(" ");
+    const setupToken = await signSetupToken(applicant.id, applicant.email);
     console.log(
       `[EMAIL STUB] Applicant created: ${applicant.email}`
     );
     console.log(
-      `[EMAIL STUB] Password setup link: http://localhost:5173/auth/setup-password?email=${encodeURIComponent(applicant.email)}&applicantId=${applicant.id}&name=${encodeURIComponent(fullName)}&studentId=${encodeURIComponent(applicant.studentId ?? "")}`
+      `[EMAIL STUB] Password setup link: http://localhost:5173/auth/setup-password?token=${setupToken}`
     );
 
     // ── 6. Return created applicant ───────────────────────────────────────
