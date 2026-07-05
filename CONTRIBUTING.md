@@ -20,17 +20,25 @@ This repository is internal to the `microsoft-student-community-qcu` GitHub orga
 
 ---
 
-## Branch Strategy
+## Branch Strategy & Conventions
 
-Branch off `main` and use these prefixes:
+We follow a structured branching convention to ensure quality and compliance. The flow from development to production is structured as follows:
 
-| Prefix | Purpose |
-|--------|---------|
-| `feature/*` | New functionality |
-| `fix/*` | Bug fixes |
-| `docs/*` | Documentation only |
-| `refactor/*` | Code restructuring |
-| `chore/*` | Tooling, deps, config |
+```mermaid
+graph TD
+    feature["feature/* (Contributor)"] -->|PR Approval: FE (BootlegYouki) or BE (mark-ianz)| develop["develop (Development Environment)"]
+    develop -->|PR Approval: Software Development Head (CarlOwlTech)| release["release (Staging Environment)"]
+    release -->|PR Approval: cloud-team & qa-team & cybersecurity-team| main["main & hotfixes (Production Environment)"]
+```
+
+### Branch Roles & Approvals
+
+| Branch | Source Branch | Target Branch | Cloud Environment / Services Used | Approving Code Owners |
+| :--- | :--- | :--- | :--- | :--- |
+| `main` / `hotfixes` | `release` / Hotfix branch | Production | **Azure Web App (`msc-qcu`)** / MySQL Production Database | `cloud-team` & `qa-team` & `cybersecurity-team` |
+| `release` | `develop` | `main` | Staging / QA Environment | Software Development Head (`CarlOwlTech`) |
+| `develop` | `feature/*` | `release` | **Azure Web App (`msc-qcu-develop`)** / MySQL Development Database | FE (`BootlegYouki`) or BE (`mark-ianz`) |
+| `feature/*` | *Self-contained* | `develop` | Local Development (XAMPP / SQLite / local MySQL) | Contributor (Anyone) — Includes fixes, docs, refactors, chores |
 
 ---
 
