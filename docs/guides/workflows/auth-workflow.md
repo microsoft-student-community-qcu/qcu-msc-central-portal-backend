@@ -25,9 +25,14 @@ User submits membership application
 Backend creates Applicant record (status: PENDING_REVIEW)
 	↓
 Backend sends email with password setup link
-  Contains: email, applicantId, name, studentId (as URL params)
+  Contains: signed JWT token (expires in 48h, single-use)
 	↓
-User clicks link → frontend /auth/setup-password page
+User clicks link → frontend /auth/setup-password?token=<jwt>
+	↓
+Frontend validates token: POST /api/v1/users/validate-setup-token
+  (returns email, name, studentId — or errors if expired/invalid/used)
+	↓
+Frontend shows password form with pre-filled name and email
 	↓
 Frontend calls POST /api/auth/sign-up/email with:
 	↓
@@ -86,20 +91,73 @@ Juan is a QCU student who wants to join the Microsoft Student Community. Here's 
 │   "Click here to create your account and set your password"          │
 │                                                                      │
 │   Link: /auth/setup-password                                         │
-│         ?email=juan%40gmail.com                                      │
-│         &applicantId=app-1                                           │
-│         &name=Juan+Dela+Cruz                                         │
-│         &studentId=23-1234                                           │
+│         ?token=<48h-expiring-signed-JWT>                             │
 │                                                                      │
 │   → Only applicants who submitted get this email                     │
+│   → Link expires after 48 hours                                      │
+│   → Single-use: once an account is created, the token is rejected    │
+│   → If expired, applicant can request a new link via the             │
+│     resend endpoint (see step 3a)                                    │
 └──────────────────────────────────────────────────────────────────────┘
                                   │
                                   ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│ 3. ACCOUNT CREATION (Better Auth sign-up)                           │
+│ 3. TOKEN VALIDATION                                                  │
 │                                                                      │
-│ Juan clicks the link → /auth/setup-password page opens.              │
-│ The page reads the URL params: email, applicantId, name, studentId. │
+│ Juan clicks the link → /auth/setup-password?token=<jwt> opens.      │
+│                                                                      │
+│ Before showing the password form, the frontend validates the token: │
+│ POST /api/v1/users/validate-setup-token                              │
+│   Body: { "token": "<jwt-from-url>" }                                │
+│                                                                      │
+│ Backend verifies:                                                    │
+│   ✓ JWT signature valid?                                             │
+│   ✓ Token not expired? (48h)                                         │
+│   ✓ Applicant still exists?                                          │
+│   ✓ Applicant.userId is null? (not already used)                     │
+│                                                                      │
+│ Response: { "success": true, "data": { "applicantId": "app-1",     │
+│            "email": "juan@gmail.com", "name": "Juan Dela Cruz",     │
+│            "studentId": "23-1234" } }                                │
+│                                                                      │
+│ Frontend stores applicantId + email + name + studentId in memory.  │
+│ Pre-fills the form fields.                                          │
+│                                                                      │
+│ If invalid/expired → show error page with "Link expired" message    │
+│ If already used → show "Account already exists. Please sign in."    │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ 3a. RESEND SETUP LINK (if expired/lost)                             │
+│                                                                      │
+│ If Juan's link expired or he lost the email, he visits the          │
+│ /auth/resend-setup-link page (or clicks "Resend" on the login page). │
+│                                                                      │
+│ Frontend calls: POST /api/v1/applicants/resend-setup-link           │
+│   Body: { "email": "juan@gmail.com" }                                │
+│                                                                      │
+│ Backend looks up:                                                    │
+│   Applicant where email = "juan@gmail.com" AND userId IS NULL       │
+│                                                                      │
+│ If found: generates new JWT, sends fresh email with new link        │
+│ If not found or already linked: silently does nothing               │
+│                                                                      │
+│ Always returns:                                                      │
+│   { "success": true, "message": "If an account exists, a new        │
+│     setup link has been sent." }                                     │
+│   (generic — prevents email enumeration)                             │
+│                                                                      │
+│ Rate limited: 3 req/min per IP                                      │
+│                                                                      │
+│ Juan checks his email → clicks new link → continues to step 3       │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ 4. ACCOUNT CREATION (Better Auth sign-up)                           │
 │                                                                      │
 │ Juan enters a password and clicks "Create Account".                 │
 │                                                                      │
@@ -129,7 +187,7 @@ Juan is a QCU student who wants to join the Microsoft Student Community. Here's 
                                   │
                                   ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│ 4. LINK APPLICANT (bridge the gap)                                  │
+│ 5. LINK APPLICANT (bridge the gap)                                  │
 │                                                                      │
 │ The frontend MUST call linkApplicant right after successful sign-up. │
 │ This is the step that connects the User account to the Applicant.   │
@@ -155,7 +213,7 @@ Juan is a QCU student who wants to join the Microsoft Student Community. Here's 
                                   │
                                   ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│ 5. ADMIN APPROVAL → AUTO MEMBER UPGRADE                             │
+│ 6. ADMIN APPROVAL → AUTO MEMBER UPGRADE                             │
 │                                                                      │
 │ Days later, an MSC admin reviews Juan's application and approves.   │
 │                                                                      │
@@ -205,36 +263,46 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
 #### Exact Sequence on `/auth/setup-password`
 
 ```
-1. Page loads → read URL params:
-     email, applicantId, name, studentId
+1. Page loads → read token from URL:
+      token = queryParam("token")
 
-2. User enters password and submits
+2. Call #1 — Validate Setup Token:
+   POST /api/v1/users/validate-setup-token
+   Body: { "token": token }
 
-3. Call #1 — Create Account:
+   → Success Response: { "success": true, "data": { "applicantId", "email", "name", "studentId", ... } }
+   → Error Response:   { "success": false, "errors": ["..."] }
+
+3. On success → store `applicantId` + `email` + `name` + `studentId` in memory, pre-fill form fields.
+   On error   → show relevant error page (expired/used/not found).
+
+4. User enters password and submits
+
+5. Call #2 — Create Account:
    POST /api/auth/sign-up/email
    Body: {
-     "email":       email,          // from URL
+     "email":       email,          // from validation response
      "password":    password,       // user input
-     "name":        name,           // from URL
-     "studentId":   studentId       // from URL
+     "name":        name,           // from validation response
+     "studentId":   studentId       // from validation response
    }
 
    → Response: { "token": "abc...", "user": { "id": "user-1", ... } }
 
-4. Save the token (sessionStorage or cookie for redirect)
+6. Save the token (sessionStorage or cookie for redirect)
 
-5. Call #2 — Link Applicant (REQUIRED — do NOT skip):
+7. Call #3 — Link Applicant (REQUIRED — do NOT skip):
    POST /api/v1/users/link-applicant
-   Authorization: Bearer abc...         // token from step 3
-   Body: { "applicantId": "app-1" }     // applicantId from URL
+   Authorization: Bearer abc...         // token from step 5
+   Body: { "applicantId": "app-1" }     // from validation response (step 2)
 
    → Response: { "success": true, "message": "Applicant linked..." }
 
-6. Redirect user to: /portal/tracking
+8. Redirect user to: /portal/tracking
    → They can now view their application status
    → When admin approves, their role will auto-upgrade to MEMBER
 
-⚠ If step 5 fails or is skipped:
+⚠ If step 7 fails or is skipped:
   • Applicant and User stay disconnected
   • Admin approval won't promote User to MEMBER
   • User is stuck as APPLICANT indefinitely
@@ -244,11 +312,14 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
 
 | Step | Error | What to show |
 |------|-------|-------------|
-| 3 | `{ "errors": ["Student ID already taken"] }` | "An account with this Student ID already exists. Please contact support." |
-| 3 | `{ "errors": ["Email is required", ...] }` | Show each error message as a list |
-| 5 | `404 Applicant not found` | "Your application was not found. Please submit a new application." |
-| 5 | `400 email mismatch` | "The email used to sign up does not match your application email." |
-| 5 | `409 Already linked` | "Your account is already linked. Redirecting to tracking..." → redirect anyway |
+| 2 | Invalid or expired token | "Your setup link has expired or is invalid." → Show "Resend setup link" button that navigates to /auth/resend-setup-link |
+| 2 | Already used | "Your account has already been created. Please sign in instead." → redirect to /auth/sign-in |
+| 2 | Application not found | "Your application was not found. Please submit a new application." |
+| 5 | `{ "errors": ["Student ID already taken"] }` | "An account with this Student ID already exists. Please contact support." |
+| 5 | `{ "errors": ["Email is required", ...] }` | Show each error message as a list |
+| 7 | `404 Applicant not found` | "Your application was not found. Please submit a new application." |
+| 7 | `400 email mismatch` | "The email used to sign up does not match your application email." |
+| 7 | `409 Already linked` | "Your account is already linked. Redirecting to tracking..." → redirect anyway |
 
 ---
 
@@ -332,6 +403,8 @@ Route uses require* guard to block unauthorized requests
 | POST | `/api/auth/sign-in/google` | Public | Sign in with Google (OAuth) |
 | POST | `/api/auth/sign-in/github` | Public | Sign in with GitHub (OAuth) |
 | GET | `/api/auth/get-session` | Required | Get current session |
+| POST | `/api/v1/users/validate-setup-token` | None | Validate password-setup JWT from email link |
+| POST | `/api/v1/applicants/resend-setup-link` | None | Resend setup email (3 req/min) |
 | GET | `/api/v1/users/me` | Required | Get user profile |
 | POST | `/api/v1/users/link-applicant` | Required | Link applicant record to user account |
 | PATCH | `/api/v1/users/:userId/role` | ADMIN_HR | Update user role |
