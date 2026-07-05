@@ -10,6 +10,7 @@ import applicantRoutes from "./routes/applicant.routes";
 import { resendSetupLink } from "./controllers/applicant.controller";
 import eventRoutes from "./routes/event.routes";
 import userRoutes from "./routes/user.routes";
+import { prisma } from "./config/database";
 
 const app = express();
 
@@ -194,11 +195,13 @@ app.get("/", (_req, res) => {
  */
 // All CRUD API routes have been removed per request.
 
-/**
- * Health check endpoint
- */
-app.get("/health", (_req, res) => {
-  res.json({ status: "healthy" });
+app.get("/health", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: "healthy", database: "connected" });
+  } catch (error: any) {
+    res.status(500).json({ status: "unhealthy", database: "disconnected", error: error.message });
+  }
 });
 
 /**

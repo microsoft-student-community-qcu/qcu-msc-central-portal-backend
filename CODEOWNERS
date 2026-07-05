@@ -1,3 +1,16 @@
-# Branching Conventions & Approval Requirements
-# Target: main
-* @microsoft-student-community-qcu/cloud-team @microsoft-student-community-qcu/qa-team
+# ==============================================================================
+# QCU MSC Backend CODEOWNERS
+# ==============================================================================
+
+# 1. Default Fallback (Project config, dependencies, security)
+* @microsoft-student-community-qcu/cloud-team @microsoft-student-community-qcu/qa-team @microsoft-student-community-qcu/cybersecurity-team
+
+# 2. Cloud & DevOps Infrastructure
+/.github/ @microsoft-student-community-qcu/cloud-team
+/host.json @microsoft-student-community-qcu/cloud-team
+/local.settings.json @microsoft-student-community-qcu/cloud-team
+
+# 3. Backend application, Database & Environment Templates
+/prisma/ @microsoft-student-community-qcu/qa-team @mark-ianz
+/src/ @microsoft-student-community-qcu/qa-team @mark-ianz
+/.env.example @microsoft-student-community-qcu/qa-team @mark-ianz

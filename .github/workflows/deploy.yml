@@ -1,0 +1,23 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    uses: microsoft-student-community-qcu/qcu-msc-cicd/.github/workflows/deploy-azure-function-node.yml@main
+    with:
+      node-version: '24'
+      build-command: 'npm run build'
+      app-name: func-msc-qcu-backend
+      package-path: '.'
+    secrets:
+      azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+      azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+      azure-subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
