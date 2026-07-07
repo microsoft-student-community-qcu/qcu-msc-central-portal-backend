@@ -49,7 +49,35 @@ export const createEventSchema = z
   });
 
 // Schema for updating an event's details.
-export const updateEventSchema = createEventSchema.partial();
+// Defined separately (not via .partial() on createEventSchema) because
+// Zod v4 does not allow .partial() on schemas containing .refine().
+export const updateEventSchema = z.object({
+  title: z
+    .string()
+    .min(1, "Event title is required")
+    .max(150, "Event title must be less than 150 characters")
+    .optional(),
+  description: z
+    .string()
+    .max(1000, "Description must be less than 1000 characters")
+    .optional()
+    .nullable(),
+  date: z.coerce.date({
+    error: "Event date is required and must be a valid date",
+  }).optional(),
+  priorityStartDate: z.coerce.date({
+    error: "Priority start date is required and must be a valid date",
+  }).optional(),
+  generalStartDate: z.coerce.date({
+    error: "General start date is required and must be a valid date",
+  }).optional(),
+  type: eventTypeEnum.optional(),
+  maxCapacity: z
+    .number()
+    .int("Capacity must be an integer")
+    .positive("Capacity must be a positive number")
+    .optional(),
+});
 
 // Schema for registering a guest (account-free) or authenticated member to an event.
 // studentId is required for guest registrations (captured via Zonal OCR);

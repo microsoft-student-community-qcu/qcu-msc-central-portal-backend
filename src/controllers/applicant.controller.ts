@@ -4,6 +4,7 @@ import {
   createApplicantSchema,
   updateApplicantSchema,
   updateApplicantStatusSchema,
+  approveManualIdSchema,
 } from "../schemas/applicant.schema";
 import { prisma } from "../config/database";
 import { ocrStore } from "../config/ocrStore";
@@ -505,6 +506,107 @@ export async function updateApplicant(
     }
 
     console.error("Failed to update applicant:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+// ── Admin: Manual ID Override ─────────────────────────────────────────────
+
+/**
+ * PATCH /api/v1/applicants/:applicantId/approve-id
+ *
+ * Allows ADMIN_HR to review and approve or reject a quarantined applicant
+ * (manual_application: true) after manually verifying their uploaded ID
+ * image against their typed student number.
+ *
+ * On approval:
+ *   - Sets manual_application to false (clears quarantine)
+ *   - Sets studentId from the request body (since OCR could not extract it)
+ *   - Sets status to PENDING_REVIEW (enters the normal pipeline)
+ *
+ * On rejection:
+ *   - Sets status to REJECTED
+ *   - Leaves manual_application: true for audit trail
+ */
+export async function approveManualId(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { applicantId } = req.params;
+
+    const parsed = approveManualIdSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const { action, studentId } = parsed.data;
+
+    const existing = await prisma.applicant.findUnique({
+      where: { id: applicantId },
+    });
+
+    if (!existing) {
+      res.status(404).json({
+        success: false,
+        message: "Applicant not found",
+      });
+      return;
+    }
+
+    if (!existing.manual_application) {
+      res.status(400).json({
+        success: false,
+        message:
+          "This applicant is not in the manual ID verification queue. Only applicants with manual_application: true can be processed here.",
+      });
+      return;
+    }
+
+    let updateData: any;
+
+    if (action === "approve") {
+      updateData = {
+        manual_application: false,
+        studentId: studentId ?? existing.studentId,
+        status: "PENDING_REVIEW",
+      };
+    } else {
+      updateData = {
+        status: "REJECTED",
+      };
+    }
+
+    const applicant = await prisma.applicant.update({
+      where: { id: applicantId },
+      data: updateData,
+    });
+
+    // Email stub — TODO: replace with real email engine (Task 4.1)
+    if (action === "approve") {
+      console.log(`[EMAIL STUB] Manual ID approved: ${applicant.email} — now in PENDING_REVIEW`);
+    } else {
+      console.log(`[EMAIL STUB] Manual ID rejected: ${applicant.email}`);
+    }
+
+    res.status(200).json({
+      success: true,
+      data: formatApplicantResponse(applicant),
+      message:
+        action === "approve"
+          ? "Applicant ID approved. Application moved to review pipeline."
+          : "Applicant ID rejected. Application has been rejected.",
+    });
+  } catch (error) {
+    console.error("Failed to process manual ID override:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error",

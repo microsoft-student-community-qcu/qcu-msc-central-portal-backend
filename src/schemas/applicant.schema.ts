@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+
 // ── Enums ────────────────────────────────────────────────────────────────
 
 export const applicantStatusEnum = z.enum(
@@ -322,3 +323,35 @@ export type UpdateApplicantStatusSchema = z.infer<typeof updateApplicantStatusSc
 export type ApplicantStatusEnum = z.infer<typeof applicantStatusEnum>;
 export type GenderEnum = z.infer<typeof genderEnum>;
 export type CampusEnum = z.infer<typeof campusEnum>;
+
+
+// ── Manual ID Override Schema (HR) ───────────────────────────────────────
+
+/**
+ * Schema for ADMIN_HR manual ID verification override.
+ * action: "approve" clears quarantine, "reject" closes the application.
+ * studentId is required when action is "approve" and OCR never extracted one.
+ */
+export const approveManualIdSchema = z.object({
+  action: z.enum(["approve", "reject"], {
+    error: "Action must be approve or reject",
+  }),
+  studentId: z
+    .string({ message: "Student ID must be a text value" })
+    .regex(
+      /^\d{2}-\d{4}$/,
+      "Student ID format must be YY-NNNN (e.g., 23-1234)"
+    )
+    .optional(),
+}).refine(
+  (data) => {
+    if (data.action === "approve" && !data.studentId) return false;
+    return true;
+  },
+  {
+    message: "studentId is required when approving an applicant",
+    path: ["studentId"],
+  }
+);
+
+export type ApproveManualIdSchema = z.infer<typeof approveManualIdSchema>;

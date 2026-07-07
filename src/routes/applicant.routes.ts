@@ -8,6 +8,7 @@ import {
   listApplicants,
   updateApplicantStatus,
   updateApplicant,
+  approveManualId,
 } from "../controllers/applicant.controller";
 
 const upload = multer({
@@ -99,5 +100,12 @@ router.patch("/:applicantId/status", requireAdminHR, updateApplicantStatus);
  * Updates an applicant's profile details. ADMIN_HR only.
  */
 router.patch("/:applicantId", requireAdminHR, updateApplicant);
+
+/**
+ * PATCH /api/v1/applicants/:applicantId/approve-id
+ *
+ * Manual ID verification override for quarantined applicants. ADMIN_HR only.
+ */
+router.patch("/:applicantId/approve-id", requireAdminHR, approveManualId);
 
 export default router;
