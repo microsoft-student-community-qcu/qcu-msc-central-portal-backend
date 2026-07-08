@@ -10,7 +10,6 @@ import applicantRoutes from "./routes/applicant.routes";
 import { resendSetupLink } from "./controllers/applicant.controller";
 import eventRoutes from "./routes/event.routes";
 import userRoutes from "./routes/user.routes";
-import { prisma } from "./config/database";
 
 const app = express();
 
@@ -143,7 +142,6 @@ app.use("/api/auth", async (req, res, next) => {
   }
 });
 
-app.use("/api/v1/events", eventRoutes);
 
 // Public routes (no auth required)
 app.use("/api/v1/ocr", ocrRoutes);
@@ -170,6 +168,7 @@ app.use("/api/v1/users", userRoutes);
 
 // Applicant routes
 app.use("/api/v1/applicants", applicantRoutes);
+app.use("/api/v1/events", eventRoutes);
 
 /**
  * Base route

@@ -78,3 +78,4 @@ export function requireMemberOrAdmin(req: Request, res: Response, next: NextFunc
   }
   next();
 }
+

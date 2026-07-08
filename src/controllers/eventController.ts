@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { registerEventSchema } from "../schemas/registerEvent.schema";
 import { prisma } from "../config/database";
 import { ocrStore } from "../config/ocrStore";
+import { createEventSchema } from "../schemas/event.schema";
 
 /**
  * POST /api/v1/events/:eventId/register
@@ -250,5 +251,270 @@ export async function registerForEvent(
     res
       .status(500)
       .json({ success: false, message: "Internal server error during registration" });
+  }
+}
+
+// ── Admin: Create Event ──────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/events
+ *
+ * Creates a new event. ADMIN_LOGISTICS only.
+ * Once created, the event automatically appears in the public /events feed.
+ */
+export async function createEvent(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const parsed = createEventSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const event = await prisma.event.create({
+      data: {
+        title: parsed.data.title,
+        description: parsed.data.description ?? null,
+        date: parsed.data.date,
+        priorityStartDate: parsed.data.priorityStartDate,
+        generalStartDate: parsed.data.generalStartDate,
+        type: parsed.data.type ?? "PUBLIC",
+        maxCapacity: parsed.data.maxCapacity,
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: event,
+      message: "Event created successfully",
+    });
+  } catch (error) {
+    console.error("Failed to create event:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+// ── Admin: Get Event Attendee Roster ─────────────────────────────────────
+
+/**
+ * GET /api/v1/events/:eventId/registrations
+ *
+ * Returns all registrations for a specific event including check-in status.
+ * ADMIN_LOGISTICS only.
+ *
+ * Query params:
+ *   - status (optional): APPROVED | PENDING_REVIEW | REJECTED | CANCELLED
+ *   - hasAttended (optional): true | false
+ */
+export async function getEventRegistrations(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { eventId } = req.params;
+    const { status, hasAttended } = req.query as Record<string, string>;
+
+    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) {
+      res.status(404).json({ success: false, message: "Event not found" });
+      return;
+    }
+
+    const where: any = { eventId };
+    if (status) where.status = status;
+    if (hasAttended !== undefined) {
+      where.hasAttended = hasAttended === "true";
+    }
+
+    const [total, registrations] = await Promise.all([
+      prisma.registration.count({ where }),
+      prisma.registration.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        event: {
+          id: event.id,
+          title: event.title,
+          date: event.date,
+          maxCapacity: event.maxCapacity,
+          registeredCount: total,
+          spotsRemaining: event.maxCapacity - total,
+        },
+        total,
+        registrations,
+      },
+      message: "Registrations retrieved successfully",
+    });
+  } catch (error) {
+    console.error("Failed to fetch registrations:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+// ── Admin: QR Check-In ───────────────────────────────────────────────────
+
+/**
+ * PATCH /api/v1/events/:eventId/registrations/checkin
+ *
+ * Validates a QR payload against this specific event and marks the
+ * registration as attended. Used by the QR scanner route.
+ * ADMIN_LOGISTICS only.
+ *
+ * Body: { qrPayload: string }
+ *
+ * Returns 400 if the QR payload belongs to a different event,
+ * is already scanned, or is not found — matching the PRD's
+ * "Invalid Ticket or Already Scanned" error requirement.
+ */
+export async function checkInByQr(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { eventId } = req.params;
+    const { qrPayload } = req.body;
+
+    if (!qrPayload || typeof qrPayload !== "string") {
+      res.status(400).json({
+        success: false,
+        message: "qrPayload is required",
+      });
+      return;
+    }
+
+    const registration = await prisma.registration.findUnique({
+      where: { qrPayload },
+    });
+
+    // Both "not found" and "wrong event" return the same error —
+    // intentionally vague to match PRD: "Invalid Ticket or Already Scanned"
+    if (!registration || registration.eventId !== eventId) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid Ticket or Already Scanned",
+      });
+      return;
+    }
+
+    if (registration.hasAttended) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid Ticket or Already Scanned",
+      });
+      return;
+    }
+
+    if (registration.status !== "APPROVED") {
+      res.status(400).json({
+        success: false,
+        message: "Registration is not approved for check-in",
+      });
+      return;
+    }
+
+    const updated = await prisma.registration.update({
+      where: { qrPayload },
+      data: { hasAttended: true },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        registrationId: updated.id,
+        name: `${updated.firstName} ${updated.lastName}`.trim(),
+        hasAttended: updated.hasAttended,
+      },
+      message: `${updated.firstName} ${updated.lastName} checked in successfully`.trim(),
+    });
+  } catch (error) {
+    console.error("Failed to check in:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+// ── Admin: Manual Check-In Override ─────────────────────────────────────
+
+/**
+ * PATCH /api/v1/events/:eventId/registrations/:registrationId/checkin
+ *
+ * Manual check-in override for cases where the QR scanner fails
+ * (cracked screen, damaged QR, etc.). Looks up by registrationId
+ * instead of QR payload. ADMIN_LOGISTICS only.
+ */
+export async function manualCheckIn(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { eventId, registrationId } = req.params;
+
+    const registration = await prisma.registration.findUnique({
+      where: { id: registrationId },
+    });
+
+    if (!registration || registration.eventId !== eventId) {
+      res.status(404).json({
+        success: false,
+        message: "Registration not found for this event",
+      });
+      return;
+    }
+
+    if (registration.hasAttended) {
+      res.status(400).json({
+        success: false,
+        message: "This attendee has already been checked in",
+      });
+      return;
+    }
+
+    if (registration.status !== "APPROVED") {
+      res.status(400).json({
+        success: false,
+        message: "Registration is not approved for check-in",
+      });
+      return;
+    }
+
+    const updated = await prisma.registration.update({
+      where: { id: registrationId },
+      data: { hasAttended: true },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        registrationId: updated.id,
+        name: `${updated.firstName} ${updated.lastName}`.trim(),
+        hasAttended: updated.hasAttended,
+      },
+      message: `${updated.firstName} ${updated.lastName} checked in successfully (manual override)`.trim(),
+    });
+  } catch (error) {
+    console.error("Failed to manually check in:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 }

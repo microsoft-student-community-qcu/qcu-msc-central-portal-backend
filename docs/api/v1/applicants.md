@@ -1,7 +1,7 @@
 # Applicant Tracking API
 
 ## Overview
-The Applicant Tracking API manages the recruitment and application pipeline for prospective MSC members. It tracks applications from submission through final hiring decision (APPLIED → INTERVIEWING → ACCEPTED/REJECTED).
+The Applicant Tracking API manages the recruitment and application pipeline for prospective MSC members. It tracks applications from submission through admin review and final decision (PENDING_REVIEW → APPROVED / REJECTED / CANCELLED).
 
 The submission endpoint accepts **multipart/form-data** to support file uploads (Certificate of Registration, Curriculum Vitae).
 
@@ -93,7 +93,7 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
     "portfolio": string | null,
     "githubOrProjectLinks": string | null,
     "previousWorksAchievements": string | null,
-    "status": "APPLIED",
+    "status": "PENDING_REVIEW",
     "manual_application": boolean,
     "createdAt": string (ISO 8601),
     "updatedAt": string (ISO 8601)
@@ -340,7 +340,7 @@ Retrieves all applicants with optional filtering by status, campus, or gender.
 **Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Query Parameters:**
-- `status` (optional): Filter by status — `APPLIED`, `INTERVIEWING`, `ACCEPTED`, `REJECTED`
+- `status` (optional): Filter by status — `APPROVED`, `PENDING_REVIEW`, `REJECTED`, `CANCELLED`
 - `campus` (optional): Filter by campus — `SAN_BARTOLOME_MAIN`, `SAN_FRANCISCO`, `BATASAN`
 - `gender` (optional): Filter by gender — `MALE`, `FEMALE`, `LGBTQIA`, `PREFER_NOT_TO_SAY`
 - `manual_application` (optional): Filter by manual application flag — `true` or `false`
@@ -396,7 +396,7 @@ Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
 **Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Request Parameters:**
-- `status` (enum, required): New status — `APPLIED`, `INTERVIEWING`, `ACCEPTED`, or `REJECTED`
+- `status` (enum, required): New status — `APPROVED`, `PENDING_REVIEW`, `REJECTED`, or `CANCELLED`
 
 **Response Format:**
 ```json
@@ -409,7 +409,7 @@ Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
     "middleInitial": string | null,
     "email": string,
     "studentId": string | null,
-    "status": "APPLIED" | "INTERVIEWING" | "ACCEPTED" | "REJECTED",
+    "status": "APPROVED" | "PENDING_REVIEW" | "REJECTED" | "CANCELLED",
     "manual_application": boolean,
     "updatedAt": string (ISO 8601)
   },
@@ -423,7 +423,7 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -d '{
-    "status": "INTERVIEWING"
+    "status": "PENDING_REVIEW"
   }'
 ```
 
@@ -438,7 +438,7 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
     "middleInitial": "B",
     "email": "jane@example.com",
     "studentId": "23-5678",
-    "status": "INTERVIEWING",
+    "status": "PENDING_REVIEW",
     "manual_application": false,
     "updatedAt": "2026-06-15T11:00:00Z"
   },
@@ -448,7 +448,69 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
 
 ---
 
-### 6. Update Applicant Details
+### 6. Manual ID Override
+
+**Description:**  
+Allows ADMIN_HR staff to review and approve or reject applicants who were flagged for manual ID verification (`manual_application: true`). Approval requires a student ID and clears the quarantine state; rejection preserves the audit flag and sets the applicant to `REJECTED`.
+
+**Method:** `PATCH`  
+**Path:** `/api/v1/applicants/:applicantId/approve-id`
+
+**Authentication:** Required (Bearer token, ADMIN_HR only)
+
+**Request Body:**
+- `action` (enum, required): `approve` or `reject`
+- `studentId` (string, required when `action` is `approve`): QCU Student ID in `YY-NNNN` format
+
+**Response Format:**
+```json
+{
+  "success": boolean,
+  "data": {
+    "id": string,
+    "lastName": string,
+    "firstName": string,
+    "middleInitial": string | null,
+    "email": string,
+    "studentId": string | null,
+    "status": "APPROVED" | "PENDING_REVIEW" | "REJECTED" | "CANCELLED",
+    "manual_application": boolean,
+    "updatedAt": string (ISO 8601)
+  },
+  "message": string
+}
+```
+
+**Example Request (Approve):**
+```bash
+curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-446655440001/approve-id \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -d '{
+    "action": "approve",
+    "studentId": "23-5678"
+  }'
+```
+
+**Example Request (Reject):**
+```bash
+curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-446655440001/approve-id \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -d '{
+    "action": "reject"
+  }'
+```
+
+**Status Codes:**
+- `200`: Applicant processed successfully
+- `400`: Applicant is not in the manual verification queue or `studentId` is missing for approval
+- `404`: Applicant not found
+- `500`: Internal server error
+
+---
+
+### 7. Update Applicant Details
 
 **Description:**  
 Updates an applicant's profile details. Only ADMIN_HR users can update applicants.

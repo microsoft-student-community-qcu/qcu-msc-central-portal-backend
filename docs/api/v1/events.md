@@ -255,7 +255,7 @@ curl -X DELETE http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-44665
 ### 6. Register for Event
 
 **Description:**  
-Registers a guest (no account required) or authenticated member for an event. Guest registrations must first call `POST /api/v1/ocr/verify` to obtain an `ocrSessionId`. Authenticated members bypass OCR — their `studentId` is auto-pulled from their profile. Generates a unique QR code for event check-in.
+Registers a guest (no account required) or an authenticated member for an event. Guest registrations must first call `POST /api/v1/ocr/verify` to obtain an `ocrSessionId`. Authenticated members bypass OCR and use their profile data automatically. The endpoint generates a QR payload for event check-in.
 
 **Method:** `POST`  
 **Path:** `/api/v1/events/:eventId/register`
@@ -265,9 +265,9 @@ Registers a guest (no account required) or authenticated member for an event. Gu
 - `firstName` (string, required): Attendee's first name (1-100 characters)
 - `middleInitial` (string, optional): Middle initial, single letter optionally followed by a dot
 - `email` (string, required): Attendee's email address
-- `studentId` (string, optional): QCU Student ID (YY-NNNN format), required for guest registrations (extracted via Zonal OCR, forwarded from OCR session), auto-pulled for authenticated members
+- `studentId` (string, optional): QCU Student ID in `YY-NNNN` format; required for guest registrations and used when OCR cannot extract it
 - `ocrSessionId` (string, optional): OCR session token returned from `POST /api/v1/ocr/verify`
-- `userId` (string, optional): User ID if authenticated member (UUID format, auto-attached server-side from JWT)
+- `userId` (string, optional): User ID if the attendee is already authenticated (auto-attached server-side from JWT)
 
 **Response Format:**
 ```json
@@ -282,7 +282,7 @@ Registers a guest (no account required) or authenticated member for an event. Gu
     "email": string,
     "status": "APPROVED" | "PENDING_REVIEW",
     "manual_registration": boolean,
-    "qrCode": string (QR payload UUID),
+    "qrPayload": string,
     "hasAttended": boolean,
     "createdAt": string (ISO 8601)
   },
@@ -295,7 +295,8 @@ Registers a guest (no account required) or authenticated member for an event. Gu
 curl -X POST http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655440002/register \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Alex Johnson",
+    "lastName": "Johnson",
+    "firstName": "Alex",
     "email": "alex@example.com",
     "studentId": "23-5678",
     "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004"
@@ -309,11 +310,13 @@ curl -X POST http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-4466554
   "data": {
     "registrationId": "880e8400-e29b-41d4-a716-446655440003",
     "eventId": "770e8400-e29b-41d4-a716-446655440002",
-    "name": "Alex Johnson",
+    "lastName": "Johnson",
+    "firstName": "Alex",
+    "middleInitial": null,
     "email": "alex@example.com",
     "status": "APPROVED",
     "manual_registration": false,
-    "qrCode": "880e8400-e29b-41d4-a716-446655440003",
+    "qrPayload": "880e8400-e29b-41d4-a716-446655440003",
     "hasAttended": false,
     "createdAt": "2026-06-15T11:00:00Z"
   },
@@ -326,33 +329,41 @@ curl -X POST http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-4466554
 ### 7. Get Event Registrations
 
 **Description:**  
-Retrieves all registrations for a specific event. Only ADMIN_LOGISTICS can view.
+Retrieves all registrations for a specific event, including attendance and capacity summary. Only ADMIN_LOGISTICS can view this roster.
 
 **Method:** `GET`  
 **Path:** `/api/v1/events/:eventId/registrations`
 
-**Authentication:** Required (Bearer token, ADMIN_LOGISTICS)
+**Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
 
 **Query Parameters:**
-- `hasAttended` (optional): Filter by attendance status (true/false)
-- `limit` (optional): Number of records to return (default: 50)
-- `offset` (optional): Pagination offset (default: 0)
+- `status` (optional): Filter by registration status — `APPROVED`, `PENDING_REVIEW`, `REJECTED`, `CANCELLED`
+- `hasAttended` (optional): Filter by attendance status (`true`/`false`)
 
 **Response Format:**
 ```json
 {
   "success": boolean,
   "data": {
+    "event": {
+      "id": string,
+      "title": string,
+      "date": string (ISO 8601),
+      "maxCapacity": number,
+      "registeredCount": number,
+      "spotsRemaining": number
+    },
     "total": number,
     "registrations": [
       {
-        "registrationId": string,
+        "id": string,
         "lastName": string,
-    "firstName": string,
-    "middleInitial": string | null,
+        "firstName": string,
+        "middleInitial": string | null,
         "email": string,
+        "status": "APPROVED" | "PENDING_REVIEW" | "REJECTED" | "CANCELLED",
         "hasAttended": boolean,
-        "createdAt": string
+        "createdAt": string (ISO 8601)
       }
     ]
   },
@@ -362,13 +373,51 @@ Retrieves all registrations for a specific event. Only ADMIN_LOGISTICS can view.
 
 ---
 
-### 8. Mark Attendance
+### 8. QR Check-In
 
 **Description:**  
-Marks a student as attended using their QR code payload.
+Validates a QR payload for the current event and marks the registration as attended. This is intended for QR scanner workflows and returns a generic error for invalid or already-used tickets.
 
-**Method:** `POST`  
-**Path:** `/api/v1/events/:eventId/attendance/:qrCode`
+**Method:** `PATCH`  
+**Path:** `/api/v1/events/:eventId/registrations/checkin`
+
+**Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
+
+**Request Body:**
+```json
+{
+  "qrPayload": "<qr payload string>"
+}
+```
+
+**Response Format:**
+```json
+{
+  "success": boolean,
+  "data": {
+    "registrationId": string,
+    "name": string,
+    "hasAttended": true
+  },
+  "message": string
+}
+```
+
+**Status Codes:**
+- `200`: Check-in successful
+- `400`: Invalid ticket, duplicate scan, or registration not approved for check-in
+- `404`: Event not found
+- `500`: Internal server error
+
+---
+
+### 9. Manual Check-In Override
+
+**Description:**  
+Allows logistics staff to manually mark a registration as attended by registration ID when QR scanning is unavailable or fails. This is useful for cracked screens or damaged QR passes.
+
+**Method:** `PATCH`  
+**Path:** `/api/v1/events/:eventId/registrations/:registrationId/checkin`
 
 **Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
 
@@ -378,17 +427,18 @@ Marks a student as attended using their QR code payload.
   "success": boolean,
   "data": {
     "registrationId": string,
-    "hasAttended": true,
-    "message": string
-  }
+    "name": string,
+    "hasAttended": true
+  },
+  "message": string
 }
 ```
 
-**Example Request:**
-```bash
-curl -X POST http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655440002/attendance/880e8400-e29b-41d4-a716-446655440003 \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-```
+**Status Codes:**
+- `200`: Manual check-in successful
+- `400`: Registration already checked in or not approved for check-in
+- `404`: Registration not found for the provided event
+- `500`: Internal server error
 
 ---
 
