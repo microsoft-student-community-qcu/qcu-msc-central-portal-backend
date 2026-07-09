@@ -109,26 +109,35 @@ Event appears in event listings
   - Uploaded Student ID.
   - Submitted information.
   - Eligibility and authenticity.
-- **If approved:**
-  - Registration status becomes:
+- Logistics admin can resolve the pending registration via `PATCH /api/v1/events/:eventId/registrations/:registrationId/approve`.
+  - Request body:
     ```json
     {
-      "status": "approved"
+      "action": "approve"
     }
     ```
-  - System sends:
-    - Approval email.
-    - QR Ticket / QR Pass.
-    - Event details.
-    - Unique cancellation link.
-- **If rejected:**
-  - Registration status becomes:
+    or
     ```json
     {
-      "status": "rejected"
+      "action": "reject"
     }
     ```
-  - System sends a rejection email with the reason (optional).
+  - If approved:
+    - Registration status becomes:
+      ```json
+      {
+        "status": "APPROVED"
+      }
+      ```
+    - Backend logs a stub email with the QR ticket URL derived from the registration's `qrPayload`.
+  - If rejected:
+    - Registration status becomes:
+      ```json
+      {
+        "status": "REJECTED"
+      }
+      ```
+    - Backend logs a stub rejection email message.
 
 ---
 

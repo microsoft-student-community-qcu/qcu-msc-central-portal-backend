@@ -4,6 +4,7 @@ import { getEvents } from "../controllers/eventsFeedController";
 import {
   createEvent,
   getEventRegistrations,
+  reviewRegistration,
   checkInByQr,
   manualCheckIn,
 } from "../controllers/eventController";
@@ -26,6 +27,13 @@ router.post("/", requireAdminLogistics, createEvent);
 
 // GET /api/v1/events/:eventId/registrations
 router.get("/:eventId/registrations", requireAdminLogistics, getEventRegistrations);
+
+// PATCH /api/v1/events/:eventId/registrations/:registrationId/approve
+router.patch(
+  "/:eventId/registrations/:registrationId/approve",
+  requireAdminLogistics,
+  reviewRegistration
+);
 
 // PATCH /api/v1/events/:eventId/registrations/checkin (QR scanner)
 router.patch("/:eventId/registrations/checkin", requireAdminLogistics, checkInByQr);

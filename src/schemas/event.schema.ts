@@ -96,8 +96,16 @@ export const registerEventSchema = z.object({
     .nullable(),
 });
 
+// Schema for logistics admin review actions on manual-review registrations.
+export const reviewRegistrationSchema = z.object({
+  action: z.enum(["approve", "reject"], {
+    error: "Action must be either approve or reject",
+  }),
+});
+
 export type CreateEventSchema = z.infer<typeof createEventSchema>;
 export type UpdateEventSchema = z.infer<typeof updateEventSchema>;
 export type RegisterEventSchema = z.infer<typeof registerEventSchema>;
+export type ReviewRegistrationSchema = z.infer<typeof reviewRegistrationSchema>;
 export type EventTypeEnum = z.infer<typeof eventTypeEnum>;
 export type RegistrationStatusEnum = z.infer<typeof registrationStatusEnum>;
