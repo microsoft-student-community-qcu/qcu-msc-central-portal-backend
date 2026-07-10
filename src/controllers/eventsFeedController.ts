@@ -15,6 +15,57 @@ import { prisma } from "../config/database";
  * ("top 3 upcoming active events") without role-based hiding at the
  * feed level.
  */
+export async function getEventById(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { eventId } = req.params;
+
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        _count: {
+          select: { registrations: { where: { status: { not: "REJECTED" } } } },
+        },
+      },
+    });
+
+    if (!event) {
+      res.status(404).json({
+        success: false,
+        message: "Event not found",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: event.id,
+        title: event.title,
+        description: event.description,
+        date: event.date,
+        priorityStartDate: event.priorityStartDate,
+        generalStartDate: event.generalStartDate,
+        type: event.type,
+        maxCapacity: event.maxCapacity,
+        registeredCount: event._count.registrations,
+        spotsRemaining: event.maxCapacity - event._count.registrations,
+        createdAt: event.createdAt,
+        updatedAt: event.updatedAt,
+      },
+      message: "Event retrieved successfully",
+    });
+  } catch (error) {
+    console.error("Failed to fetch event:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error while fetching event",
+    });
+  }
+}
+
 export async function getEvents(_req: Request, res: Response): Promise<void> {
   try {
     const now = new Date();
