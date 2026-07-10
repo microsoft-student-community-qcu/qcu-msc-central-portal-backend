@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { registerForEvent } from "../controllers/eventController";
-import { getEvents } from "../controllers/eventsFeedController";
+import { getEvents, getEventById } from "../controllers/eventsFeedController";
 import {
   createEvent,
   getEventRegistrations,
@@ -16,6 +16,9 @@ const router = Router();
 
 // GET /api/v1/events
 router.get("/", getEvents);
+
+// GET /api/v1/events/:eventId
+router.get("/:eventId", getEventById);
 
 // POST /api/v1/events/:eventId/register
 router.post("/:eventId/register", registerForEvent);
