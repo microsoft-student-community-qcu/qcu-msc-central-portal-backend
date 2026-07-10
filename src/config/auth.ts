@@ -46,6 +46,7 @@ export const auth = betterAuth({
       },
     },
   },
+  trustedOrigins: [env.FRONTEND_URL],
   plugins: [bearer()],
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
