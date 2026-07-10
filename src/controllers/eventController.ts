@@ -122,7 +122,7 @@ export async function registerForEvent(
       if (!parsed.success) {
         res.status(400).json({
           success: false,
-          message: "Validation error",
+          message: "One or more fields are invalid. Check the errors field for details.",
           errors: parsed.error.flatten().fieldErrors,
         });
         return;
