@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { registerEventSchema } from "../schemas/registerEvent.schema";
 import { prisma } from "../config/database";
 import { ocrStore } from "../config/ocrStore";
-import { createEventSchema } from "../schemas/event.schema";
+import { createEventSchema, reviewRegistrationSchema } from "../schemas/event.schema";
 
 /**
  * POST /api/v1/events/:eventId/register
@@ -361,6 +361,97 @@ export async function getEventRegistrations(
     });
   } catch (error) {
     console.error("Failed to fetch registrations:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+// ── Admin: Review Manual Registration ─────────────────────────────────
+
+/**
+ * PATCH /api/v1/events/:eventId/registrations/:registrationId/approve
+ *
+ * Allows ADMIN_LOGISTICS to approve or reject registrations that were
+ * flagged for manual review after OCR failure. Approvals emit a stubbed
+ * email log with a QR ticket URL derived from the registration's qrPayload.
+ */
+export async function reviewRegistration(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { eventId, registrationId } = req.params;
+    const parsed = reviewRegistrationSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) {
+      res.status(404).json({ success: false, message: "Event not found" });
+      return;
+    }
+
+    const registration = await prisma.registration.findUnique({
+      where: { id: registrationId },
+    });
+
+    if (!registration || registration.eventId !== eventId) {
+      res.status(404).json({
+        success: false,
+        message: "Registration not found for this event",
+      });
+      return;
+    }
+
+    if (registration.status !== "PENDING_REVIEW") {
+      res.status(400).json({
+        success: false,
+        message: "Registration is not pending review",
+      });
+      return;
+    }
+
+    const nextStatus = parsed.data.action === "approve" ? "APPROVED" : "REJECTED";
+    const updated = await prisma.registration.update({
+      where: { id: registrationId },
+      data: { status: nextStatus },
+    });
+
+    if (parsed.data.action === "approve") {
+      const qrUrl = `/ticket/${updated.qrPayload}`;
+      console.log(
+        `[EMAIL STUB] Registration approved for ${updated.email} — QR ticket: ${qrUrl}`
+      );
+    } else {
+      console.log(
+        `[EMAIL STUB] Registration rejected for ${updated.email}`
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        registrationId: updated.id,
+        eventId: updated.eventId,
+        status: updated.status,
+        action: parsed.data.action,
+      },
+      message:
+        parsed.data.action === "approve"
+          ? "Registration approved successfully"
+          : "Registration rejected successfully",
+    });
+  } catch (error) {
+    console.error("Failed to review registration:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error",

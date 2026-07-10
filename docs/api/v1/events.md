@@ -257,6 +257,53 @@ curl -X DELETE http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-44665
 **Description:**  
 Registers a guest (no account required) or an authenticated member for an event. Guest registrations must first call `POST /api/v1/ocr/verify` to obtain an `ocrSessionId`. Authenticated members bypass OCR and use their profile data automatically. The endpoint generates a QR payload for event check-in.
 
+---
+
+### 7. Review Pending Manual Registration
+
+**Description:**  
+Allows ADMIN_LOGISTICS to approve or reject registrations that were flagged for manual review after OCR failure.
+
+**Method:** `PATCH`  
+**Path:** `/api/v1/events/:eventId/registrations/:registrationId/approve`
+
+**Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
+
+**Request Body:**
+```json
+{
+  "action": "approve"
+}
+```
+or
+```json
+{
+  "action": "reject"
+}
+```
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "data": {
+    "registrationId": "string",
+    "eventId": "string",
+    "status": "APPROVED | REJECTED",
+    "action": "approve | reject"
+  },
+  "message": "Registration approved successfully"
+}
+```
+
+**Example Request:**
+```bash
+curl -X PATCH http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655440002/registrations/6f0f8d3d-7b36-4c0e-b31b-91be7b4e6cb9/approve \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -d '{"action":"approve"}'
+```
+
 **Method:** `POST`  
 **Path:** `/api/v1/events/:eventId/register`
 
