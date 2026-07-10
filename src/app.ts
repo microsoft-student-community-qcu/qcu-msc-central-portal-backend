@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
+import { env } from "./config/env";
 import { auth } from "./config/auth";
 import { prisma } from "./config/database";
 import { authMiddleware } from "./routes/authMiddleware";
@@ -14,7 +15,10 @@ import userRoutes from "./routes/user.routes";
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: env.FRONTEND_URL,
+  credentials: true,
+}));
 app.use(express.json());
 
 // Rate limiters for public POST endpoints

@@ -19,6 +19,7 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GITHUB_CLIENT_ID: z.string().optional(),
   GITHUB_CLIENT_SECRET: z.string().optional(),
+  FRONTEND_URL: z.string().url().default("http://localhost:5173"),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
