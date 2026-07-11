@@ -1,6 +1,5 @@
 import { createWorker, PSM } from "tesseract.js";
 import sharp from "sharp";
-import * as fs from "node:fs";
 
 function toTitleCase(text: string): string {
   return text.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
@@ -129,7 +128,7 @@ function parseFullName(text: string): {
  * rather than by fixed geometry. But sharper OCR input still improves
  * character-level accuracy on the ID number and name, so we keep it.
  */
-async function correctRotation(inputBuffer: Buffer, imagePath?: string): Promise<Buffer> {
+async function correctRotation(inputBuffer: Buffer, filename?: string): Promise<Buffer> {
   const worker = await createWorker("eng", 1, { legacyCore: true } as any);
   let working = inputBuffer;
   let coarseAngle = 0;
@@ -181,8 +180,8 @@ async function correctRotation(inputBuffer: Buffer, imagePath?: string): Promise
     }
   }
 
-  const cleanPath = imagePath ? imagePath.split(/[/\\]/).pop() : "unknown";
-  console.log(`[OCR-DEBUG] ${cleanPath} rotation: coarse=${coarseAngle}° fine=${bestAngle}° (score=${bestScore.toFixed(0)})`);
+  const cleanLabel = filename ? filename.split(/[/\\]/).pop() : "in-memory";
+  console.log(`[OCR-DEBUG] ${cleanLabel} rotation: coarse=${coarseAngle}° fine=${bestAngle}° (score=${bestScore.toFixed(0)})`);
 
   if (bestAngle === 0) return working;
   return sharp(working).rotate(bestAngle, { background: "#ffffff" }).toBuffer();
@@ -207,16 +206,15 @@ async function correctRotation(inputBuffer: Buffer, imagePath?: string): Promise
  * Full-page OCR + content-based field matching (below) sidesteps the
  * problem entirely — it doesn't need to know where the card is at all.
  */
-async function prepareVariants(imagePath: string): Promise<Buffer[]> {
-  const rawBuffer = fs.readFileSync(imagePath);
-  const upright = await correctRotation(rawBuffer, imagePath);
+async function prepareVariants(imageBuffer: Buffer, filename?: string): Promise<Buffer[]> {
+  const upright = await correctRotation(imageBuffer, filename);
   const base = sharp(upright).rotate(); // normalize any remaining EXIF orientation
 
   const variantA = await base.clone().grayscale().normalize().sharpen().toBuffer();
   const variantB = await base.clone().grayscale().normalize().threshold(160).toBuffer();
 
-  const cleanPath = imagePath.split(/[/\\]/).pop();
-  console.log(`[OCR-DEBUG] ${cleanPath} variants prepared: A=sharpen (${variantA.length} bytes), B=threshold (${variantB.length} bytes)`);
+  const cleanLabel = filename ? filename.split(/[/\\]/).pop() : "in-memory";
+  console.log(`[OCR-DEBUG] ${cleanLabel} variants prepared: A=sharpen (${variantA.length} bytes), B=threshold (${variantB.length} bytes)`);
 
   return [variantA, variantB];
 }
@@ -401,17 +399,17 @@ function isBetter(a: OcrResult, b: OcrResult | null): boolean {
   return (a.fullName?.length ?? 0) > (b.fullName?.length ?? 0);
 }
 
-export async function extractFields(imagePath: string): Promise<OcrResult> {
+export async function extractFields(imageBuffer: Buffer, filename?: string): Promise<OcrResult> {
   const labels = ["A", "B"];
-  const variants = await prepareVariants(imagePath);
+  const variants = await prepareVariants(imageBuffer, filename);
 
   let best: OcrResult | null = null;
   for (let vi = 0; vi < variants.length; vi++) {
     for (const psm of PSM_ATTEMPTS) {
       const result = await extractFromVariant(variants[vi], psm, labels[vi]);
       if (isConfidentMatch(result)) {
-        const cleanPath = imagePath.split(/[/\\]/).pop();
-        console.log(`[OCR-DEBUG] ${cleanPath}: CONFIRMED on variant ${labels[vi]} PSM=${psm} → returning early`);
+        const cleanLabel = filename ? filename.split(/[/\\]/).pop() : "in-memory";
+        console.log(`[OCR-DEBUG] ${cleanLabel}: CONFIRMED on variant ${labels[vi]} PSM=${psm} → returning early`);
         return result;
       }
       if (isBetter(result, best)) {
@@ -421,9 +419,9 @@ export async function extractFields(imagePath: string): Promise<OcrResult> {
   }
 
   const excerpt = (s: string | null) => (s ? `"${s.substring(0, 40)}"` : "null");
-  const cleanPath = imagePath.split(/[/\\]/).pop();
+  const cleanLabel = filename ? filename.split(/[/\\]/).pop() : "in-memory";
   console.log(
-    `[OCR-DEBUG] ${cleanPath}: no confident match, best=` +
+    `[OCR-DEBUG] ${cleanLabel}: no confident match, best=` +
     `studentId=${best?.studentId ?? "null"} lastName=${best?.lastName ?? "null"} fullName=${excerpt(best?.fullName ?? null)}`
   );
 
