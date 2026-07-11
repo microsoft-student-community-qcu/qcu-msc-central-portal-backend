@@ -429,7 +429,7 @@ Retrieves all registrations for a specific event, including attendance and capac
 ### 8. QR Check-In
 
 **Description:**  
-Validates a QR payload for the current event and marks the registration as attended. This is intended for QR scanner workflows and returns a generic error for invalid or already-used tickets.
+Validates a QR payload for the current event and marks the registration as attended. This is intended for QR scanner workflows and returns distinct error messages for invalid QR codes and duplicate scans.
 
 **Method:** `PATCH`  
 **Path:** `/api/v1/events/:eventId/registrations/checkin`
@@ -458,7 +458,7 @@ Validates a QR payload for the current event and marks the registration as atten
 
 **Status Codes:**
 - `200`: Check-in successful
-- `400`: Invalid ticket, duplicate scan, or registration not approved for check-in
+- `400`: Invalid QR code, duplicate scan, or registration not approved for check-in
 - `404`: Event not found
 - `500`: Internal server error
 

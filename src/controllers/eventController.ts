@@ -494,12 +494,10 @@ export async function checkInByQr(
       where: { qrPayload },
     });
 
-    // Both "not found" and "wrong event" return the same error —
-    // intentionally vague to match PRD: "Invalid Ticket or Already Scanned"
     if (!registration || registration.eventId !== eventId) {
       res.status(400).json({
         success: false,
-        message: "Invalid Ticket or Already Scanned",
+        message: "Invalid QR code.",
       });
       return;
     }
@@ -507,7 +505,7 @@ export async function checkInByQr(
     if (registration.hasAttended) {
       res.status(400).json({
         success: false,
-        message: "Invalid Ticket or Already Scanned",
+        message: "This ticket has already been checked in.",
       });
       return;
     }

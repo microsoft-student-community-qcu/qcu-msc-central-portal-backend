@@ -158,7 +158,7 @@
 
 **Edge Cases & Errors:**
 
-- If the scanner reads a QR code that does not belong to the specific event (or is a fake/duplicate), display a prominent red error: "Invalid Ticket or Already Scanned."
+- If the scanner reads a QR code that does not belong to the specific event (or is a fake/duplicate), display a prominent red error: "Invalid QR code." or "This ticket has already been checked in."
 
 ## 5. Developer Handoff & Documentation Standards
 
