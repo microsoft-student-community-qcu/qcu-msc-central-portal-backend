@@ -50,7 +50,7 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
     "fullName": "BUSTILLO, Mark Ian B.",
     "lastName": "Bustillo",
     "firstName": "Mark Ian",
-    "middleInitial": "B.",
+    "middleInitial": "B",
     "manualRequired": false,
     "attemptsRemaining": 3
   },
@@ -202,7 +202,7 @@ The Zonal OCR engine extracts data from predefined rectangular zones on the QCU 
 The `fullNameBlock` is parsed server-side:
 - If a comma is present, the left side becomes `lastName` and the right side becomes `firstName`.
 - If no comma, the first word is treated as the last name and the rest is the first name.
-- If the last word of the first name is a single letter (optionally followed by a dot, e.g. `B.`), it is extracted into `middleInitial`.
+- If the last word of the first name is a single letter (optionally followed by a dot, e.g. `B.`), it is extracted into `middleInitial` with the dot stripped.
 - `lastName` is formatted in Title Case (e.g. `DELA CRUZ` → `Dela Cruz`).
 - The original combined text is returned as `fullName` for frontend display.
 
