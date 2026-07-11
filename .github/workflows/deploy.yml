@@ -2,7 +2,7 @@ name: Deploy Backend
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop, release]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +15,6 @@ jobs:
     with:
       node-version: '24'
       build-command: 'npm run build'
-      app-name: func-msc-qcu-backend
       package-path: '.'
     secrets:
       azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
