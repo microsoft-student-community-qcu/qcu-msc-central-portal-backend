@@ -20,6 +20,7 @@ const envSchema = z.object({
   GITHUB_CLIENT_ID: z.string().optional(),
   GITHUB_CLIENT_SECRET: z.string().optional(),
   FRONTEND_URL: z.string().url().default("http://localhost:5173"),
+  AZURE_STORAGE_ACCOUNT_NAME: z.string().min(1),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

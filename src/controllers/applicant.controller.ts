@@ -89,12 +89,12 @@ export async function createApplicant(
 
     // ── 3. Handle file uploads ────────────────────────────────────────────
     const uploadedFiles = files as NonNullable<typeof files>;
-    const certificateOfRegistrationPath = saveDocument(
+    const certificateOfRegistrationPath = await saveDocument(
       uploadedFiles.certificateOfRegistration[0].buffer,
       `cor_${Date.now()}_${uploadedFiles.certificateOfRegistration[0].originalname}`
     );
 
-    const curriculumVitaePath = saveDocument(
+    const curriculumVitaePath = await saveDocument(
       uploadedFiles.curriculumVitae[0].buffer,
       `cv_${Date.now()}_${uploadedFiles.curriculumVitae[0].originalname}`
     );
