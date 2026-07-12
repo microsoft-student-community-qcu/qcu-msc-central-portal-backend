@@ -102,6 +102,7 @@ describe("POST /api/v1/applicants (public)", () => {
       manualRequired: false,
       attemptsRemaining: 3,
       imagePath: "/uploads/ocr/test.jpg",
+      digitCorrectedInName: false,
     });
     (prisma.applicant.create as any).mockResolvedValueOnce({
       ...mockApplicantRecord,

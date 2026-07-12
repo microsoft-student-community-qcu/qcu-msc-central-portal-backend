@@ -446,7 +446,7 @@ export async function extractFields(
   // upload's original filename through for logging/debugging without a
   // signature change later, and to match the (buffer, originalname) call
   // shape used at the call site.
-  originalname?: string
+  _originalname?: string
 ): Promise<OcrResult> {
   const variants = await prepareVariants(imageBuffer);
 

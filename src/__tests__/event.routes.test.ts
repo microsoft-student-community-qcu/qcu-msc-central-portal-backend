@@ -120,6 +120,7 @@ describe("POST /api/v1/events/:eventId/register (public + member)", () => {
       manualRequired: false,
       attemptsRemaining: 3,
       imagePath: "/uploads/ocr/test.jpg",
+      digitCorrectedInName: false,
     });
     (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
     (prisma.registration.count as any).mockResolvedValueOnce(50);
