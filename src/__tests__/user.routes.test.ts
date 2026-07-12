@@ -5,7 +5,6 @@ import { verifySetupToken } from "../utils/token";
 import {
   mockUserRecord,
   authUnauthenticated,
-  authApplicant,
 } from "./helpers";
 
 // ── Auth Mock Setup ──────────────────────────────────────────────────────

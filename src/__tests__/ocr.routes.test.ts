@@ -1,12 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
-import path from "node:path";
 import { extractFields } from "../services/ocr.service";
 import app from "../app";
 
 describe("POST /api/v1/ocr/verify", () => {
-  const fakeImagePath = path.join(__dirname, "..", "..", "test-fixtures", "test-id.jpg");
-
   beforeEach(() => {
     vi.clearAllMocks();
   });
