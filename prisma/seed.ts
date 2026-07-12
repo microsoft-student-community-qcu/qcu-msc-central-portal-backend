@@ -12,10 +12,10 @@ async function main() {
   const logisticsAdminEmail = process.env.SEED_LOGISTICS_ADMIN_EMAIL;
   const logisticsAdminPassword = process.env.SEED_LOGISTICS_ADMIN_PASSWORD;
 
-  // Enforce secrets strictly on main branch to prevent insecure defaults
-  if (process.env.BRANCH_NAME === "main") {
+  // Enforce secrets strictly on production or main branch to prevent insecure defaults
+  if (isProd) {
     if (!hrAdminEmail || !hrAdminPassword || !logisticsAdminEmail || !logisticsAdminPassword) {
-      throw new Error("Seeding on main branch requires all SEED_* environment variables to be defined.");
+      throw new Error("Seeding on production or main branch requires all SEED_* environment variables to be defined.");
     }
   }
 
