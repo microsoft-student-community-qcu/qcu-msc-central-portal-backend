@@ -34,7 +34,8 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
     "firstName": string | null,
     "middleInitial": string | null,
     "manualRequired": boolean,
-    "attemptsRemaining": number
+    "attemptsRemaining": number,
+    "digitCorrectedInName": boolean
   },
   "message": string
 }
@@ -52,7 +53,8 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
     "firstName": "Mark Ian",
     "middleInitial": "B",
     "manualRequired": false,
-    "attemptsRemaining": 3
+    "attemptsRemaining": 3,
+    "digitCorrectedInName": true
   },
   "message": "Student ID verified successfully"
 }
@@ -70,7 +72,8 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
     "firstName": null,
     "middleInitial": null,
     "manualRequired": false,
-    "attemptsRemaining": 1
+    "attemptsRemaining": 1,
+    "digitCorrectedInName": false
   },
   "message": "Could not read Student ID. Please retake the photo. (2/3 attempts used)"
 }
@@ -88,7 +91,8 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
     "firstName": null,
     "middleInitial": null,
     "manualRequired": true,
-    "attemptsRemaining": 0
+    "attemptsRemaining": 0,
+    "digitCorrectedInName": false
   },
   "message": "Unable to read Student ID after 3 attempts. Please enter your details manually."
 }
@@ -157,7 +161,7 @@ Without `ocrSessionId`, a client could bypass OCR entirely by calling `POST /api
 |----------------|----------|
 | **Persistence** | Lost when the Node.js process stops (crash, restart, deploy) |
 | **TTL** | 10 minutes — expired sessions are pruned automatically |
- | **Data stored** | `{ studentId, lastName, firstName, middleInitial, manualRequired, imagePath }` — nothing sensitive |
+ | **Data stored** | `{ studentId, lastName, firstName, middleInitial, manualRequired, digitCorrectedInName, imagePath }` — nothing sensitive |
 | **Scaling** | Single-process only. Multiple server instances cannot share sessions |
 
 ### Why in-memory is fine for development
@@ -207,6 +211,38 @@ The `fullNameBlock` is parsed server-side:
 - The original combined text is returned as `fullName` for frontend display.
 
 > **Note:** These zones were calibrated against a physical QCU Student ID card scan (355×550px reference). If the card design changes or a different orientation is used, zone coordinates must be re-calibrated in `src/services/ocr.service.ts`.
+
+---
+
+### Name Digit Correction
+
+Tesseract sometimes misreads letter characters as digits when the ID card uses a bold or sans-serif font (e.g. `"O"` in `"BUSTILLO, Mark Ian O."` may be read as `"0"`). The OCR engine applies a correction pass that replaces digits on name-block lines with their likely letter equivalents.
+
+**High-confidence corrections** (applied automatically; considered reliable):
+
+| Digit | Corrected To |
+|-------|-------------|
+| `0` | `O` |
+| `1` | `I` |
+| `5` | `S` |
+| `8` | `B` |
+
+**Low-confidence corrections** (only applied when necessary; results using these are treated as weaker matches in the retry loop):
+
+| Digit | Corrected To |
+|-------|-------------|
+| `2` | `Z` |
+| `3` | `B` |
+| `4` | `A` |
+| `6` | `G` |
+| `7` | `T` |
+| `9` | `G` |
+
+Key rules:
+
+- **Name-block only** — corrections are only applied to lines identified as name candidates. The student-ID line (`##-####`) is never touched, so `"23-1954"` can never become `"ZB-I9S4"`.
+- **`digitCorrectedInName`** — returned in all API responses. When `true`, at least one digit in the scanned name was reinterpreted as a letter. The `lastName`, `firstName`, and `middleInitial` fields already reflect the correction, but since even high-confidence guesses could be wrong, the frontend should prompt the user to confirm the name.
+- **Retry-loop impact** — Results that required a low-confidence correction do not short-circuit the retry loop. The engine tries the remaining image variants and page-segmentation modes first, hoping a cleaner read will recognize the character correctly without guessing.
 
 ---
 
