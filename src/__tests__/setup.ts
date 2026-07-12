@@ -11,6 +11,7 @@ process.env.BETTER_AUTH_SECRET = "test-secret-at-least-8-chars-long";
 process.env.BETTER_AUTH_URL = "http://localhost:5000";
 process.env.FRONTEND_URL = "http://localhost:5173";
 process.env.OCR_MAX_FAILURES = "3";
+process.env.RESEND_API_KEY = "re_test-key-for-testing";
 
 const testUploadDir = path.join(os.tmpdir(), `qcu-test-uploads-${Date.now()}`);
 process.env.IMAGE_STORAGE_PATH = path.join(testUploadDir, "ocr");
@@ -94,4 +95,14 @@ vi.mock("../config/auth", () => ({
       getSession: vi.fn(),
     },
   },
+}));
+
+vi.mock("../services/email.service", () => ({
+  sendSetupLinkEmail: vi.fn(() => Promise.resolve()),
+  sendRegistrationConfirmedEmail: vi.fn(() => Promise.resolve()),
+  sendRegistrationPendingReviewEmail: vi.fn(() => Promise.resolve()),
+  sendRegistrationApprovedEmail: vi.fn(() => Promise.resolve()),
+  sendRegistrationRejectedEmail: vi.fn(() => Promise.resolve()),
+  sendManualIdApprovedEmail: vi.fn(() => Promise.resolve()),
+  sendManualIdRejectedEmail: vi.fn(() => Promise.resolve()),
 }));

@@ -10,6 +10,11 @@ import { prisma } from "../config/database";
 import { ocrStore } from "../config/ocrStore";
 import { saveDocument } from "../utils/imageStorage";
 import { signSetupToken } from "../utils/token";
+import {
+  sendSetupLinkEmail,
+  sendManualIdApprovedEmail,
+  sendManualIdRejectedEmail,
+} from "../services/email.service";
 
 /**
  * POST /api/v1/applicants
@@ -160,14 +165,9 @@ export async function createApplicant(
       },
     });
 
-    // ── 5. Email stub (placeholder — integrate with Better Auth email) ────
+    // ── 5. Send setup link email ──────────────────────────────────────────
     const setupToken = await signSetupToken(applicant.id, applicant.email);
-    console.log(
-      `[EMAIL STUB] Applicant created: ${applicant.email}`
-    );
-    console.log(
-      `[EMAIL STUB] Password setup link: http://localhost:5173/auth/setup-password?token=${setupToken}`
-    );
+    await sendSetupLinkEmail(applicant.email, setupToken);
 
     // ── 6. Return created applicant ───────────────────────────────────────
     res.status(201).json({
@@ -590,11 +590,10 @@ export async function approveManualId(
       data: updateData,
     });
 
-    // Email stub — TODO: replace with real email engine (Task 4.1)
     if (action === "approve") {
-      console.log(`[EMAIL STUB] Manual ID approved: ${applicant.email} — now in PENDING_REVIEW`);
+      await sendManualIdApprovedEmail(applicant.email);
     } else {
-      console.log(`[EMAIL STUB] Manual ID rejected: ${applicant.email}`);
+      await sendManualIdRejectedEmail(applicant.email);
     }
 
     res.status(200).json({
@@ -640,12 +639,7 @@ export async function resendSetupLink(req: Request, res: Response): Promise<void
 
     if (applicant) {
       const setupToken = await signSetupToken(applicant.id, applicant.email);
-      console.log(
-        `[EMAIL STUB] Resent setup link to: ${applicant.email}`
-      );
-      console.log(
-        `[EMAIL STUB] Password setup link: http://localhost:5173/auth/setup-password?token=${setupToken}`
-      );
+      await sendSetupLinkEmail(applicant.email, setupToken);
     }
 
     res.status(200).json({
