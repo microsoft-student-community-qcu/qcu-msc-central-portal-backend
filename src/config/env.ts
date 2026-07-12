@@ -19,6 +19,8 @@ const envSchema = z.object({
   GITHUB_CLIENT_SECRET: z.string().optional(),
   FRONTEND_URL: z.string().url().default("http://localhost:5173"),
   AZURE_STORAGE_ACCOUNT_NAME: z.string().min(1),
+  RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
+  RESEND_FROM_EMAIL: z.string().email().default("no-reply@anonimi.cloud"),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
