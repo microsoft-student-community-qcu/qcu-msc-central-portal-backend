@@ -47,6 +47,7 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
         manualRequired: false,
         attemptsRemaining: env.OCR_MAX_FAILURES,
         imagePath,
+        digitCorrectedInName: result.digitCorrectedInName,
       });
 
       res.status(200).json({
@@ -60,6 +61,12 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
           middleInitial: result.middleInitial,
           manualRequired: false,
           attemptsRemaining: env.OCR_MAX_FAILURES,
+          // Frontend: when true, a digit character in the scanned name had
+          // to be reinterpreted as a letter (e.g. "0" -> "O"). The name
+          // fields above already reflect that correction, but it's still a
+          // guess — show the user a "please confirm your name is correct"
+          // prompt rather than silently trusting it.
+          digitCorrectedInName: result.digitCorrectedInName,
         },
         message: "Student ID verified successfully",
       });
@@ -84,6 +91,7 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
           middleInitial: null,
           manualRequired: false,
           attemptsRemaining,
+          digitCorrectedInName: false,
         },
         message: `Could not read Student ID. Please retake the photo. (${attemptsUsed}/${env.OCR_MAX_FAILURES} attempts used)`,
       });
@@ -98,6 +106,7 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
       manualRequired: true,
       attemptsRemaining: 0,
       imagePath,
+      digitCorrectedInName: false,
     });
 
     res.status(422).json({
@@ -111,6 +120,7 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
         middleInitial: null,
         manualRequired: true,
         attemptsRemaining: 0,
+        digitCorrectedInName: false,
       },
       message: `Unable to read Student ID after ${env.OCR_MAX_FAILURES} attempts. Please enter your details manually.`,
     });
