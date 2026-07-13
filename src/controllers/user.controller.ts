@@ -129,7 +129,14 @@ export async function validateSetupToken(req: Request, res: Response): Promise<v
 
     const applicant = await prisma.applicant.findUnique({
       where: { id: payload.applicantId },
-      select: { userId: true },
+      select: {
+        userId: true,
+        email: true,
+        firstName: true,
+        middleInitial: true,
+        lastName: true,
+        studentId: true,
+      },
     });
 
     if (!applicant) {
@@ -148,34 +155,15 @@ export async function validateSetupToken(req: Request, res: Response): Promise<v
       return;
     }
 
-    const applicantData = await prisma.applicant.findUnique({
-      where: { id: payload.applicantId },
-      select: {
-        email: true,
-        firstName: true,
-        middleInitial: true,
-        lastName: true,
-        studentId: true,
-      },
-    });
-
-    if (!applicantData) {
-      res.status(400).json({
-        success: false,
-        errors: ["Application not found."],
-      });
-      return;
-    }
-
     res.status(200).json({
       success: true,
       data: {
         applicantId: payload.applicantId,
-        email: applicantData.email,
-        firstName: applicantData.firstName,
-        lastName: applicantData.lastName,
-        middleInitial: applicantData.middleInitial,
-        studentId: applicantData.studentId,
+        email: applicant.email,
+        firstName: applicant.firstName,
+        lastName: applicant.lastName,
+        middleInitial: applicant.middleInitial,
+        studentId: applicant.studentId,
       },
     });
   } catch (error) {

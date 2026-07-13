@@ -196,6 +196,7 @@ model Registration {
   qrPayload          String             @unique // Unique UUID for QR code verification
   hasAttended        Boolean            @default(false)
   createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   @@unique([eventId, userId])    // One registration per authenticated user per event
   @@unique([eventId, studentId]) // One registration per student ID per event (guests)

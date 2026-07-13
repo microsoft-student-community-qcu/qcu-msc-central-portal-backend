@@ -61,7 +61,7 @@ function setupUnauthenticated(): void {
 
 describe("POST /api/v1/users/validate-setup-token (public)", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     setupUnauthenticated();
   });
 
@@ -108,8 +108,6 @@ describe("POST /api/v1/users/validate-setup-token (public)", () => {
     (prisma.applicant.findUnique as any).mockResolvedValueOnce({
       id: "applicant-1",
       userId: null,
-    });
-    (prisma.applicant.findUnique as any).mockResolvedValueOnce({
       email: "test@example.com",
       firstName: "John",
       middleInitial: "M",
