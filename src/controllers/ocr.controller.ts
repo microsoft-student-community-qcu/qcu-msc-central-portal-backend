@@ -54,8 +54,7 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
         success: true,
         data: {
           ocrSessionId: session.ocrSessionId,
-          studentId: result.studentId,
-          fullName: result.fullName,
+          studentId: session.studentId,
           lastName: result.lastName,
           firstName: result.firstName,
           middleInitial: result.middleInitial,
@@ -85,7 +84,6 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
         data: {
           ocrSessionId: null,
           studentId: null,
-          fullName: null,
           lastName: null,
           firstName: null,
           middleInitial: null,
@@ -114,7 +112,6 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
       data: {
         ocrSessionId: session.ocrSessionId,
         studentId: null,
-        fullName: null,
         lastName: null,
         firstName: null,
         middleInitial: null,
