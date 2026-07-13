@@ -45,6 +45,10 @@ export const ocrStore = {
     return sessions.get(sessionId);
   },
 
+  deleteSession(sessionId: string): void {
+    sessions.delete(sessionId);
+  },
+
   createSession(data: {
     studentId: string | null;
     lastName: string | null;

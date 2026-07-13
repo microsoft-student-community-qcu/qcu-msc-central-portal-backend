@@ -44,6 +44,8 @@ async function main() {
         email: finalHREmail,
         password: finalHRPassword,
         name: hrAdminName,
+        firstName: "System",
+        lastName: "HR Admin",
         studentId: hrAdminStudentId,
       },
     });
@@ -69,6 +71,8 @@ async function main() {
         email: finalLogisticsEmail,
         password: finalLogisticsPassword,
         name: finalLogisticsName,
+        firstName: "System",
+        lastName: "Logistics Admin",
         studentId: finalLogisticsStudentId,
       },
     });

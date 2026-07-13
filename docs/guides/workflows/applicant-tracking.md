@@ -13,7 +13,7 @@ The applicant pipeline is managed exclusively by ADMIN_HR users. Applications ar
 3. Frontend sends the captured image to `POST /api/v1/ocr/verify`.
 4. Backend runs **Zonal OCR** on predefined QCU ID card zones.
 5. **If OCR succeeds:**
-   - Backend returns `{ studentId, lastName, firstName, middleInitial, manualRequired: false, ocrSessionId }`.
+   - Backend returns `{ ocrSessionId, studentId, lastName, firstName, middleInitial, manualRequired: false }`.
    - Application form is automatically pre-filled using extracted data.
    - User reviews and completes the multi-section form:
      - **Personal Information** — firstName, lastName, middleName, gender, campus, dateOfBirth, nationality

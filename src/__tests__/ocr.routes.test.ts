@@ -37,7 +37,6 @@ describe("POST /api/v1/ocr/verify", () => {
       lastName: "Doe",
       firstName: "John",
       middleInitial: "M",
-      fullName: "John M Doe",
     });
 
     const res = await request(app)
@@ -61,7 +60,6 @@ describe("POST /api/v1/ocr/verify", () => {
       lastName: null,
       firstName: null,
       middleInitial: null,
-      fullName: null,
     });
 
     const res = await request(app)
@@ -84,7 +82,6 @@ describe("POST /api/v1/ocr/verify", () => {
       lastName: null,
       firstName: null,
       middleInitial: null,
-      fullName: null,
     });
 
     // Exhaust all attempts
@@ -116,7 +113,6 @@ describe("POST /api/v1/ocr/verify", () => {
       lastName: "Doe",
       firstName: "John",
       middleInitial: "M",
-      fullName: "John M Doe",
     });
 
     // Send 11 requests quickly

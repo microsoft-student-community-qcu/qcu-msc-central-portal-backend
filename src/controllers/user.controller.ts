@@ -167,18 +167,14 @@ export async function validateSetupToken(req: Request, res: Response): Promise<v
       return;
     }
 
-    const fullName = [applicantData.firstName, applicantData.middleInitial, applicantData.lastName]
-      .filter(Boolean)
-      .join(" ");
-
     res.status(200).json({
       success: true,
       data: {
         applicantId: payload.applicantId,
         email: applicantData.email,
-        name: fullName,
         firstName: applicantData.firstName,
         lastName: applicantData.lastName,
+        middleInitial: applicantData.middleInitial,
         studentId: applicantData.studentId,
       },
     });
@@ -259,6 +255,16 @@ export async function linkApplicant(req: Request, res: Response): Promise<void> 
     await prisma.applicant.update({
       where: { id: applicantId },
       data: { userId },
+    });
+
+    // Copy name fields from Applicant to User so the split names are populated
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        firstName: applicant.firstName,
+        lastName: applicant.lastName,
+        middleInitial: applicant.middleInitial,
+      },
     });
 
     res.status(200).json({

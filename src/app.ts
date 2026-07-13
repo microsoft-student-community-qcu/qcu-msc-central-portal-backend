@@ -46,7 +46,12 @@ const signUpSchema = z.object({
   password: z
     .string({ message: "Password is required" })
     .min(8, { message: "Password must be at least 8 characters" }),
-  name: z.string({ message: "Name is required" }),
+  firstName: z.string({ message: "First name is required" }).min(1, "First name cannot be empty"),
+  lastName: z.string({ message: "Last name is required" }).min(1, "Last name cannot be empty"),
+  middleInitial: z
+    .string({ message: "Middle initial must be a single letter" })
+    .regex(/^[A-Za-z]\.?$/, "Middle initial must be a single letter, optionally followed by a dot")
+    .optional(),
   studentId: z.string({ message: "Student ID is required" }),
 });
 
@@ -84,6 +89,9 @@ app.use("/api/auth", async (req, res, next) => {
           });
           return;
         }
+
+        // Construct full name server-side from split fields (Better Auth requires `name`)
+        req.body.name = `${result.data.firstName} ${result.data.lastName}`.trim();
       }
 
       // Pre-validate sign-in body
