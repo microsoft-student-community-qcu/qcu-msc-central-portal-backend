@@ -121,7 +121,7 @@ describe("POST /api/v1/users/validate-setup-token (public)", () => {
       .send({ token: "valid-token" });
     expect(res.status).toBe(200);
     expect(res.body.data.email).toBe("test@example.com");
-    expect(res.body.data.name).toBe("John M Doe");
+    expect(res.body.data.middleInitial).toBe("M");
   });
 });
 

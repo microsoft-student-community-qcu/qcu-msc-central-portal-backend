@@ -15,7 +15,8 @@ describe("POST /api/auth/sign-up/email", () => {
       .send({
         email: "not-an-email",
         password: "password123",
-        name: "Test User",
+        firstName: "Test",
+        lastName: "User",
         studentId: "QCU-2020-001",
       });
 
@@ -29,7 +30,8 @@ describe("POST /api/auth/sign-up/email", () => {
       .send({
         email: "test@example.com",
         password: "short",
-        name: "Test User",
+        firstName: "Test",
+        lastName: "User",
         studentId: "QCU-2020-001",
       });
 
@@ -45,7 +47,8 @@ describe("POST /api/auth/sign-up/email", () => {
       .send({
         email: "test@example.com",
         password: "password123",
-        name: "Test User",
+        firstName: "Test",
+        lastName: "User",
         studentId: "QCU-2020-001",
       });
 
@@ -66,7 +69,8 @@ describe("POST /api/auth/sign-up/email", () => {
       .send({
         email: "test@example.com",
         password: "password123",
-        name: "Test User",
+        firstName: "Test",
+        lastName: "User",
         studentId: "QCU-2020-001",
       });
 
@@ -87,7 +91,8 @@ describe("POST /api/auth/sign-up/email", () => {
       .send({
         email: "test@example.com",
         password: "password123",
-        name: "Test User",
+        firstName: "Test",
+        lastName: "User",
         studentId: "QCU-2020-001",
       });
 

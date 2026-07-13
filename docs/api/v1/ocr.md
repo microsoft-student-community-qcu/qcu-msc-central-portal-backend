@@ -29,7 +29,6 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
   "data": {
     "ocrSessionId": string (UUID),
     "studentId": string | null,
-    "fullName": string | null,
     "lastName": string | null,
     "firstName": string | null,
     "middleInitial": string | null,
@@ -48,7 +47,6 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
   "data": {
     "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004",
     "studentId": "23-5678",
-    "fullName": "BUSTILLO, Mark Ian B.",
     "lastName": "Bustillo",
     "firstName": "Mark Ian",
     "middleInitial": "B",
@@ -67,7 +65,6 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
   "data": {
     "ocrSessionId": null,
     "studentId": null,
-    "fullName": null,
     "lastName": null,
     "firstName": null,
     "middleInitial": null,
@@ -86,7 +83,6 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
   "data": {
     "ocrSessionId": "990e8400-e29b-41d4-a716-446655440006",
     "studentId": null,
-    "fullName": null,
     "lastName": null,
     "firstName": null,
     "middleInitial": null,
@@ -115,7 +111,7 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
 3. **Backend processes:** Runs Zonal OCR on the predefined card zones and tracks failures per client IP.
 4. **On success (200):**
    - Session stored with `manualRequired: false` and all extracted fields.
-   - **Frontend behavior:** Pre-fill the form with `lastName`, `firstName`, and `middleInitial`. Keep these fields **editable** so the user can correct any OCR mistakes. Set the `studentId` field as **read-only** — it is authoritative from the server. Show the raw `fullName` text nearby as a reference.
+   - **Frontend behavior:** Pre-fill the form with `lastName`, `firstName`, and `middleInitial`. Keep these fields **editable** so the user can correct any OCR mistakes. Set the `studentId` field as **read-only** — it is authoritative from the server.
    - Proceed to step 6.
 5. **On failure:**
    - **Retries remaining (422, `attemptsRemaining > 0`):** No session is created. `ocrSessionId` is `null`. Show the error message and a retry prompt. Allow the user to retake the photo. Do **not** show the submit form yet — the user must succeed OCR or exhaust retries first.
@@ -208,7 +204,6 @@ The `fullNameBlock` is parsed server-side:
 - If no comma, the first word is treated as the last name and the rest is the first name.
 - If the last word of the first name is a single letter (optionally followed by a dot, e.g. `B.`), it is extracted into `middleInitial` with the dot stripped.
 - `lastName` is formatted in Title Case (e.g. `DELA CRUZ` → `Dela Cruz`).
-- The original combined text is returned as `fullName` for frontend display.
 
 > **Note:** These zones were calibrated against a physical QCU Student ID card scan (355×550px reference). If the card design changes or a different orientation is used, zone coordinates must be re-calibrated in `src/services/ocr.service.ts`.
 
@@ -259,9 +254,7 @@ Zonal OCR operates on fixed-position rectangles over the ID card image. Real-wor
 
 ### Frontend Recommendations
 
-- **Pre-fill but keep editable** — Populate `lastName`, `firstName`, and `middleInitial` from the OCR response, but allow the user to correct any field before submission. The raw `fullName` field is provided as a reference to help the user spot OCR errors.
-- **Student ID is read-only** — The `studentNumber` zone targets numeric text with a clear `YY-NNNN` pattern, making it significantly more reliable than the name zone. Once extracted, display `studentId` as read-only. It will be validated server-side against the OCR session anyway.
-- **Fallback to `fullName`** — If the parsed fields (`lastName`/`firstName`/`middleInitial`) look wrong, display the `fullName` value so the user can see exactly what the OCR engine read and correct accordingly.
+- **Pre-fill but keep editable** — Populate `lastName`, `firstName`, and `middleInitial` from the OCR response, but allow the user to correct any field before submission. Set the `studentId` field as **read-only** — it is authoritative from the server.
 - **Manual entry unlocks everything** — When `manualRequired: true`, all fields including `studentId` become editable. The user enters their details by hand.
 
 ---

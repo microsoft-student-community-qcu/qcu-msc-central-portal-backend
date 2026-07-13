@@ -34,17 +34,17 @@ Frontend validates token: POST /api/v1/users/validate-setup-token
 	↓
 Frontend shows password form with pre-filled name and email
 	↓
-Frontend calls POST /api/auth/sign-up/email with:
+  Frontend calls POST /api/auth/sign-up/email with:
 	↓
   {
     "email": "juan@gmail.com",
     "password": "SecurePass123",
-    "name": "Juan Dela Cruz",
-    "studentId": "23-1234",
     "firstName": "Juan",
     "lastName": "Dela Cruz",
+    "studentId": "23-1234",
     "role": "APPLICANT"
   }
+  Note: `name` is constructed server-side as `"Juan Dela Cruz"` and forwarded to Better Auth.
 	↓
 Better Auth creates User + Account records
 	↓
@@ -117,10 +117,12 @@ Juan is a QCU student who wants to join the Microsoft Student Community. Here's 
 │   ✓ Has the applicant not already created an account?               │
 │                                                                      │
 │ Response: { "success": true, "data": { "applicantId": "app-1",     │
-│            "email": "juan@gmail.com", "name": "Juan Dela Cruz",     │
+│            "email": "juan@gmail.com", "firstName": "Juan",          │
+│            "lastName": "Dela Cruz", "middleInitial": null,           │
 │            "studentId": "23-1234" } }                                │
 │                                                                      │
-│ Frontend stores applicantId + email + name + studentId in memory.  │
+│ Frontend stores applicantId + email + firstName + lastName +        │
+│ studentId in memory.                                                 │
 │ Pre-fills the form fields.                                          │
 │                                                                      │
 │ If invalid/expired → show error page with "Link expired" message    │
@@ -166,12 +168,12 @@ Juan is a QCU student who wants to join the Microsoft Student Community. Here's 
 │   Body: {                                                            │
 │     "email": "juan@gmail.com",                                       │
 │     "password": "SecurePass123!",                                    │
-│     "name": "Juan Dela Cruz",                                        │
-│     "studentId": "23-1234",                                          │
 │     "firstName": "Juan",                                             │
 │     "lastName": "Dela Cruz",                                         │
+│     "studentId": "23-1234",                                          │
 │     "role": "APPLICANT"                                              │
 │   }                                                                  │
+│   Note: `name` is constructed server-side as `"Juan Dela Cruz"`.    │
 │                                                                      │
 │ Better Auth creates:                                                 │
 │   User    { id: "user-1", email: "juan@gmail.com",                  │
@@ -271,10 +273,10 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
    POST /api/v1/users/validate-setup-token
    Body: { "token": token }
 
-   → Success Response: { "success": true, "data": { "applicantId", "email", "name", "studentId", ... } }
+   → Success Response: { "success": true, "data": { "applicantId", "email", "firstName", "lastName", "studentId", ... } }
    → Error Response:   { "success": false, "errors": ["..."] }
 
-3. On success → store `applicantId` + `email` + `name` + `studentId` in memory, pre-fill form fields.
+3. On success → store `applicantId` + `email` + `firstName` + `lastName` + `studentId` in memory, pre-fill form fields.
    On error   → show relevant error page (expired/used/not found).
 
 4. User enters password and submits
@@ -284,9 +286,11 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
    Body: {
      "email":       email,          // from validation response
      "password":    password,       // user input
-     "name":        name,           // from validation response
+     "firstName":   firstName,      // from validation response
+     "lastName":    lastName,       // from validation response
      "studentId":   studentId       // from validation response
    }
+   Note: The full `name` field is constructed server-side.
 
    → Response: { "token": "abc...", "user": { "id": "user-1", ... } }
 

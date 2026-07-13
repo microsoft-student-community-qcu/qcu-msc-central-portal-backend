@@ -32,9 +32,9 @@ Checks if the link is authentic (not fake), not expired, and makes sure it can o
   "data": {
     "applicantId": "660e8400-e29b-41d4-a716-446655440001",
     "email": "juan@gmail.com",
-    "name": "Juan Dela Cruz",
     "firstName": "Juan",
     "lastName": "Dela Cruz",
+    "middleInitial": null,
     "studentId": "23-1234"
   }
 }
