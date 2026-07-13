@@ -184,88 +184,16 @@ curl -X GET "http://localhost:5000/api/v1/events?type=PUBLIC&limit=20"
 
 ---
 
-### 4. Update Event
-
-**Description:**  
-Updates event details. Only ADMIN_LOGISTICS users can update events.
-
-**Method:** `PATCH`  
-**Path:** `/api/v1/events/:eventId`
-
-**Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
-
-**Request Parameters:**
-- `title` (string, optional): Updated title
-- `description` (string, optional): Updated description
-- `date` (string, optional): Updated date
-- `type` (enum, optional): Updated type
-- `maxCapacity` (number, optional): Updated max capacity
-
-**Response Format:**
-```json
-{
-  "success": boolean,
-  "data": {
-    "id": string,
-    "title": string,
-    "description": string | null,
-    "date": string (ISO 8601),
-    "type": "PUBLIC" | "MEMBERS_ONLY",
-    "maxCapacity": number,
-    "updatedAt": string (ISO 8601)
-  },
-  "message": string
-}
-```
-
-**Example Request:**
-```bash
-curl -X PATCH http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655440002 \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -d '{
-    "maxCapacity": 75
-  }'
-```
-
----
-
-### 5. Delete Event
-
-**Description:**  
-Deletes an event and all associated registrations. Only ADMIN_LOGISTICS users can delete events.
-
-**Method:** `DELETE`  
-**Path:** `/api/v1/events/:eventId`
-
-**Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
-
-**Response Format:**
-```json
-{
-  "success": boolean,
-  "message": string
-}
-```
-
-**Example Request:**
-```bash
-curl -X DELETE http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655440002 \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-```
-
----
-
 ## Event Registration Endpoints
 
-### 6. Register for Event
+### 4. Register for Event
 
 **Description:**  
 Registers a guest (no account required) or an authenticated member for an event. Guest registrations must first call `POST /api/v1/ocr/verify` to obtain an `ocrSessionId`. Authenticated members bypass OCR and use their profile data automatically. The endpoint generates a QR payload for event check-in.
 
 ---
 
-### 7. Review Pending Manual Registration
+### 5. Review Pending Manual Registration
 
 **Description:**  
 Allows ADMIN_LOGISTICS to approve or reject registrations that were flagged for manual review after OCR failure.
@@ -319,7 +247,7 @@ curl -X PATCH http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655
 - `middleInitial` (string, optional): Middle initial, single letter optionally followed by a dot
 - `email` (string, required): Attendee's email address
 - `studentId` (string, optional): QCU Student ID in `YY-NNNN` format; required for guest registrations and used when OCR cannot extract it
-- `ocrSessionId` (string, optional): OCR session token returned from `POST /api/v1/ocr/verify`
+- `ocrSessionId` (string, required): OCR session token returned from `POST /api/v1/ocr/verify`
 - `userId` (string, optional): User ID if the attendee is already authenticated (auto-attached server-side from JWT)
 
 **Response Format:**
@@ -379,7 +307,7 @@ curl -X POST http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-4466554
 
 ---
 
-### 7. Get Event Registrations
+### 6. Get Event Registrations
 
 **Description:**  
 Retrieves all registrations for a specific event, including attendance and capacity summary. Only ADMIN_LOGISTICS can view this roster.
@@ -426,7 +354,7 @@ Retrieves all registrations for a specific event, including attendance and capac
 
 ---
 
-### 8. QR Check-In
+### 7. QR Check-In
 
 **Description:**  
 Validates a QR payload for the current event and marks the registration as attended. This is intended for QR scanner workflows and returns distinct error messages for invalid QR codes and duplicate scans.
@@ -464,7 +392,7 @@ Validates a QR payload for the current event and marks the registration as atten
 
 ---
 
-### 9. Manual Check-In Override
+### 8. Manual Check-In Override
 
 **Description:**  
 Allows logistics staff to manually mark a registration as attended by registration ID when QR scanning is unavailable or fails. This is useful for cracked screens or damaged QR passes.
