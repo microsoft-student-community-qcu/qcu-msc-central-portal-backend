@@ -10,7 +10,12 @@ export const createUserSchema = z.object({
     .string()
     .min(1, "Student ID is required")
     .regex(/^\d{2}-\d{4}$/, "Student ID must be in format YY-NNNN (e.g., 23-1234)"),
-  name: z.string().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
+  firstName: z.string().min(1, "First name is required").max(100, "First name must be less than 100 characters"),
+  lastName: z.string().min(1, "Last name is required").max(100, "Last name must be less than 100 characters"),
+  middleInitial: z
+    .string()
+    .regex(/^[A-Za-z]\.?$/, "Middle initial must be a single letter, optionally followed by a dot")
+    .optional(),
   email: z.string().email("Invalid email address format"),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });

@@ -99,6 +99,7 @@ export async function registerForEvent(
     let studentId: string | null = null;
     let manualRegistration = false;
     let resolvedUserId: string | null = null;
+    let ocrSessionId: string | undefined;
     if (isMemberPath) {
       const user = await prisma.user.findUnique({ where: { id: userId! } });
       if (!user) {
@@ -134,7 +135,8 @@ export async function registerForEvent(
         return;
       }
 
-      const { lastName: bodyLastName, firstName: bodyFirstName, middleInitial: bodyMiddleInitial, email: bodyEmail, ocrSessionId } = parsed.data;
+      const { lastName: bodyLastName, firstName: bodyFirstName, middleInitial: bodyMiddleInitial, email: bodyEmail, ocrSessionId: sessionOcrId } = parsed.data;
+      ocrSessionId = sessionOcrId;
 
       if (!ocrSessionId) {
         res
@@ -203,9 +205,10 @@ export async function registerForEvent(
       },
     });
 
-    // ── 7. TODO: consume OCR session ─────────────────────────────────────
-    // ocrStore currently has no consumeSession()/delete method — flagged
-    // with the team (same gap exists in applicantController.ts).
+    // ── 7. Clean up OCR session (guest path only) ────────────────────────
+    if (!isMemberPath && ocrSessionId) {
+      ocrStore.deleteSession(ocrSessionId);
+    }
 
     // ── 8. Send confirmation email ────────────────────────────────────────
     if (registration.status === "APPROVED") {

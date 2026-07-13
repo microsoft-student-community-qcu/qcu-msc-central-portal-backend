@@ -165,11 +165,14 @@ export async function createApplicant(
       },
     });
 
-    // ── 5. Send setup link email ──────────────────────────────────────────
+    // ── 5. Clean up OCR session ───────────────────────────────────────────
+    ocrStore.deleteSession(ocrSessionId);
+
+    // ── 6. Send setup link email ──────────────────────────────────────────
     const setupToken = await signSetupToken(applicant.id, applicant.email);
     await sendSetupLinkEmail(applicant.email, setupToken);
 
-    // ── 6. Return created applicant ───────────────────────────────────────
+    // ── 7. Return created applicant ───────────────────────────────────────
     res.status(201).json({
       success: true,
       data: {
