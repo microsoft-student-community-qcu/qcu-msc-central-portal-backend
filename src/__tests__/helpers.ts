@@ -64,8 +64,6 @@ export const mockEventRecord = {
   generalStartDate: new Date("2025-06-01"),
   type: "PUBLIC" as const,
   maxCapacity: 100,
-  location: "Main Hall",
-  imageUrl: null,
   createdAt: pastDate,
   updatedAt: pastDate,
   _count: { registrations: 5 },
