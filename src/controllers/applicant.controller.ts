@@ -10,6 +10,7 @@ import {
   approveManualIdSchema,
 } from "../schemas/applicant.schema";
 import { prisma } from "../config/database";
+import type { Applicant } from "@prisma/client";
 import { ocrStore } from "../config/ocrStore";
 import { saveDocument } from "../utils/imageStorage";
 import { signSetupToken } from "../utils/token";
@@ -204,6 +205,9 @@ export async function createApplicant(
         previousWorksAchievements: applicant.previousWorksAchievements,
         status: applicant.status,
         manual_application: applicant.manual_application,
+        idImagePath: applicant.idImagePath,
+        certificateOfRegistration: applicant.certificateOfRegistration,
+        curriculumVitae: applicant.curriculumVitae,
         createdAt: applicant.createdAt,
         updatedAt: applicant.updatedAt,
       },
@@ -243,7 +247,7 @@ export async function createApplicant(
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function formatApplicantResponse(applicant: any) {
+function formatApplicantResponse(applicant: Applicant) {
   return {
     id: applicant.id,
     lastName: applicant.lastName,
@@ -270,6 +274,9 @@ function formatApplicantResponse(applicant: any) {
     previousWorksAchievements: applicant.previousWorksAchievements,
     status: applicant.status,
     manual_application: applicant.manual_application,
+    idImagePath: applicant.idImagePath,
+    certificateOfRegistration: applicant.certificateOfRegistration,
+    curriculumVitae: applicant.curriculumVitae,
     createdAt: applicant.createdAt,
     updatedAt: applicant.updatedAt,
   };

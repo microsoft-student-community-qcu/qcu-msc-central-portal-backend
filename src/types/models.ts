@@ -18,7 +18,7 @@ export type UserRole = "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS";
 /**
  * Strict union of all applicant pipeline statuses.
  */
-export type ApplicantStatus = "APPLIED" | "INTERVIEWING" | "ACCEPTED" | "REJECTED";
+export type ApplicantStatus = "APPROVED" | "PENDING_REVIEW" | "REJECTED" | "CANCELLED";
 
 /**
  * Strict union of gender options for membership application.
@@ -113,7 +113,7 @@ export interface Applicant {
   /** Strict pipeline status — never a raw string. */
   status: ApplicantStatus;
   /** Flagged true when OCR fails and applicant manually enters credentials. */
-  manualApplication: boolean;
+  manual_application: boolean;
   /** Filesystem path to uploaded Student ID image. */
   idImagePath: string | null;
   createdAt: Date;
@@ -172,4 +172,5 @@ export interface Registration {
   qrPayload: string;
   hasAttended: boolean;
   createdAt: Date;
+  updatedAt: Date;
 }
