@@ -28,6 +28,7 @@ enum ApplicantStatus {
   PENDING_REVIEW
   REJECTED
   CANCELLED
+  RESUBMIT
 }
 
 // Gender enumeration for membership application.
@@ -159,6 +160,7 @@ model Applicant {
   status                      ApplicantStatus @default(PENDING_REVIEW)
   manual_application          Boolean         @default(false) // Flagged true when OCR fails → manual upload
   idImagePath                 String?         // Filesystem path to uploaded Student ID image
+  adminMessage                String?         // Admin remark (used for RESUBMIT reason, etc.)
   userId                      String?         @unique // Nullable one-to-one link to User when applicant becomes a member
   user                        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt                   DateTime        @default(now())

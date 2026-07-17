@@ -18,7 +18,7 @@ export type UserRole = "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS";
 /**
  * Strict union of all applicant pipeline statuses.
  */
-export type ApplicantStatus = "APPROVED" | "PENDING_REVIEW" | "REJECTED" | "CANCELLED";
+export type ApplicantStatus = "APPROVED" | "PENDING_REVIEW" | "REJECTED" | "CANCELLED" | "RESUBMIT";
 
 /**
  * Strict union of gender options for membership application.
@@ -112,6 +112,8 @@ export interface Applicant {
   previousWorksAchievements: string | null;
   /** Strict pipeline status — never a raw string. */
   status: ApplicantStatus;
+  /** Admin remark visible to the applicant (used for RESUBMIT reason, etc.). */
+  adminMessage: string | null;
   /** Flagged true when OCR fails and applicant manually enters credentials. */
   manual_application: boolean;
   /** Filesystem path to uploaded Student ID image. */

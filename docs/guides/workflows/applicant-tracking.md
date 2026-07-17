@@ -106,8 +106,10 @@ Dashboard refreshed with new status
 ```
 PENDING_REVIEW (initial submission)
   ├─→ APPROVED (admin accepts → User becomes MEMBER)
-  └─→ REJECTED (admin denies)
-CANCELLED (can be set from any status)
+  ├─→ REJECTED (admin denies)
+  └─→ RESUBMIT (admin requests changes + message)
+        └─→ PENDING_REVIEW (applicant resubmits → clears message)
+CANCELLED (applicant or admin, from any status other than APPROVED)
 ```
 
 ## API Endpoints
