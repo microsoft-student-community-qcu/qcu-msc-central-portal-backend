@@ -25,7 +25,7 @@ app.use(express.json());
 const signUpLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
-  message: { success: false, errors: ["Too many sign-up attempts. Please try again later."] },
+  message: { success: false, message: "Too many sign-up attempts. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -33,7 +33,7 @@ const signUpLimiter = rateLimit({
 const signInLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
-  message: { success: false, errors: ["Too many sign-in attempts. Please try again later."] },
+  message: { success: false, message: "Too many sign-in attempts. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -72,7 +72,8 @@ app.use("/api/auth", async (req, res, next) => {
         if (!result.success) {
           res.status(400).json({
             success: false,
-            errors: result.error.issues.map((e: z.ZodIssue) => e.message),
+            message: "Validation error",
+            errors: result.error.flatten().fieldErrors,
           });
           return;
         }
@@ -85,7 +86,7 @@ app.use("/api/auth", async (req, res, next) => {
         if (existing) {
           res.status(400).json({
             success: false,
-            errors: ["Student ID already taken"],
+            message: "Student ID already taken",
           });
           return;
         }
@@ -100,7 +101,8 @@ app.use("/api/auth", async (req, res, next) => {
         if (!result.success) {
           res.status(400).json({
             success: false,
-            errors: result.error.issues.map((e: z.ZodIssue) => e.message),
+            message: "Validation error",
+            errors: result.error.flatten().fieldErrors,
           });
           return;
         }
@@ -137,7 +139,7 @@ app.use("/api/auth", async (req, res, next) => {
       if (errorBody?.message === "Failed to create user") {
         res.status(400).json({
           success: false,
-          errors: ["Failed to create user. Please check your input."],
+          message: "Failed to create user. Please check your input.",
         });
         return;
       }
@@ -161,7 +163,7 @@ app.use("/api/v1/ocr", ocrRoutes);
 const resendLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 3,
-  message: { success: false, errors: ["Too many requests. Please try again later."] },
+  message: { success: false, message: "Too many requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -221,7 +223,7 @@ app.get("/health", async (_req, res) => {
 app.use((_req, res) => {
   res.status(404).json({
     success: false,
-    error: "Endpoint not found",
+    message: "Endpoint not found",
   });
 });
 

@@ -659,7 +659,8 @@ export async function resendSetupLink(req: Request, res: Response): Promise<void
     if (!parsed.success) {
       res.status(400).json({
         success: false,
-        errors: parsed.error.issues.map((e: z.ZodIssue) => e.message),
+        message: "Validation error",
+        errors: parsed.error.flatten().fieldErrors,
       });
       return;
     }

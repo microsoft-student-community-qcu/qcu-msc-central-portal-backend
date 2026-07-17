@@ -111,7 +111,8 @@ export async function validateSetupToken(req: Request, res: Response): Promise<v
     if (!parsed.success) {
       res.status(400).json({
         success: false,
-        errors: parsed.error.issues.map((e: z.ZodIssue) => e.message),
+        message: "Validation error",
+        errors: parsed.error.flatten().fieldErrors,
       });
       return;
     }
@@ -122,7 +123,7 @@ export async function validateSetupToken(req: Request, res: Response): Promise<v
     } catch {
       res.status(400).json({
         success: false,
-        errors: ["Invalid or expired setup link. Please request a new one."],
+        message: "Invalid or expired setup link. Please request a new one.",
       });
       return;
     }
@@ -142,7 +143,7 @@ export async function validateSetupToken(req: Request, res: Response): Promise<v
     if (!applicant) {
       res.status(400).json({
         success: false,
-        errors: ["Application not found. Please submit a new application."],
+        message: "Application not found. Please submit a new application.",
       });
       return;
     }
@@ -150,7 +151,7 @@ export async function validateSetupToken(req: Request, res: Response): Promise<v
     if (applicant.userId) {
       res.status(400).json({
         success: false,
-        errors: ["This setup link has already been used. Please sign in instead."],
+        message: "This setup link has already been used. Please sign in instead.",
       });
       return;
     }
