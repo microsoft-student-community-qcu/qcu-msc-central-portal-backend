@@ -274,6 +274,7 @@ function formatApplicantResponse(applicant: Applicant) {
     previousWorksAchievements: applicant.previousWorksAchievements,
     status: applicant.status,
     manual_application: applicant.manual_application,
+    adminMessage: applicant.adminMessage,
     idImagePath: applicant.idImagePath,
     certificateOfRegistration: applicant.certificateOfRegistration,
     curriculumVitae: applicant.curriculumVitae,
@@ -432,7 +433,7 @@ export async function updateApplicantStatus(
       return;
     }
 
-    const { status } = parsed.data;
+    const { status, message } = parsed.data;
 
     const existing = await prisma.applicant.findUnique({
       where: { id: applicantId },
@@ -446,9 +447,16 @@ export async function updateApplicantStatus(
       return;
     }
 
+    const updateData: any = { status };
+    if (message) {
+      updateData.adminMessage = message;
+    } else if (status !== "RESUBMIT") {
+      updateData.adminMessage = null;
+    }
+
     const applicant = await prisma.applicant.update({
       where: { id: applicantId },
-      data: { status },
+      data: updateData,
     });
 
     if (status === "APPROVED" && applicant.userId) {
@@ -683,6 +691,136 @@ export async function resendSetupLink(req: Request, res: Response): Promise<void
     });
   } catch (error) {
     console.error("Failed to resend setup link:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+// ── Applicant: Cancel Application ──────────────────────────────────────────
+
+/**
+ * POST /api/v1/applicants/:applicantId/cancel
+ *
+ * Allows an authenticated applicant to cancel their own application.
+ * Requires a linked User account (userId must match the authenticated user).
+ */
+export async function cancelApplication(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { applicantId } = req.params;
+    const userId = (req as any).userId;
+
+    const applicant = await prisma.applicant.findUnique({
+      where: { id: applicantId },
+    });
+
+    if (!applicant) {
+      res.status(404).json({
+        success: false,
+        message: "Applicant not found",
+      });
+      return;
+    }
+
+    if (!applicant.userId || applicant.userId !== userId) {
+      res.status(403).json({
+        success: false,
+        message: "You can only cancel your own application",
+      });
+      return;
+    }
+
+    if (applicant.status === "APPROVED") {
+      res.status(400).json({
+        success: false,
+        message: "Cannot cancel an already approved application",
+      });
+      return;
+    }
+
+    const updated = await prisma.applicant.update({
+      where: { id: applicantId },
+      data: { status: "CANCELLED" },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: formatApplicantResponse(updated),
+      message: "Application cancelled successfully",
+    });
+  } catch (error) {
+    console.error("Failed to cancel application:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+// ── Applicant: Resubmit Application ────────────────────────────────────────
+
+/**
+ * POST /api/v1/applicants/:applicantId/resubmit
+ *
+ * Allows an applicant to resubmit their application after being asked to
+ * RESUBMIT by an admin. Accepts optional multipart file uploads and fields.
+ * Sets status back to PENDING_REVIEW and clears the adminMessage.
+ */
+export async function resubmitApplication(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { applicantId } = req.params;
+    const userId = (req as any).userId;
+
+    const applicant = await prisma.applicant.findUnique({
+      where: { id: applicantId },
+    });
+
+    if (!applicant) {
+      res.status(404).json({
+        success: false,
+        message: "Applicant not found",
+      });
+      return;
+    }
+
+    if (!applicant.userId || applicant.userId !== userId) {
+      res.status(403).json({
+        success: false,
+        message: "You can only resubmit your own application",
+      });
+      return;
+    }
+
+    if (applicant.status !== "RESUBMIT") {
+      res.status(400).json({
+        success: false,
+        message: "Only applications with RESUBMIT status can be resubmitted",
+      });
+      return;
+    }
+
+    const updated = await prisma.applicant.update({
+      where: { id: applicantId },
+      data: {
+        status: "PENDING_REVIEW",
+        adminMessage: null,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: formatApplicantResponse(updated),
+      message: "Application resubmitted successfully",
+    });
+  } catch (error) {
+    console.error("Failed to resubmit application:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error",
