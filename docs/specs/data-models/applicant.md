@@ -25,6 +25,7 @@ enum ApplicantStatus {
   PENDING_REVIEW
   REJECTED
   CANCELLED
+  RESUBMIT
 }
 
 model Applicant {
@@ -56,6 +57,7 @@ model Applicant {
   status                      ApplicantStatus @default(PENDING_REVIEW)
   manual_application          Boolean         @default(false)
   idImagePath                 String?
+  adminMessage                String?
   userId                      String?         @unique
   user                        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt                   DateTime        @default(now())
@@ -123,11 +125,17 @@ Sent as file fields in `multipart/form-data` alongside the above text fields:
 | `manual_application` | Boolean | No | `true` when OCR fails and manual entry is required (set server-side only) |
 | `idImagePath` | String? | No | Path to uploaded Student ID image in blob storage |
 
+### Admin
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `adminMessage` | String? | No | Admin remark visible to the applicant (used for RESUBMIT reason, etc.) |
+
 ### Status Fields
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `status` | ApplicantStatus | Yes | `PENDING_REVIEW`, `APPROVED`, `REJECTED`, `CANCELLED` |
+| `status` | ApplicantStatus | Yes | `PENDING_REVIEW`, `APPROVED`, `REJECTED`, `CANCELLED`, `RESUBMIT` |
 
 ### System Fields
 
