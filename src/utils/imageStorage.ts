@@ -36,7 +36,7 @@ export function getImagePath(filename: string): string {
 export async function saveDocument(buffer: Buffer, filename: string): Promise<string> {
   const client = getBlobServiceClient();
   const containerClient = client.getContainerClient(DOCUMENTS_CONTAINER);
-  await containerClient.createIfNotExists();
+  await containerClient.createIfNotExists({ access: "container" });
   const blockBlobClient = containerClient.getBlockBlobClient(filename);
   await blockBlobClient.upload(buffer, buffer.length);
   return blockBlobClient.url;
