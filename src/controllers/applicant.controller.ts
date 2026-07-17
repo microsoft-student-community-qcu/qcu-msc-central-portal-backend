@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import {
+  applicantStatusEnum,
+  genderEnum,
+  campusEnum,
   createApplicantSchema,
   updateApplicantSchema,
   updateApplicantStatusSchema,
@@ -343,9 +346,30 @@ export async function listApplicants(
 
     const where: any = {};
 
-    if (status) where.status = status;
-    if (campus) where.campus = campus;
-    if (gender) where.gender = gender;
+    if (status) {
+      const parsed = applicantStatusEnum.safeParse(status);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: `Invalid status filter: "${status}"` });
+        return;
+      }
+      where.status = parsed.data;
+    }
+    if (campus) {
+      const parsed = campusEnum.safeParse(campus);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: `Invalid campus filter: "${campus}"` });
+        return;
+      }
+      where.campus = parsed.data;
+    }
+    if (gender) {
+      const parsed = genderEnum.safeParse(gender);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: `Invalid gender filter: "${gender}"` });
+        return;
+      }
+      where.gender = parsed.data;
+    }
     if (manual_application !== undefined) {
       where.manual_application = manual_application === "true";
     }

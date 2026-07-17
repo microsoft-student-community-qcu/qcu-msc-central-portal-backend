@@ -38,10 +38,10 @@ router.patch(
   reviewRegistration
 );
 
-// PATCH /api/v1/events/:eventId/registrations/checkin (QR scanner)
-router.patch("/:eventId/registrations/checkin", requireAdminLogistics, checkInByQr);
-
 // PATCH /api/v1/events/:eventId/registrations/:registrationId/checkin (manual override)
 router.patch("/:eventId/registrations/:registrationId/checkin", requireAdminLogistics, manualCheckIn);
+
+// PATCH /api/v1/events/:eventId/registrations/checkin (QR scanner)
+router.patch("/:eventId/registrations/checkin", requireAdminLogistics, checkInByQr);
 
 export default router;

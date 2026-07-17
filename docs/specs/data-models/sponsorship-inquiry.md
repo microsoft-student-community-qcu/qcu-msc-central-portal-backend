@@ -2,22 +2,27 @@
 
 ## Overview
 
-Represents a corporate sponsorship lead submitted via the public sponsorship inquiry form.
+Represents a corporate sponsorship lead submitted via the public "Collaborate With Us" form on the landing page. Admins track inquiries through a simple status workflow.
 
 ## Prisma Definition
 
 ```prisma
+enum SponsorshipStatus {
+  NEW
+  CONTACTED
+  CLOSED
+}
+
 model SponsorshipInquiry {
-  id             String   @id @default(cuid())
-  companyName    String
-  contactPerson  String
-  contactEmail   String
-  contactNumber  String?
-  eventName      String
-  sponsorshipTier String?
-  message        String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id           String            @id @default(uuid())
+  email        String
+  contactName  String
+  contactPhone String?
+  company      String
+  message      String            @db.Text
+  status       SponsorshipStatus @default(NEW)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 }
 ```
 
@@ -25,16 +30,23 @@ model SponsorshipInquiry {
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `id` | String (CUID) | Yes | Primary key |
-| `companyName` | String | Yes | Sponsoring organization |
-| `contactPerson` | String | Yes | Name of the inquiry contact |
-| `contactEmail` | String | Yes | Contact email address |
-| `contactNumber` | String? | No | Contact phone number |
-| `eventName` | String | Yes | Event to sponsor |
-| `sponsorshipTier` | String? | No | Preferred tier/package |
-| `message` | String? | No | Additional notes |
+| `id` | String (UUID) | Yes | Primary key |
+| `email` | String | Yes | Contact email address |
+| `contactName` | String | Yes | Name of the inquiry contact |
+| `contactPhone` | String? | No | Contact phone number |
+| `company` | String | Yes | Sponsoring organization |
+| `message` | String (Text) | Yes | Inquiry message details |
+| `status` | SponsorshipStatus | Yes | `NEW`, `CONTACTED`, `CLOSED` (defaults to `NEW`) |
 | `createdAt` | DateTime | Yes | Auto-generated |
 | `updatedAt` | DateTime | Yes | Auto-managed |
+
+## Status Values
+
+| Value | Description |
+|-------|-------------|
+| `NEW` | Inquiry received, not yet acted upon |
+| `CONTACTED` | Admin has reached out to the inquirer |
+| `CLOSED` | Inquiry resolved or no longer relevant |
 
 ## Notes
 
