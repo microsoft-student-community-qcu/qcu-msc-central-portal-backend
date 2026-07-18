@@ -11,6 +11,9 @@ import {
   approveManualId,
   cancelApplication,
   resubmitApplication,
+  getApplicantMe,
+  serveDocument,
+  serveImage,
 } from "../controllers/applicant.controller";
 
 const upload = multer({
@@ -73,6 +76,16 @@ router.post(
   createApplicant
 );
 
+// ── Applicant Self-Service Routes (Authenticated) ───────────────────────
+
+/**
+ * GET /api/v1/applicants/me
+ *
+ * Allows an authenticated applicant to fetch their own live applicant record.
+ * Must be defined BEFORE /:applicantId to prevent shadowing and 403 blocks.
+ */
+router.get("/me", requireAuth, getApplicantMe);
+
 // ── Admin Routes (ADMIN_HR only) ─────────────────────────────────────────
 
 /**
@@ -124,6 +137,19 @@ router.post("/:applicantId/cancel", requireAuth, cancelApplication);
  *
  * Allows an applicant to resubmit after being asked to RESUBMIT.
  */
-router.post("/:applicantId/resubmit", requireAuth, resubmitApplication);
+router.post(
+  "/:applicantId/resubmit",
+  requireAuth,
+  upload.fields([
+    { name: "certificateOfRegistration", maxCount: 1 },
+    { name: "curriculumVitae", maxCount: 1 },
+  ]),
+  handleMulterError,
+  resubmitApplication
+);
+
+// ── Protected File Proxy Routes ──────────────────────────────────────────
+router.get("/documents/:filename", requireAuth, serveDocument);
+router.get("/images/:filename", requireAuth, serveImage);
 
 export default router;

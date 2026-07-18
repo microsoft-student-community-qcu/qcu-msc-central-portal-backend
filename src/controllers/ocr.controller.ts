@@ -31,7 +31,8 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
 
     const imagePath = await saveImage(
       file.buffer,
-      `ocr_${Date.now()}_${file.originalname}`
+      `ocr_${Date.now()}_${file.originalname}`,
+      file.mimetype
     );
 
     const clientIp = req.ip ?? req.socket.remoteAddress ?? "unknown";
