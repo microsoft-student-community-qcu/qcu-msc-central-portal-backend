@@ -468,10 +468,11 @@ export async function updateApplicantStatus(
       data: updateData,
     });
 
-    if (status === "APPROVED" && applicant.userId) {
+    if (applicant.userId) {
+      const newUserRole = status === "APPROVED" ? "MEMBER" : "APPLICANT";
       await prisma.user.update({
         where: { id: applicant.userId },
-        data: { role: "MEMBER" },
+        data: { role: newUserRole },
       });
     }
 
