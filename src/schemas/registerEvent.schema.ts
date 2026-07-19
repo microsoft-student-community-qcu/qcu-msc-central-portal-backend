@@ -20,9 +20,8 @@ export const registerEventSchema = z.object({
     .string({ message: "Email is required" })
     .email("Invalid email address format"),
   ocrSessionId: z
-    .string({ message: "OCR session ID must be a valid string" })
-    .uuid("Invalid OCR session ID")
-    .optional(),
+    .string({ message: "OCR session ID is required" })
+    .uuid("OCR session ID format is invalid"),
 });
 
 export type RegisterEventSchema = z.infer<typeof registerEventSchema>;

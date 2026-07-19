@@ -73,6 +73,31 @@ qcu-msc-central-portal-backend/
 - Deprecation policy: document deprecated endpoints in `/docs/api/` with a deprecation timeline and migration notes.
 - Maintain backward compatibility within a major version; non-breaking additions may be added under the same major version.
 
+## API Response Format
+
+All endpoints follow a consistent JSON response contract:
+
+### Success
+```json
+{ "success": true, "data": { ... }, "message": "Human-readable summary (optional)" }
+```
+
+### Simple Error (not found, auth failure, business logic, 500)
+```json
+{ "success": false, "message": "Human-readable error description" }
+```
+
+### Validation Error (Zod field-level)
+```json
+{ "success": false, "message": "Validation error", "errors": { "fieldName": ["Error message"] } }
+```
+
+Rules:
+- Use `message` (never `error`) for all simple error responses.
+- Use `errors` only for field-level Zod validation details under `flatten().fieldErrors`.
+- Rate limiter responses from `express-rate-limit` must use `message` (not `errors`).
+- Auth guards in `authMiddleware.ts` and the 404 handler must use `message`.
+
 ## Role-Based Access Control (RBAC)
 
 - Auth middleware lives in `src/routes/authMiddleware.ts`.
@@ -93,6 +118,7 @@ qcu-msc-central-portal-backend/
 - Create a new migration after schema changes: `npm run prisma:migrate`.
 - Environment variables are validated via Zod in `src/config/env.ts` at startup.
 - All database connection strings use the `DATABASE_URL` env variable.
+- CORS and Better Auth `trustedOrigins` accept both `FRONTEND_URL` (main site) and `ADMIN_FRONTEND_URL` (admin panel).
 
 ### UserRole Enum
 
@@ -122,7 +148,7 @@ Guests have no User record (behavioral role only).
 - The OCR engine lives in `src/services/ocr.service.ts` using Tesseract.js with predefined QCU ID card zones.
 - OCR failures are tracked per client IP in an in-memory store (`src/config/ocrStore.ts`) with a 1-hour TTL.
 - After `OCR_MAX_FAILURES` consecutive failures, the endpoint returns `manualRequired: true` and the frontend must show manual entry.
-- Uploaded ID images (both success and failure) are saved to `IMAGE_STORAGE_PATH` for audit purposes.
+- Uploaded ID images (both success and failure) are saved to Azure Blob Storage (`AZURE_STORAGE_ACCOUNT_NAME` / `ocr` container) for audit purposes.
 - Rate limit: 10 requests per minute per IP for the OCR endpoint.
 - Public OCR routes are registered BEFORE auth middleware in `src/app.ts`.
 - Zone coordinates for Zonal OCR are defined as absolute pixel values in `src/services/ocr.service.ts` — these must be re-calibrated against an actual QCU Student ID template during testing.

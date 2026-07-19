@@ -16,7 +16,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: env.FRONTEND_URL,
+  origin: [env.FRONTEND_URL, env.ADMIN_FRONTEND_URL],
   credentials: true,
 }));
 app.use(express.json());
@@ -25,7 +25,7 @@ app.use(express.json());
 const signUpLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
-  message: { success: false, errors: ["Too many sign-up attempts. Please try again later."] },
+  message: { success: false, message: "Too many sign-up attempts. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -33,7 +33,7 @@ const signUpLimiter = rateLimit({
 const signInLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
-  message: { success: false, errors: ["Too many sign-in attempts. Please try again later."] },
+  message: { success: false, message: "Too many sign-in attempts. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -46,7 +46,12 @@ const signUpSchema = z.object({
   password: z
     .string({ message: "Password is required" })
     .min(8, { message: "Password must be at least 8 characters" }),
-  name: z.string({ message: "Name is required" }),
+  firstName: z.string({ message: "First name is required" }).min(1, "First name cannot be empty"),
+  lastName: z.string({ message: "Last name is required" }).min(1, "Last name cannot be empty"),
+  middleInitial: z
+    .string({ message: "Middle initial must be a single letter" })
+    .regex(/^[A-Za-z]\.?$/, "Middle initial must be a single letter, optionally followed by a dot")
+    .optional(),
   studentId: z.string({ message: "Student ID is required" }),
 });
 
@@ -67,7 +72,8 @@ app.use("/api/auth", async (req, res, next) => {
         if (!result.success) {
           res.status(400).json({
             success: false,
-            errors: result.error.issues.map((e: z.ZodIssue) => e.message),
+            message: "Validation error",
+            errors: result.error.flatten().fieldErrors,
           });
           return;
         }
@@ -80,10 +86,13 @@ app.use("/api/auth", async (req, res, next) => {
         if (existing) {
           res.status(400).json({
             success: false,
-            errors: ["Student ID already taken"],
+            message: "Student ID already taken",
           });
           return;
         }
+
+        // Construct full name server-side from split fields (Better Auth requires `name`)
+        req.body.name = `${result.data.firstName} ${result.data.lastName}`.trim();
       }
 
       // Pre-validate sign-in body
@@ -92,7 +101,8 @@ app.use("/api/auth", async (req, res, next) => {
         if (!result.success) {
           res.status(400).json({
             success: false,
-            errors: result.error.issues.map((e: z.ZodIssue) => e.message),
+            message: "Validation error",
+            errors: result.error.flatten().fieldErrors,
           });
           return;
         }
@@ -129,7 +139,7 @@ app.use("/api/auth", async (req, res, next) => {
       if (errorBody?.message === "Failed to create user") {
         res.status(400).json({
           success: false,
-          errors: ["Failed to create user. Please check your input."],
+          message: "Failed to create user. Please check your input.",
         });
         return;
       }
@@ -153,7 +163,7 @@ app.use("/api/v1/ocr", ocrRoutes);
 const resendLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 3,
-  message: { success: false, errors: ["Too many requests. Please try again later."] },
+  message: { success: false, message: "Too many requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -213,7 +223,7 @@ app.get("/health", async (_req, res) => {
 app.use((_req, res) => {
   res.status(404).json({
     success: false,
-    error: "Endpoint not found",
+    message: "Endpoint not found",
   });
 });
 

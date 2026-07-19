@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import multer, { MulterError } from "multer";
 import rateLimit from "express-rate-limit";
-import { requireAdminHR } from "./authMiddleware";
+import { requireAdminHR, requireAuth } from "./authMiddleware";
 import {
   createApplicant,
   getApplicant,
@@ -9,6 +9,8 @@ import {
   updateApplicantStatus,
   updateApplicant,
   approveManualId,
+  cancelApplication,
+  resubmitApplication,
 } from "../controllers/applicant.controller";
 
 const upload = multer({
@@ -107,5 +109,21 @@ router.patch("/:applicantId", requireAdminHR, updateApplicant);
  * Manual ID verification override for quarantined applicants. ADMIN_HR only.
  */
 router.patch("/:applicantId/approve-id", requireAdminHR, approveManualId);
+
+// ── Applicant Routes (authenticated, ownership-checked) ───────────────────
+
+/**
+ * POST /api/v1/applicants/:applicantId/cancel
+ *
+ * Allows an authenticated applicant to cancel their own application.
+ */
+router.post("/:applicantId/cancel", requireAuth, cancelApplication);
+
+/**
+ * POST /api/v1/applicants/:applicantId/resubmit
+ *
+ * Allows an applicant to resubmit after being asked to RESUBMIT.
+ */
+router.post("/:applicantId/resubmit", requireAuth, resubmitApplication);
 
 export default router;

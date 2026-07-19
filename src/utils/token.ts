@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { env } from "../config/env";
 
 const SECRET = new TextEncoder().encode(env.BETTER_AUTH_SECRET);
-const EXPIRY = "48h";
+const EXPIRY = "24h";
 
 interface SetupTokenPayload {
   applicantId: string;

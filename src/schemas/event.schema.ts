@@ -79,23 +79,6 @@ export const updateEventSchema = z.object({
     .optional(),
 });
 
-// Schema for registering a guest (account-free) or authenticated member to an event.
-// studentId is required for guest registrations (captured via Zonal OCR);
-// userId is auto-attached from JWT for authenticated members, not client-settable.
-// manual_registration is set server-side when OCR fails (3 attempts).
-export const registerEventSchema = z.object({
-  name: z
-    .string()
-    .min(1, "Name is required")
-    .max(100, "Name must be less than 100 characters"),
-  email: z.string().email("Invalid email address format"),
-  studentId: z
-    .string()
-    .regex(/^\d{2}-\d{4}$/, "Student ID must be in format YY-NNNN (e.g., 23-1234)")
-    .optional()
-    .nullable(),
-});
-
 // Schema for logistics admin review actions on manual-review registrations.
 export const reviewRegistrationSchema = z.object({
   action: z.enum(["approve", "reject"], {
@@ -105,7 +88,6 @@ export const reviewRegistrationSchema = z.object({
 
 export type CreateEventSchema = z.infer<typeof createEventSchema>;
 export type UpdateEventSchema = z.infer<typeof updateEventSchema>;
-export type RegisterEventSchema = z.infer<typeof registerEventSchema>;
 export type ReviewRegistrationSchema = z.infer<typeof reviewRegistrationSchema>;
 export type EventTypeEnum = z.infer<typeof eventTypeEnum>;
 export type RegistrationStatusEnum = z.infer<typeof registrationStatusEnum>;

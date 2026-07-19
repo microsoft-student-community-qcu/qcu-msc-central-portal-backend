@@ -20,7 +20,7 @@ model User {
   lastName      String
   firstName     String
   middleInitial String?
-  name          String?    // Full name (Better Auth standard field — used during sign-up)
+  name          String?    // Full name (Better Auth standard field — constructed server-side from firstName + lastName)
   studentId     String     @unique
   emailVerified Boolean    @default(false)
   image         String?

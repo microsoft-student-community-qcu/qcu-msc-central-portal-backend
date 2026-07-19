@@ -60,8 +60,22 @@ All environment variables are validated via Zod in `src/config/env.ts` at startu
 | `DATABASE_URL` | Prisma MySQL connection string | `mysql://root:password@localhost:3306/qcu_msc_central_portal` |
 | `BETTER_AUTH_SECRET` | Better Auth secret (min 8 chars) | (auto-generated) |
 | `BETTER_AUTH_URL` | Auth service base URL | `http://localhost:5000` |
-| `IMAGE_STORAGE_PATH` | OCR ID card image storage directory | `./uploads/images` |
-| `DOCUMENT_STORAGE_PATH` | Applicant document (CoR, CV) storage directory | `./uploads/documents` |
+| `FRONTEND_URL` | Main frontend URL (CORS + trusted origins) | `http://localhost:5173` |
+| `ADMIN_FRONTEND_URL` | Admin panel URL (CORS + trusted origins) | `http://localhost:8081` |
+| `AZURE_STORAGE_ACCOUNT_NAME` | Azure Blob Storage account for images/docs | *(required)* |
+| `AZURE_CLIENT_ID` | Azure Service Principal client ID | *(required)* |
+| `AZURE_CLIENT_SECRET` | Azure Service Principal client secret | *(required)* |
+| `AZURE_TENANT_ID` | Azure Service Principal tenant ID | *(required)* |
+| `EMAIL_PROVIDER` | Email delivery backend | `RESEND` or `SMTP` |
+| `RESEND_API_KEY` | Resend API key (when `EMAIL_PROVIDER=RESEND`) | *(required for RESEND)* |
+| `RESEND_FROM_EMAIL` | Resend sender email | `no-reply@anonimi.cloud` |
+| `SMTP_HOST` | SMTP server host (when `EMAIL_PROVIDER=SMTP`) | *(required for SMTP)* |
+| `SMTP_PORT` | SMTP server port | *(required for SMTP)* |
+| `SMTP_SECURE` | SMTP TLS flag | `true` / `false` |
+| `SMTP_USER` | SMTP username | *(required for SMTP)* |
+| `SMTP_PASS` | SMTP password or app password | *(required for SMTP)* |
+| `SMTP_FROM_NAME` | SMTP sender display name | `Microsoft Student Community` |
+| `SMTP_FROM_EMAIL` | SMTP sender email | *(required for SMTP)* |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID | *(optional)* |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | *(optional)* |
 | `GITHUB_CLIENT_ID` | GitHub OAuth client ID | *(optional)* |
@@ -76,7 +90,6 @@ qcu-msc-central-portal-backend/
 ├── docs/           # API docs, guides, specs
 ├── prisma/         # Schema + migrations
 ├── src/            # Application source
-├── uploads/        # Uploaded files (images, documents)
 ├── .env.example
 ├── AGENTS.md
 ├── CONTRIBUTING.md
@@ -97,4 +110,6 @@ qcu-msc-central-portal-backend/
 
 ## Testing
 
-Test endpoints using **POSTMAN**, **HTTPie**, **Thunder Client** (VS Code), or your preferred HTTP client. Request/response payload formats are documented in `docs/api/v{N}/<endpoint>.md`. See [AGENTS.md](AGENTS.md) for testing expectations.
+- **Unit / integration tests:** Vitest (`npm test` or `npx vitest`).
+- **Manual testing:** Use **POSTMAN**, **HTTPie**, or **Thunder Client** (VS Code). Payload formats are documented in `docs/api/v{N}/<endpoint>.md`.
+- See [AGENTS.md](AGENTS.md) for testing expectations.

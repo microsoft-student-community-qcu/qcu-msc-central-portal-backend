@@ -28,6 +28,7 @@ enum ApplicantStatus {
   PENDING_REVIEW
   REJECTED
   CANCELLED
+  RESUBMIT
 }
 
 // Gender enumeration for membership application.
@@ -78,7 +79,7 @@ model User {
   lastName      String?
   firstName     String?
   middleInitial String?
-  name          String?        // Full name (Better Auth standard field — used during sign-up)
+  name          String?        // Full name (Better Auth standard field — constructed server-side from firstName + lastName)
   studentId     String         @unique
   emailVerified Boolean        @default(false)
   image         String?
@@ -159,6 +160,7 @@ model Applicant {
   status                      ApplicantStatus @default(PENDING_REVIEW)
   manual_application          Boolean         @default(false) // Flagged true when OCR fails → manual upload
   idImagePath                 String?         // Filesystem path to uploaded Student ID image
+  adminMessage                String?         // Admin remark (used for RESUBMIT reason, etc.)
   userId                      String?         @unique // Nullable one-to-one link to User when applicant becomes a member
   user                        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt                   DateTime        @default(now())
@@ -196,6 +198,7 @@ model Registration {
   qrPayload          String             @unique // Unique UUID for QR code verification
   hasAttended        Boolean            @default(false)
   createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   @@unique([eventId, userId])    // One registration per authenticated user per event
   @@unique([eventId, studentId]) // One registration per student ID per event (guests)

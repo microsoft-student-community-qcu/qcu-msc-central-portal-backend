@@ -25,16 +25,17 @@ Used by the frontend `/auth/setup-password` page when an applicant clicks the pa
 {
   "email": "juan@gmail.com",
   "password": "SecurePass123",
-  "name": "Juan Dela Cruz",
-  "studentId": "23-1234",
   "firstName": "Juan",
   "lastName": "Dela Cruz",
+  "studentId": "23-1234",
   "role": "APPLICANT"
 }
 ```
 
-**Required fields:** `email`, `password`, `name`, `studentId`
-**Optional fields:** `firstName`, `lastName`, `role` (defaults to `APPLICANT`)
+**Required fields:** `email`, `password`, `firstName`, `lastName`, `studentId`
+**Optional fields:** `role` (defaults to `APPLICANT`)
+
+> The full `name` field is constructed server-side from `firstName` + `lastName` for Better Auth compatibility.
 
 Access the authenticated session from the response headers/cookies for subsequent requests.
 

@@ -1,15 +1,24 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import {
+  applicantStatusEnum,
+  genderEnum,
+  campusEnum,
   createApplicantSchema,
   updateApplicantSchema,
   updateApplicantStatusSchema,
   approveManualIdSchema,
 } from "../schemas/applicant.schema";
 import { prisma } from "../config/database";
+import type { Applicant } from "@prisma/client";
 import { ocrStore } from "../config/ocrStore";
 import { saveDocument } from "../utils/imageStorage";
 import { signSetupToken } from "../utils/token";
+import {
+  sendSetupLinkEmail,
+  sendManualIdApprovedEmail,
+  sendManualIdRejectedEmail,
+} from "../services/email.service";
 
 /**
  * POST /api/v1/applicants
@@ -160,16 +169,14 @@ export async function createApplicant(
       },
     });
 
-    // ── 5. Email stub (placeholder — integrate with Better Auth email) ────
-    const setupToken = await signSetupToken(applicant.id, applicant.email);
-    console.log(
-      `[EMAIL STUB] Applicant created: ${applicant.email}`
-    );
-    console.log(
-      `[EMAIL STUB] Password setup link: http://localhost:5173/auth/setup-password?token=${setupToken}`
-    );
+    // ── 5. Clean up OCR session ───────────────────────────────────────────
+    ocrStore.deleteSession(ocrSessionId);
 
-    // ── 6. Return created applicant ───────────────────────────────────────
+    // ── 6. Send setup link email ──────────────────────────────────────────
+    const setupToken = await signSetupToken(applicant.id, applicant.email);
+    await sendSetupLinkEmail(applicant.email, setupToken);
+
+    // ── 7. Return created applicant ───────────────────────────────────────
     res.status(201).json({
       success: true,
       data: {
@@ -198,6 +205,9 @@ export async function createApplicant(
         previousWorksAchievements: applicant.previousWorksAchievements,
         status: applicant.status,
         manual_application: applicant.manual_application,
+        idImagePath: applicant.idImagePath,
+        certificateOfRegistration: applicant.certificateOfRegistration,
+        curriculumVitae: applicant.curriculumVitae,
         createdAt: applicant.createdAt,
         updatedAt: applicant.updatedAt,
       },
@@ -237,7 +247,7 @@ export async function createApplicant(
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function formatApplicantResponse(applicant: any) {
+function formatApplicantResponse(applicant: Applicant) {
   return {
     id: applicant.id,
     lastName: applicant.lastName,
@@ -264,6 +274,10 @@ function formatApplicantResponse(applicant: any) {
     previousWorksAchievements: applicant.previousWorksAchievements,
     status: applicant.status,
     manual_application: applicant.manual_application,
+    adminMessage: applicant.adminMessage,
+    idImagePath: applicant.idImagePath,
+    certificateOfRegistration: applicant.certificateOfRegistration,
+    curriculumVitae: applicant.curriculumVitae,
     createdAt: applicant.createdAt,
     updatedAt: applicant.updatedAt,
   };
@@ -340,9 +354,30 @@ export async function listApplicants(
 
     const where: any = {};
 
-    if (status) where.status = status;
-    if (campus) where.campus = campus;
-    if (gender) where.gender = gender;
+    if (status) {
+      const parsed = applicantStatusEnum.safeParse(status);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: `Invalid status filter: "${status}"` });
+        return;
+      }
+      where.status = parsed.data;
+    }
+    if (campus) {
+      const parsed = campusEnum.safeParse(campus);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: `Invalid campus filter: "${campus}"` });
+        return;
+      }
+      where.campus = parsed.data;
+    }
+    if (gender) {
+      const parsed = genderEnum.safeParse(gender);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, message: `Invalid gender filter: "${gender}"` });
+        return;
+      }
+      where.gender = parsed.data;
+    }
     if (manual_application !== undefined) {
       where.manual_application = manual_application === "true";
     }
@@ -398,7 +433,7 @@ export async function updateApplicantStatus(
       return;
     }
 
-    const { status } = parsed.data;
+    const { status, message } = parsed.data;
 
     const existing = await prisma.applicant.findUnique({
       where: { id: applicantId },
@@ -412,9 +447,16 @@ export async function updateApplicantStatus(
       return;
     }
 
+    const updateData: any = { status };
+    if (message) {
+      updateData.adminMessage = message;
+    } else if (status !== "RESUBMIT") {
+      updateData.adminMessage = null;
+    }
+
     const applicant = await prisma.applicant.update({
       where: { id: applicantId },
-      data: { status },
+      data: updateData,
     });
 
     if (status === "APPROVED" && applicant.userId) {
@@ -590,11 +632,10 @@ export async function approveManualId(
       data: updateData,
     });
 
-    // Email stub — TODO: replace with real email engine (Task 4.1)
     if (action === "approve") {
-      console.log(`[EMAIL STUB] Manual ID approved: ${applicant.email} — now in PENDING_REVIEW`);
+      await sendManualIdApprovedEmail(applicant.email);
     } else {
-      console.log(`[EMAIL STUB] Manual ID rejected: ${applicant.email}`);
+      await sendManualIdRejectedEmail(applicant.email);
     }
 
     res.status(200).json({
@@ -626,7 +667,8 @@ export async function resendSetupLink(req: Request, res: Response): Promise<void
     if (!parsed.success) {
       res.status(400).json({
         success: false,
-        errors: parsed.error.issues.map((e: z.ZodIssue) => e.message),
+        message: "Validation error",
+        errors: parsed.error.flatten().fieldErrors,
       });
       return;
     }
@@ -640,12 +682,7 @@ export async function resendSetupLink(req: Request, res: Response): Promise<void
 
     if (applicant) {
       const setupToken = await signSetupToken(applicant.id, applicant.email);
-      console.log(
-        `[EMAIL STUB] Resent setup link to: ${applicant.email}`
-      );
-      console.log(
-        `[EMAIL STUB] Password setup link: http://localhost:5173/auth/setup-password?token=${setupToken}`
-      );
+      await sendSetupLinkEmail(applicant.email, setupToken);
     }
 
     res.status(200).json({
@@ -654,6 +691,136 @@ export async function resendSetupLink(req: Request, res: Response): Promise<void
     });
   } catch (error) {
     console.error("Failed to resend setup link:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+// ── Applicant: Cancel Application ──────────────────────────────────────────
+
+/**
+ * POST /api/v1/applicants/:applicantId/cancel
+ *
+ * Allows an authenticated applicant to cancel their own application.
+ * Requires a linked User account (userId must match the authenticated user).
+ */
+export async function cancelApplication(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { applicantId } = req.params;
+    const userId = (req as any).userId;
+
+    const applicant = await prisma.applicant.findUnique({
+      where: { id: applicantId },
+    });
+
+    if (!applicant) {
+      res.status(404).json({
+        success: false,
+        message: "Applicant not found",
+      });
+      return;
+    }
+
+    if (!applicant.userId || applicant.userId !== userId) {
+      res.status(403).json({
+        success: false,
+        message: "You can only cancel your own application",
+      });
+      return;
+    }
+
+    if (applicant.status === "APPROVED") {
+      res.status(400).json({
+        success: false,
+        message: "Cannot cancel an already approved application",
+      });
+      return;
+    }
+
+    const updated = await prisma.applicant.update({
+      where: { id: applicantId },
+      data: { status: "CANCELLED" },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: formatApplicantResponse(updated),
+      message: "Application cancelled successfully",
+    });
+  } catch (error) {
+    console.error("Failed to cancel application:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+// ── Applicant: Resubmit Application ────────────────────────────────────────
+
+/**
+ * POST /api/v1/applicants/:applicantId/resubmit
+ *
+ * Allows an applicant to resubmit their application after being asked to
+ * RESUBMIT by an admin. Accepts optional multipart file uploads and fields.
+ * Sets status back to PENDING_REVIEW and clears the adminMessage.
+ */
+export async function resubmitApplication(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { applicantId } = req.params;
+    const userId = (req as any).userId;
+
+    const applicant = await prisma.applicant.findUnique({
+      where: { id: applicantId },
+    });
+
+    if (!applicant) {
+      res.status(404).json({
+        success: false,
+        message: "Applicant not found",
+      });
+      return;
+    }
+
+    if (!applicant.userId || applicant.userId !== userId) {
+      res.status(403).json({
+        success: false,
+        message: "You can only resubmit your own application",
+      });
+      return;
+    }
+
+    if (applicant.status !== "RESUBMIT") {
+      res.status(400).json({
+        success: false,
+        message: "Only applications with RESUBMIT status can be resubmitted",
+      });
+      return;
+    }
+
+    const updated = await prisma.applicant.update({
+      where: { id: applicantId },
+      data: {
+        status: "PENDING_REVIEW",
+        adminMessage: null,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: formatApplicantResponse(updated),
+      message: "Application resubmitted successfully",
+    });
+  } catch (error) {
+    console.error("Failed to resubmit application:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error",
