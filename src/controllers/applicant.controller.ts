@@ -12,7 +12,7 @@ import {
 import { prisma } from "../config/database";
 import type { Applicant } from "@prisma/client";
 import { ocrStore } from "../config/ocrStore";
-import { saveDocument } from "../utils/imageStorage";
+import { saveDocument, getDocumentStream, getImageStream } from "../utils/imageStorage";
 import { signSetupToken } from "../utils/token";
 import {
   sendSetupLinkEmail,
@@ -100,12 +100,14 @@ export async function createApplicant(
     const uploadedFiles = files as NonNullable<typeof files>;
     const certificateOfRegistrationPath = await saveDocument(
       uploadedFiles.certificateOfRegistration[0].buffer,
-      `cor_${Date.now()}_${uploadedFiles.certificateOfRegistration[0].originalname}`
+      `cor_${Date.now()}_${uploadedFiles.certificateOfRegistration[0].originalname}`,
+      uploadedFiles.certificateOfRegistration[0].mimetype
     );
 
     const curriculumVitaePath = await saveDocument(
       uploadedFiles.curriculumVitae[0].buffer,
-      `cv_${Date.now()}_${uploadedFiles.curriculumVitae[0].originalname}`
+      `cv_${Date.now()}_${uploadedFiles.curriculumVitae[0].originalname}`,
+      uploadedFiles.curriculumVitae[0].mimetype
     );
 
     // ── 3. Resolve OCR session ────────────────────────────────────────────
@@ -275,6 +277,7 @@ function formatApplicantResponse(applicant: Applicant) {
     status: applicant.status,
     manual_application: applicant.manual_application,
     adminMessage: applicant.adminMessage,
+    resubmitFields: applicant.resubmitFields ? applicant.resubmitFields.split(",") : [],
     idImagePath: applicant.idImagePath,
     certificateOfRegistration: applicant.certificateOfRegistration,
     curriculumVitae: applicant.curriculumVitae,
@@ -433,7 +436,7 @@ export async function updateApplicantStatus(
       return;
     }
 
-    const { status, message } = parsed.data;
+    const { status, message, resubmitFields } = parsed.data;
 
     const existing = await prisma.applicant.findUnique({
       where: { id: applicantId },
@@ -454,15 +457,22 @@ export async function updateApplicantStatus(
       updateData.adminMessage = null;
     }
 
+    if (status === "RESUBMIT" && resubmitFields) {
+      updateData.resubmitFields = resubmitFields.join(",");
+    } else if (status !== "RESUBMIT") {
+      updateData.resubmitFields = null;
+    }
+
     const applicant = await prisma.applicant.update({
       where: { id: applicantId },
       data: updateData,
     });
 
-    if (status === "APPROVED" && applicant.userId) {
+    if (applicant.userId) {
+      const newUserRole = status === "APPROVED" ? "MEMBER" : "APPLICANT";
       await prisma.user.update({
         where: { id: applicant.userId },
-        data: { role: "MEMBER" },
+        data: { role: newUserRole },
       });
     }
 
@@ -806,12 +816,81 @@ export async function resubmitApplication(
       return;
     }
 
+    const unlocked = applicant.resubmitFields ? applicant.resubmitFields.split(",") : [];
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    const body = req.body;
+
+    // Check if files are uploaded but locked
+    if (files?.certificateOfRegistration?.length && !unlocked.includes("certificateOfRegistration")) {
+      res.status(400).json({
+        success: false,
+        message: "Certificate of Registration is locked for resubmission",
+      });
+      return;
+    }
+
+    if (files?.curriculumVitae?.length && !unlocked.includes("curriculumVitae")) {
+      res.status(400).json({
+        success: false,
+        message: "Curriculum Vitae is locked for resubmission",
+      });
+      return;
+    }
+
+    // Check if text fields are updated but personalInfo is locked
+    const hasTextUpdates = Object.keys(body).some(key => key !== "_certificateOfRegistration" && key !== "_curriculumVitae" && key !== "ocrSessionId");
+    if (hasTextUpdates && !unlocked.includes("personalInfo")) {
+      res.status(400).json({
+        success: false,
+        message: "Personal information is locked for resubmission",
+      });
+      return;
+    }
+
+    const updateData: any = {
+      status: "PENDING_REVIEW",
+      adminMessage: null,
+      resubmitFields: null,
+    };
+
+    if (unlocked.includes("personalInfo") && hasTextUpdates) {
+      const parsedBody = updateApplicantSchema.safeParse(req.body);
+      if (!parsedBody.success) {
+        res.status(400).json({
+          success: false,
+          message: "Validation error",
+          errors: parsedBody.error.flatten().fieldErrors,
+        });
+        return;
+      }
+      const bodyData = { ...parsedBody.data };
+      if (bodyData.dateOfBirth) {
+        bodyData.dateOfBirth = new Date(bodyData.dateOfBirth) as any;
+      }
+      Object.assign(updateData, bodyData);
+    }
+
+    if (files?.certificateOfRegistration?.length && unlocked.includes("certificateOfRegistration")) {
+      const path = await saveDocument(
+        files.certificateOfRegistration[0].buffer,
+        `cor_${Date.now()}_${files.certificateOfRegistration[0].originalname}`,
+        files.certificateOfRegistration[0].mimetype
+      );
+      updateData.certificateOfRegistration = path;
+    }
+
+    if (files?.curriculumVitae?.length && unlocked.includes("curriculumVitae")) {
+      const path = await saveDocument(
+        files.curriculumVitae[0].buffer,
+        `cv_${Date.now()}_${files.curriculumVitae[0].originalname}`,
+        files.curriculumVitae[0].mimetype
+      );
+      updateData.curriculumVitae = path;
+    }
+
     const updated = await prisma.applicant.update({
       where: { id: applicantId },
-      data: {
-        status: "PENDING_REVIEW",
-        adminMessage: null,
-      },
+      data: updateData,
     });
 
     res.status(200).json({
@@ -827,3 +906,104 @@ export async function resubmitApplication(
     });
   }
 }
+
+// ── Applicant: Get Own Applicant Record ─────────────────────────────────────
+export async function getApplicantMe(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = (req as any).userId;
+
+    const applicant = await prisma.applicant.findUnique({
+      where: { userId },
+    });
+
+    if (!applicant) {
+      res.status(404).json({
+        success: false,
+        message: "No applicant record found linked to your account",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: formatApplicantResponse(applicant),
+    });
+  } catch (error) {
+    console.error("Failed to get own applicant record:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+function getContentTypeFromFilename(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "pdf": return "application/pdf";
+    case "jpg":
+    case "jpeg": return "image/jpeg";
+    case "png": return "image/png";
+    case "gif": return "image/gif";
+    case "webp": return "image/webp";
+    case "doc": return "application/msword";
+    case "docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    default: return "application/octet-stream";
+  }
+}
+
+// ── Applicant: Serve Protected Document ─────────────────────────────────────
+export async function serveDocument(req: Request, res: Response): Promise<void> {
+  try {
+    const { filename } = req.params;
+    const { stream, contentType, contentLength } = await getDocumentStream(filename);
+    if (!stream) {
+      res.status(404).json({ success: false, message: "Document not found" });
+      return;
+    }
+    
+    let finalContentType = contentType || "application/octet-stream";
+    if (finalContentType === "application/octet-stream") {
+      finalContentType = getContentTypeFromFilename(filename);
+    }
+    
+    res.setHeader("Content-Type", finalContentType);
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(filename)}"`);
+    if (contentLength) res.setHeader("Content-Length", contentLength);
+    
+    stream.pipe(res);
+  } catch (error: any) {
+    console.error("Failed to serve document:", error);
+    res.status(404).json({ success: false, message: "Document not found or inaccessible" });
+  }
+}
+
+// ── Applicant: Serve Protected Image ────────────────────────────────────────
+export async function serveImage(req: Request, res: Response): Promise<void> {
+  try {
+    const { filename } = req.params;
+    const { stream, contentType, contentLength } = await getImageStream(filename);
+    if (!stream) {
+      res.status(404).json({ success: false, message: "Image not found" });
+      return;
+    }
+    
+    let finalContentType = contentType || "application/octet-stream";
+    if (finalContentType === "application/octet-stream") {
+      finalContentType = getContentTypeFromFilename(filename);
+    }
+    
+    res.setHeader("Content-Type", finalContentType);
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(filename)}"`);
+    if (contentLength) res.setHeader("Content-Length", contentLength);
+    
+    stream.pipe(res);
+  } catch (error: any) {
+    console.error("Failed to serve image:", error);
+    res.status(404).json({ success: false, message: "Image not found or inaccessible" });
+  }
+}
+
