@@ -183,6 +183,7 @@ export async function createApplicant(
       success: true,
       data: {
         id: applicant.id,
+        setupToken,
         lastName: applicant.lastName,
         firstName: applicant.firstName,
         middleInitial: applicant.middleInitial,
