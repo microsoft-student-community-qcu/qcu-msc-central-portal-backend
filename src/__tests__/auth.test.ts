@@ -101,14 +101,14 @@ describe("POST /api/auth/sign-up/email", () => {
   });
 });
 
-describe("POST /api/auth/sign-in/email", () => {
+describe("POST /api/v1/auth/student/sign-in", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("returns 400 for missing fields", async () => {
     const res = await request(app)
-      .post("/api/auth/sign-in/email")
+      .post("/api/v1/auth/student/sign-in")
       .send({});
 
     expect(res.status).toBe(400);
@@ -117,25 +117,185 @@ describe("POST /api/auth/sign-in/email", () => {
 
   it("returns 400 for invalid email format", async () => {
     const res = await request(app)
-      .post("/api/auth/sign-in/email")
+      .post("/api/v1/auth/student/sign-in")
       .send({ email: "bad", password: "password123" });
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toContain("Invalid email format");
+    expect(res.body.errors.email).toContain("Invalid email format");
   });
 
-  it("calls auth.handler when validation passes", async () => {
+  it("returns 403 when ADMIN_HR tries to sign in", async () => {
+    (prisma.user.findUnique as any).mockResolvedValueOnce({ role: "ADMIN_HR" });
+
+    const res = await request(app)
+      .post("/api/v1/auth/student/sign-in")
+      .send({ email: "admin@example.com", password: "password123" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain("Admin accounts");
+  });
+
+  it("returns 403 when ADMIN_LOGISTICS tries to sign in", async () => {
+    (prisma.user.findUnique as any).mockResolvedValueOnce({ role: "ADMIN_LOGISTICS" });
+
+    const res = await request(app)
+      .post("/api/v1/auth/student/sign-in")
+      .send({ email: "admin@example.com", password: "password123" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain("Admin accounts");
+  });
+
+  it("allows APPLICANT sign-in", async () => {
+    (prisma.user.findUnique as any).mockResolvedValueOnce({ role: "APPLICANT" });
     const mockResponse = new Response(
-      JSON.stringify({ user: { id: "test-id" }, session: { id: "session-id" } }),
+      JSON.stringify({ user: { id: "applicant-id", role: "APPLICANT" }, session: { id: "session-id" } }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
     (auth.handler as any).mockResolvedValueOnce(mockResponse);
 
     const res = await request(app)
-      .post("/api/auth/sign-in/email")
-      .send({ email: "test@example.com", password: "password123" });
+      .post("/api/v1/auth/student/sign-in")
+      .send({ email: "student@example.com", password: "password123" });
 
     expect(res.status).toBe(200);
     expect(auth.handler).toHaveBeenCalledOnce();
+  });
+
+  it("allows MEMBER sign-in", async () => {
+    (prisma.user.findUnique as any).mockResolvedValueOnce({ role: "MEMBER" });
+    const mockResponse = new Response(
+      JSON.stringify({ user: { id: "member-id", role: "MEMBER" }, session: { id: "session-id" } }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+    (auth.handler as any).mockResolvedValueOnce(mockResponse);
+
+    const res = await request(app)
+      .post("/api/v1/auth/student/sign-in")
+      .send({ email: "member@example.com", password: "password123" });
+
+    expect(res.status).toBe(200);
+    expect(auth.handler).toHaveBeenCalledOnce();
+  });
+
+  it("allows sign-in when user does not exist yet (passes through to Better Auth)", async () => {
+    (prisma.user.findUnique as any).mockResolvedValueOnce(null);
+    const mockResponse = new Response(
+      JSON.stringify({ user: { id: "new-id" }, session: { id: "session-id" } }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+    (auth.handler as any).mockResolvedValueOnce(mockResponse);
+
+    const res = await request(app)
+      .post("/api/v1/auth/student/sign-in")
+      .send({ email: "new@example.com", password: "password123" });
+
+    expect(res.status).toBe(200);
+    expect(auth.handler).toHaveBeenCalledOnce();
+  });
+});
+
+describe("POST /api/v1/auth/admin/sign-in", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns 400 for missing fields", async () => {
+    const res = await request(app)
+      .post("/api/v1/auth/admin/sign-in")
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it("returns 400 for invalid email format", async () => {
+    const res = await request(app)
+      .post("/api/v1/auth/admin/sign-in")
+      .send({ email: "bad", password: "password123" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.errors.email).toContain("Invalid email format");
+  });
+
+  it("returns 403 when APPLICANT tries to sign in", async () => {
+    (prisma.user.findUnique as any).mockResolvedValueOnce({ role: "APPLICANT" });
+
+    const res = await request(app)
+      .post("/api/v1/auth/admin/sign-in")
+      .send({ email: "student@example.com", password: "password123" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain("Access denied");
+  });
+
+  it("returns 403 when MEMBER tries to sign in", async () => {
+    (prisma.user.findUnique as any).mockResolvedValueOnce({ role: "MEMBER" });
+
+    const res = await request(app)
+      .post("/api/v1/auth/admin/sign-in")
+      .send({ email: "member@example.com", password: "password123" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain("Access denied");
+  });
+
+  it("returns 403 when user does not exist", async () => {
+    (prisma.user.findUnique as any).mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .post("/api/v1/auth/admin/sign-in")
+      .send({ email: "unknown@example.com", password: "password123" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain("Access denied");
+  });
+
+  it("allows ADMIN_HR sign-in", async () => {
+    (prisma.user.findUnique as any).mockResolvedValueOnce({ role: "ADMIN_HR" });
+    const mockResponse = new Response(
+      JSON.stringify({ user: { id: "admin-hr-id", role: "ADMIN_HR" }, session: { id: "session-id" } }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+    (auth.handler as any).mockResolvedValueOnce(mockResponse);
+
+    const res = await request(app)
+      .post("/api/v1/auth/admin/sign-in")
+      .send({ email: "admin@example.com", password: "password123" });
+
+    expect(res.status).toBe(200);
+    expect(auth.handler).toHaveBeenCalledOnce();
+  });
+
+  it("allows ADMIN_LOGISTICS sign-in", async () => {
+    (prisma.user.findUnique as any).mockResolvedValueOnce({ role: "ADMIN_LOGISTICS" });
+    const mockResponse = new Response(
+      JSON.stringify({ user: { id: "admin-lg-id", role: "ADMIN_LOGISTICS" }, session: { id: "session-id" } }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+    (auth.handler as any).mockResolvedValueOnce(mockResponse);
+
+    const res = await request(app)
+      .post("/api/v1/auth/admin/sign-in")
+      .send({ email: "admin@example.com", password: "password123" });
+
+    expect(res.status).toBe(200);
+    expect(auth.handler).toHaveBeenCalledOnce();
+  });
+});
+
+describe("POST /api/auth/sign-in/email (generic — disabled)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns 400 with message directing to portal-specific endpoints", async () => {
+    const res = await request(app)
+      .post("/api/auth/sign-in/email")
+      .send({ email: "test@example.com", password: "password123" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain("Direct sign-in is not available");
+    expect(auth.handler).not.toHaveBeenCalled();
   });
 });

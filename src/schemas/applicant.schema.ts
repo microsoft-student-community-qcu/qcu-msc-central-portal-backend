@@ -318,6 +318,9 @@ export const updateApplicantStatusSchema = z.object({
     .min(1, "Admin message cannot be empty")
     .max(500, "Admin message must be under 500 characters")
     .optional(),
+  resubmitFields: z
+    .array(z.string({ message: "Each resubmit field must be a text value" }))
+    .optional(),
 });
 
 // ── Exported Types ───────────────────────────────────────────────────────

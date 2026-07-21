@@ -4,6 +4,8 @@ import { extractFields } from "../services/ocr.service";
 import { ocrStore } from "../config/ocrStore";
 import { saveImage } from "../utils/imageStorage";
 import { env } from "../config/env";
+import { prisma } from "../config/database";
+import { signSetupToken } from "../utils/token";
 
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png"];
 
@@ -29,9 +31,36 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
 
     const result = await extractFields(file.buffer, file.originalname);
 
+    if (result.extracted && result.studentId) {
+      const existingApplicant = await prisma.applicant.findFirst({
+        where: { studentId: result.studentId }
+      });
+      if (existingApplicant) {
+        if (existingApplicant.userId) {
+          res.status(400).json({
+            success: false,
+            message: "An account with this Student ID already exists. Please sign in instead."
+          });
+          return;
+        } else {
+          const setupToken = await signSetupToken(existingApplicant.id, existingApplicant.email);
+          res.status(200).json({
+            success: true,
+            data: {
+              alreadySubmitted: true,
+              setupToken,
+            },
+            message: "You have already submitted an application. Redirecting to account setup..."
+          });
+          return;
+        }
+      }
+    }
+
     const imagePath = await saveImage(
       file.buffer,
-      `ocr_${Date.now()}_${file.originalname}`
+      `ocr_${Date.now()}_${file.originalname}`,
+      file.mimetype
     );
 
     const clientIp = req.ip ?? req.socket.remoteAddress ?? "unknown";

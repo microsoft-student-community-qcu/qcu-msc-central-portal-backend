@@ -161,6 +161,7 @@ model Applicant {
   manual_application          Boolean         @default(false) // Flagged true when OCR fails → manual upload
   idImagePath                 String?         // Filesystem path to uploaded Student ID image
   adminMessage                String?         // Admin remark (used for RESUBMIT reason, etc.)
+  resubmitFields              String?         // Comma-separated list or JSON array of fields to resubmit
   userId                      String?         @unique // Nullable one-to-one link to User when applicant becomes a member
   user                        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt                   DateTime        @default(now())
