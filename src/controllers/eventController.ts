@@ -4,6 +4,12 @@ import { registerEventSchema } from "../schemas/registerEvent.schema";
 import { prisma } from "../config/database";
 import { ocrStore } from "../config/ocrStore";
 import { createEventSchema, reviewRegistrationSchema } from "../schemas/event.schema";
+import {
+  sendRegistrationConfirmedEmail,
+  sendRegistrationPendingReviewEmail,
+  sendRegistrationApprovedEmail,
+  sendRegistrationRejectedEmail,
+} from "../services/email.service";
 
 /**
  * POST /api/v1/events/:eventId/register
@@ -93,6 +99,7 @@ export async function registerForEvent(
     let studentId: string | null = null;
     let manualRegistration = false;
     let resolvedUserId: string | null = null;
+    let ocrSessionId: string | undefined;
     if (isMemberPath) {
       const user = await prisma.user.findUnique({ where: { id: userId! } });
       if (!user) {
@@ -128,7 +135,8 @@ export async function registerForEvent(
         return;
       }
 
-      const { lastName: bodyLastName, firstName: bodyFirstName, middleInitial: bodyMiddleInitial, email: bodyEmail, ocrSessionId } = parsed.data;
+      const { lastName: bodyLastName, firstName: bodyFirstName, middleInitial: bodyMiddleInitial, email: bodyEmail, ocrSessionId: sessionOcrId } = parsed.data;
+      ocrSessionId = sessionOcrId;
 
       if (!ocrSessionId) {
         res
@@ -197,21 +205,16 @@ export async function registerForEvent(
       },
     });
 
-    // ── 7. TODO: consume OCR session ─────────────────────────────────────
-    // ocrStore currently has no consumeSession()/delete method — flagged
-    // with the team (same gap exists in applicantController.ts).
+    // ── 7. Clean up OCR session (guest path only) ────────────────────────
+    if (!isMemberPath && ocrSessionId) {
+      ocrStore.deleteSession(ocrSessionId);
+    }
 
-    // ── 8. Email stub (placeholder — same pattern as applicantController) ─
+    // ── 8. Send confirmation email ────────────────────────────────────────
     if (registration.status === "APPROVED") {
-      console.log(`[EMAIL STUB] Registration confirmed: ${registration.email}`);
-      console.log(`[EMAIL STUB] QR payload: ${qrPayload}`);
-      // TODO: replace with actual email engine (Week 4.1) — should include
-      // QR ticket, event details, and unique cancellation link.
+      await sendRegistrationConfirmedEmail(registration.email, event.title, qrPayload);
     } else {
-      console.log(
-        `[EMAIL STUB] Registration pending manual review: ${registration.email}`
-      );
-      // TODO: send "submitted for manual review" email per PRD Path B.
+      await sendRegistrationPendingReviewEmail(registration.email, event.title);
     }
 
     // ── 9. Respond ────────────────────────────────────────────────────────
@@ -427,14 +430,9 @@ export async function reviewRegistration(
     });
 
     if (parsed.data.action === "approve") {
-      const qrUrl = `/ticket/${updated.qrPayload}`;
-      console.log(
-        `[EMAIL STUB] Registration approved for ${updated.email} — QR ticket: ${qrUrl}`
-      );
+      await sendRegistrationApprovedEmail(updated.email, event.title, updated.qrPayload);
     } else {
-      console.log(
-        `[EMAIL STUB] Registration rejected for ${updated.email}`
-      );
+      await sendRegistrationRejectedEmail(updated.email, event.title);
     }
 
     res.status(200).json({

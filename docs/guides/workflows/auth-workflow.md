@@ -34,17 +34,17 @@ Frontend validates token: POST /api/v1/users/validate-setup-token
 	↓
 Frontend shows password form with pre-filled name and email
 	↓
-Frontend calls POST /api/auth/sign-up/email with:
+  Frontend calls POST /api/auth/sign-up/email with:
 	↓
   {
     "email": "juan@gmail.com",
     "password": "SecurePass123",
-    "name": "Juan Dela Cruz",
-    "studentId": "23-1234",
     "firstName": "Juan",
     "lastName": "Dela Cruz",
+    "studentId": "23-1234",
     "role": "APPLICANT"
   }
+  Note: `name` is constructed server-side as `"Juan Dela Cruz"` and forwarded to Better Auth.
 	↓
 Better Auth creates User + Account records
 	↓
@@ -117,10 +117,12 @@ Juan is a QCU student who wants to join the Microsoft Student Community. Here's 
 │   ✓ Has the applicant not already created an account?               │
 │                                                                      │
 │ Response: { "success": true, "data": { "applicantId": "app-1",     │
-│            "email": "juan@gmail.com", "name": "Juan Dela Cruz",     │
+│            "email": "juan@gmail.com", "firstName": "Juan",          │
+│            "lastName": "Dela Cruz", "middleInitial": null,           │
 │            "studentId": "23-1234" } }                                │
 │                                                                      │
-│ Frontend stores applicantId + email + name + studentId in memory.  │
+│ Frontend stores applicantId + email + firstName + lastName +        │
+│ studentId in memory.                                                 │
 │ Pre-fills the form fields.                                          │
 │                                                                      │
 │ If invalid/expired → show error page with "Link expired" message    │
@@ -166,12 +168,12 @@ Juan is a QCU student who wants to join the Microsoft Student Community. Here's 
 │   Body: {                                                            │
 │     "email": "juan@gmail.com",                                       │
 │     "password": "SecurePass123!",                                    │
-│     "name": "Juan Dela Cruz",                                        │
-│     "studentId": "23-1234",                                          │
 │     "firstName": "Juan",                                             │
 │     "lastName": "Dela Cruz",                                         │
+│     "studentId": "23-1234",                                          │
 │     "role": "APPLICANT"                                              │
 │   }                                                                  │
+│   Note: `name` is constructed server-side as `"Juan Dela Cruz"`.    │
 │                                                                      │
 │ Better Auth creates:                                                 │
 │   User    { id: "user-1", email: "juan@gmail.com",                  │
@@ -271,10 +273,10 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
    POST /api/v1/users/validate-setup-token
    Body: { "token": token }
 
-   → Success Response: { "success": true, "data": { "applicantId", "email", "name", "studentId", ... } }
+   → Success Response: { "success": true, "data": { "applicantId", "email", "firstName", "lastName", "studentId", ... } }
    → Error Response:   { "success": false, "errors": ["..."] }
 
-3. On success → store `applicantId` + `email` + `name` + `studentId` in memory, pre-fill form fields.
+3. On success → store `applicantId` + `email` + `firstName` + `lastName` + `studentId` in memory, pre-fill form fields.
    On error   → show relevant error page (expired/used/not found).
 
 4. User enters password and submits
@@ -284,9 +286,11 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
    Body: {
      "email":       email,          // from validation response
      "password":    password,       // user input
-     "name":        name,           // from validation response
+     "firstName":   firstName,      // from validation response
+     "lastName":    lastName,       // from validation response
      "studentId":   studentId       // from validation response
    }
+   Note: The full `name` field is constructed server-side.
 
    → Response: { "token": "abc...", "user": { "id": "user-1", ... } }
 
@@ -326,22 +330,67 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
 
 ## Login (Email + Password)
 
+The generic `/api/auth/sign-in/email` endpoint is **disabled**. Each frontend has a dedicated sign-in endpoint that enforces role boundaries:
+
+| Portal | Endpoint | Allowed Roles |
+|--------|----------|---------------|
+| **Student Portal** | `POST /api/v1/auth/student/sign-in` | `APPLICANT`, `MEMBER` |
+| **Admin Portal** | `POST /api/v1/auth/admin/sign-in` | `ADMIN_HR`, `ADMIN_LOGISTICS` |
+
+### Student Portal Login Flow
+
 ```
-User visits login page
+User visits Student Portal login page
 	↓
 User enters email and password
 	↓
-Frontend sends POST /api/auth/sign-in/email
+Frontend sends POST /api/v1/auth/student/sign-in
 	↓
-Better Auth validates credentials
+Backend looks up user by email
 	↓
-Invalid? → Error response
+User is ADMIN_HR or ADMIN_LOGISTICS?
+	├── Yes → Return 403: "Admin accounts cannot sign in through
+	│            the Student Portal. Please use the Admin Portal."
+	│            → User is blocked (no session created)
+	└── No → Forward to Better Auth
+	             ↓
+          Better Auth validates credentials
+	             ↓
+          Invalid? → Error response
+	             ↓
+          Create Session record
+	             ↓
+          Return session + user data
+	             ↓
+          User authenticated ✓
+```
+
+### Admin Portal Login Flow
+
+```
+User visits Admin Portal login page
 	↓
-Create Session record
+User enters email and password
 	↓
-Return session + user data
+Frontend sends POST /api/v1/auth/admin/sign-in
 	↓
-User authenticated ✓
+Backend looks up user by email
+	↓
+User is APPLICANT, MEMBER, or does not exist?
+	├── Yes → Return 403: "Access denied. Only admin accounts can
+	│            sign in through the Admin Portal."
+	│            → User is blocked (no session created)
+	└── No (role is ADMIN_HR or ADMIN_LOGISTICS) → Forward to Better Auth
+	             ↓
+          Better Auth validates credentials
+	             ↓
+          Invalid? → Error response
+	             ↓
+          Create Session record
+	             ↓
+          Return session + user data
+	             ↓
+          User authenticated ✓
 ```
 
 ---
@@ -400,7 +449,9 @@ Route uses require* guard to block unauthorized requests
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/auth/sign-up/email` | Public | Create account via applicant activation link (not public registration) |
-| POST | `/api/auth/sign-in/email` | Public | Sign in with email + password |
+| POST | `/api/auth/sign-in/email` | Public | **Disabled** — redirects to use portal-specific endpoints |
+| POST | `/api/v1/auth/student/sign-in` | Public | Sign in via Student Portal (APPLICANT / MEMBER only) |
+| POST | `/api/v1/auth/admin/sign-in` | Public | Sign in via Admin Portal (ADMIN_HR / ADMIN_LOGISTICS only) |
 | POST | `/api/auth/sign-in/google` | Public | Sign in with Google (OAuth) |
 | POST | `/api/auth/sign-in/github` | Public | Sign in with GitHub (OAuth) |
 | GET | `/api/auth/get-session` | Required | Get current session |

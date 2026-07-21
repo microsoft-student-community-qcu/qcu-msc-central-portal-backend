@@ -18,12 +18,14 @@ function getBlobServiceClient(): BlobServiceClient {
 const OCR_CONTAINER = "ocr";
 const DOCUMENTS_CONTAINER = "documents";
 
-export async function saveImage(buffer: Buffer, filename: string): Promise<string> {
+export async function saveImage(buffer: Buffer, filename: string, mimetype?: string): Promise<string> {
   const client = getBlobServiceClient();
   const containerClient = client.getContainerClient(OCR_CONTAINER);
   await containerClient.createIfNotExists({ access: "container" });
   const blockBlobClient = containerClient.getBlockBlobClient(filename);
-  await blockBlobClient.upload(buffer, buffer.length);
+  await blockBlobClient.upload(buffer, buffer.length, {
+    blobHTTPHeaders: mimetype ? { blobContentType: mimetype } : undefined,
+  });
   return blockBlobClient.url;
 }
 
@@ -33,15 +35,41 @@ export function getImagePath(filename: string): string {
 
 // ── Document Storage (CoR, CV, etc.) ─────────────────────────────────────
 
-export async function saveDocument(buffer: Buffer, filename: string): Promise<string> {
+export async function saveDocument(buffer: Buffer, filename: string, mimetype?: string): Promise<string> {
   const client = getBlobServiceClient();
   const containerClient = client.getContainerClient(DOCUMENTS_CONTAINER);
-  await containerClient.createIfNotExists();
+  await containerClient.createIfNotExists({ access: "container" });
   const blockBlobClient = containerClient.getBlockBlobClient(filename);
-  await blockBlobClient.upload(buffer, buffer.length);
+  await blockBlobClient.upload(buffer, buffer.length, {
+    blobHTTPHeaders: mimetype ? { blobContentType: mimetype } : undefined,
+  });
   return blockBlobClient.url;
 }
 
 export function getDocumentPath(filename: string): string {
   return `https://${env.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${DOCUMENTS_CONTAINER}/${filename}`;
+}
+
+export async function getDocumentStream(filename: string) {
+  const client = getBlobServiceClient();
+  const containerClient = client.getContainerClient(DOCUMENTS_CONTAINER);
+  const blockBlobClient = containerClient.getBlockBlobClient(filename);
+  const downloadResponse = await blockBlobClient.download(0);
+  return {
+    stream: downloadResponse.readableStreamBody,
+    contentType: downloadResponse.contentType,
+    contentLength: downloadResponse.contentLength,
+  };
+}
+
+export async function getImageStream(filename: string) {
+  const client = getBlobServiceClient();
+  const containerClient = client.getContainerClient(OCR_CONTAINER);
+  const blockBlobClient = containerClient.getBlockBlobClient(filename);
+  const downloadResponse = await blockBlobClient.download(0);
+  return {
+    stream: downloadResponse.readableStreamBody,
+    contentType: downloadResponse.contentType,
+    contentLength: downloadResponse.contentLength,
+  };
 }

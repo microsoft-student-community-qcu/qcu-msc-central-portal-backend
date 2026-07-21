@@ -25,32 +25,88 @@ Used by the frontend `/auth/setup-password` page when an applicant clicks the pa
 {
   "email": "juan@gmail.com",
   "password": "SecurePass123",
-  "name": "Juan Dela Cruz",
-  "studentId": "23-1234",
   "firstName": "Juan",
   "lastName": "Dela Cruz",
+  "studentId": "23-1234",
   "role": "APPLICANT"
 }
 ```
 
-**Required fields:** `email`, `password`, `name`, `studentId`
-**Optional fields:** `firstName`, `lastName`, `role` (defaults to `APPLICANT`)
+**Required fields:** `email`, `password`, `firstName`, `lastName`, `studentId`
+**Optional fields:** `role` (defaults to `APPLICANT`)
+
+> The full `name` field is constructed server-side from `firstName` + `lastName` for Better Auth compatibility.
 
 Access the authenticated session from the response headers/cookies for subsequent requests.
 
 ---
 
-### 2. Sign In (Email + Password)
+### 2. Sign In — Portal-Specific Endpoints
 
-**Method:** `POST`  
-**Path:** `/api/auth/sign-in/email`
+The generic `/api/auth/sign-in/email` endpoint is **disabled**. Each frontend must use its dedicated sign-in endpoint, which enforces role boundaries:
 
-**Request:**
+| Portal | Endpoint | Allowed Roles |
+|--------|----------|---------------|
+| **Student Portal** | `POST /api/v1/auth/student/sign-in` | `APPLICANT`, `MEMBER` |
+| **Admin Portal** | `POST /api/v1/auth/admin/sign-in` | `ADMIN_HR`, `ADMIN_LOGISTICS` |
+
+**Rate limit:** 10 requests/minute per IP (independent per endpoint)
+
+**Request (both endpoints):**
 ```json
 {
   "email": "juan@gmail.com",
   "password": "SecurePass123"
 }
+```
+
+**Success Response (200):**
+```json
+{
+  "user": { "id": "...", "email": "juan@gmail.com", "role": "APPLICANT" },
+  "session": { "id": "...", "token": "..." }
+}
+```
+
+**Student Portal — Role Blocked Response (403):**
+```json
+{
+  "success": false,
+  "message": "Admin accounts cannot sign in through the Student Portal. Please use the Admin Portal."
+}
+```
+
+**Admin Portal — Role Blocked Response (403):**
+```json
+{
+  "success": false,
+  "message": "Access denied. Only admin accounts can sign in through the Admin Portal."
+}
+```
+
+**Validation Error Response (400):**
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": {
+    "email": ["Invalid email format"]
+  }
+}
+```
+
+**Example Request (student):**
+```bash
+curl -X POST http://localhost:5000/api/v1/auth/student/sign-in \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "juan@gmail.com", "password": "SecurePass123" }'
+```
+
+**Example Request (admin):**
+```bash
+curl -X POST http://localhost:5000/api/v1/auth/admin/sign-in \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "admin@qcu.edu.ph", "password": "AdminPass456" }'
 ```
 
 ---

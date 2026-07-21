@@ -4,9 +4,9 @@ import { z } from "zod";
 // ── Enums ────────────────────────────────────────────────────────────────
 
 export const applicantStatusEnum = z.enum(
-  ["APPROVED", "PENDING_REVIEW", "REJECTED", "CANCELLED"],
+  ["APPROVED", "PENDING_REVIEW", "REJECTED", "CANCELLED", "RESUBMIT"],
   {
-    error: "Status must be APPROVED, PENDING_REVIEW, REJECTED, or CANCELLED",
+    error: "Status must be APPROVED, PENDING_REVIEW, REJECTED, CANCELLED, or RESUBMIT",
   }
 );
 
@@ -313,6 +313,14 @@ export const updateApplicantSchema = z.object({
 
 export const updateApplicantStatusSchema = z.object({
   status: applicantStatusEnum,
+  message: z
+    .string({ message: "Admin message must be a text value" })
+    .min(1, "Admin message cannot be empty")
+    .max(500, "Admin message must be under 500 characters")
+    .optional(),
+  resubmitFields: z
+    .array(z.string({ message: "Each resubmit field must be a text value" }))
+    .optional(),
 });
 
 // ── Exported Types ───────────────────────────────────────────────────────

@@ -15,65 +15,53 @@ enum Gender {
 }
 
 enum Campus {
-  SAN_BARTOLOME
+  SAN_BARTOLOME_MAIN
   SAN_FRANCISCO
   BATASAN
 }
 
-enum RegistrationStatus {
+enum ApplicantStatus {
   APPROVED
-  CANCELLED
   PENDING_REVIEW
   REJECTED
+  CANCELLED
+  RESUBMIT
 }
 
 model Applicant {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Account link
-  userId String? @unique
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  // OCR tracking
-  manual_application       Boolean @default(false)
-  ocrSessionId             String?
-
-  // Personal Information
-  firstName                String
-  lastName                 String
-  middleName               String?
-  gender                   Gender
-  campus                   Campus
-  dateOfBirth              DateTime
-  nationality              String
-
-  // Contact Information
-  phoneNumber              String
-  qcuMscEmail              String   @unique
-  emergencyContactName     String
-  emergencyContactNumber   String
-
-  // Academic Information
-  college                  String
-  program                  String
-  yearLevel                String
-  studentType              String
-
-  // Supporting Requirements
-  portfolio                String?
-  githubOrProjectLinks     String?
-  previousWorksAchievements String?
-
-  // Why join the organization
-  reasonForJoining         String
-  expectations             String
-
-  // Status
-  status RegistrationStatus @default(PENDING_REVIEW)
-  adminRemarks String?
+  id                          String          @id @default(uuid())
+  lastName                    String          @default("")
+  firstName                   String          @default("")
+  middleInitial               String?
+  email                       String          @unique
+  college                     String
+  program                     String
+  section                     String
+  campus                      Campus
+  studentId                   String?
+  dateOfBirth                 DateTime
+  placeOfBirth                String
+  gender                      Gender
+  membershipRole              String
+  certificateOfRegistration   String
+  curriculumVitae             String
+  houseAddress                String
+  cellphoneNumber             String
+  qcuMscEmail                 String          @unique
+  facebookLink                String
+  interestsSkillsHobbies      String          @db.Text
+  organizationHistory         String          @db.Text
+  portfolio                   String?
+  githubOrProjectLinks        String?
+  previousWorksAchievements   String?         @db.Text
+  status                      ApplicantStatus @default(PENDING_REVIEW)
+  manual_application          Boolean         @default(false)
+  idImagePath                 String?
+  adminMessage                String?
+  userId                      String?         @unique
+  user                        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
 }
 ```
 
@@ -83,46 +71,43 @@ model Applicant {
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
-| `firstName` | String | Yes | Max 50 chars, letters/spaces/hyphens only |
-| `lastName` | String | Yes | Max 50 chars, letters/spaces/hyphens only |
-| `middleName` | String? | No | Max 50 chars |
+| `firstName` | String | Yes | Max 100 chars |
+| `lastName` | String | Yes | Max 100 chars |
+| `middleInitial` | String? | No | Single letter, optionally followed by a dot |
+| `email` | String | Yes, unique | Valid email (account/login email, not QCU email) |
+| `college` | String | Yes | Max 200 chars |
+| `program` | String | Yes | Max 200 chars |
+| `section` | String | Yes | Max 100 chars |
+| `campus` | Campus (enum) | Yes | `SAN_BARTOLOME_MAIN`, `SAN_FRANCISCO`, `BATASAN` |
+| `studentId` | String? | No* | `YY-NNNN` format — extracted from OCR or entered manually if OCR fails |
+| `dateOfBirth` | DateTime | Yes | ISO date |
+| `placeOfBirth` | String | Yes | Max 300 chars |
 | `gender` | Gender (enum) | Yes | `MALE`, `FEMALE`, `LGBTQIA`, `PREFER_NOT_TO_SAY` |
-| `campus` | Campus (enum) | Yes | `SAN_BARTOLOME`, `SAN_FRANCISCO`, `BATASAN` |
-| `dateOfBirth` | DateTime (ISO date) | Yes | Must be a valid date string |
-| `nationality` | String | Yes | Max 50 chars |
+| `membershipRole` | String | Yes | Max 200 chars |
 
 ### Contact Information
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
-| `phoneNumber` | String | Yes | 11 digits starting with `09` (`^09\d{9}$`) |
+| `houseAddress` | String | Yes | Max 500 chars |
+| `cellphoneNumber` | String | Yes | 11 digits starting with `09` (`^09\d{9}$`) |
 | `qcuMscEmail` | String | Yes, unique | Must end with `@qcu.edu.ph` |
-| `emergencyContactName` | String | Yes | Max 100 chars |
-| `emergencyContactNumber` | String | Yes | 11 digits starting with `09` (`^09\d{9}$`) |
+| `facebookLink` | String | Yes | Valid URL |
 
-### Academic Information
-
-| Field | Type | Required | Validation |
-|-------|------|----------|------------|
-| `college` | String | Yes | Max 100 chars |
-| `program` | String | Yes | Max 100 chars |
-| `yearLevel` | String | Yes | Max 50 chars |
-| `studentType` | String | Yes | Max 50 chars |
-
-### Supporting Requirements
+### Additional Information
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
-| `portfolio` | String? | No | Must be valid URL if provided |
-| `githubOrProjectLinks` | String? | No | Must be valid URL if provided |
-| `previousWorksAchievements` | String? | No | Max 500 chars if provided |
+| `interestsSkillsHobbies` | String (Text) | Yes | |
+| `organizationHistory` | String (Text) | Yes | Specify organization details or "N/A" |
 
-### Why Join
+### Supporting Requirements (Optional)
 
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
-| `reasonForJoining` | String | Yes | Max 500 chars |
-| `expectations` | String | Yes | Max 500 chars |
+| `portfolio` | String? | No | Valid URL |
+| `githubOrProjectLinks` | String? | No | Valid URL |
+| `previousWorksAchievements` | String? (Text) | No | |
 
 ### Document Uploads
 
@@ -137,21 +122,26 @@ Sent as file fields in `multipart/form-data` alongside the above text fields:
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `ocrSessionId` | String? | No | Server-generated ID from OCR verification step |
-| `manual_application` | Boolean | No | `true` when OCR fails and manual entry is required |
+| `manual_application` | Boolean | No | `true` when OCR fails and manual entry is required (set server-side only) |
+| `idImagePath` | String? | No | Path to uploaded Student ID image in blob storage |
+
+### Admin
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `adminMessage` | String? | No | Admin remark visible to the applicant (used for RESUBMIT reason, etc.) |
 
 ### Status Fields
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `status` | RegistrationStatus | Yes | `PENDING_REVIEW`, `APPROVED`, `REJECTED`, `CANCELLED` |
-| `adminRemarks` | String? | No | Admin feedback when rejecting/reviewing |
+| `status` | ApplicantStatus | Yes | `PENDING_REVIEW`, `APPROVED`, `REJECTED`, `CANCELLED`, `RESUBMIT` |
 
 ### System Fields
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `id` | String (CUID) | Yes | Primary key |
+| `id` | String (UUID) | Yes | Primary key |
 | `email` | String | Yes, unique | The account email (matches User.email) |
 | `userId` | String? | Unique | FK to User (set null on user delete) |
 | `createdAt` | DateTime | Yes | Auto-generated |
@@ -172,5 +162,6 @@ Sent as file fields in `multipart/form-data` alongside the above text fields:
 - The `email` field is the user's account/login email, not the QCU email
 - `qcuMscEmail` is a separate field for the official QCU MSC correspondence address
 - File presence is validated via injected `_certificateOfRegistration` / `_curriculumVitae` literal fields in Zod
-- File uploads are stored at `DOCUMENT_STORAGE_PATH` (default `./uploads/documents`)
-- The old `departmentChoice`, `resumeLink`, and `githubLink` fields were removed in the 2026-07-02 expansion
+- File uploads are stored in Azure Blob Storage (`documents` container)
+- `manual_application` is **never client-settable** — derived server-side from OCR session's `manualRequired` flag
+- OCR session ID (`ocrSessionId`) is stored in-memory (not in DB) — see OCR docs for details

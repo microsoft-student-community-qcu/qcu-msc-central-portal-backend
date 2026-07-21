@@ -26,7 +26,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   if (!(req as any).userId) {
     res.status(401).json({
       success: false,
-      error: "Unauthorized - authentication required",
+      message: "Unauthorized - authentication required",
     });
     return;
   }
@@ -37,7 +37,7 @@ export function requireAdminHR(req: Request, res: Response, next: NextFunction):
   if ((req as any).userRole !== "ADMIN_HR") {
     res.status(403).json({
       success: false,
-      error: "Forbidden - ADMIN_HR access required",
+      message: "Forbidden - ADMIN_HR access required",
     });
     return;
   }
@@ -48,7 +48,7 @@ export function requireAdminLogistics(req: Request, res: Response, next: NextFun
   if ((req as any).userRole !== "ADMIN_LOGISTICS") {
     res.status(403).json({
       success: false,
-      error: "Forbidden - ADMIN_LOGISTICS access required",
+      message: "Forbidden - ADMIN_LOGISTICS access required",
     });
     return;
   }
@@ -60,7 +60,7 @@ export function requireAnyAdmin(req: Request, res: Response, next: NextFunction)
   if (!["ADMIN_HR", "ADMIN_LOGISTICS"].includes(userRole)) {
     res.status(403).json({
       success: false,
-      error: "Forbidden - admin access required",
+      message: "Forbidden - admin access required",
     });
     return;
   }
@@ -72,7 +72,7 @@ export function requireMemberOrAdmin(req: Request, res: Response, next: NextFunc
   if (!["MEMBER", "ADMIN_HR", "ADMIN_LOGISTICS"].includes(userRole)) {
     res.status(403).json({
       success: false,
-      error: "Forbidden - MEMBER or admin access required",
+      message: "Forbidden - MEMBER or admin access required",
     });
     return;
   }

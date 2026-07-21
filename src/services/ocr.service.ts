@@ -8,6 +8,68 @@ function toTitleCase(text: string): string {
 const STUDENT_ID_REGEX = /^\d{2}-\d{4}$/;
 const MIDDLE_INITIAL_REGEX = /^[A-Za-z]\.?$/;
 
+// Characters Tesseract commonly confuses with letters when a name is set in
+// a bold/sans-serif card font — most visibly '0' for 'O' in a middle
+// initial like "O.", but also seen with these other pairs. Applied only to
+// lines already identified as name-block candidates (see isDigitDominant),
+// never to the student-ID line, so this can't corrupt "23-1954" parsing.
+const HIGH_CONFIDENCE_DIGIT_TO_LETTER: Record<string, string> = {
+  "0": "O",
+  "1": "I",
+  "5": "S",
+  "8": "B",
+};
+
+// Less common confusions. Kept separate from the map above so that using
+// one of these can be tracked (see normalizeNameOcrConfusions) and treated
+// as a weaker result in the retry loop below, rather than trusted outright
+// the way the high-confidence corrections are.
+const LOW_CONFIDENCE_DIGIT_TO_LETTER: Record<string, string> = {
+  "2": "Z",
+  "3": "B",
+  "4": "A",
+  "6": "G",
+  "7": "T",
+  "9": "G",
+};
+
+function normalizeNameOcrConfusions(text: string): {
+  text: string;
+  hadDigitCorrection: boolean;
+  usedLowConfidenceCorrection: boolean;
+} {
+  let hadDigitCorrection = false;
+  let usedLowConfidenceCorrection = false;
+  const corrected = text.replace(/\d/g, (d) => {
+    if (HIGH_CONFIDENCE_DIGIT_TO_LETTER[d]) {
+      hadDigitCorrection = true;
+      return HIGH_CONFIDENCE_DIGIT_TO_LETTER[d];
+    }
+    if (LOW_CONFIDENCE_DIGIT_TO_LETTER[d]) {
+      hadDigitCorrection = true;
+      usedLowConfidenceCorrection = true;
+      return LOW_CONFIDENCE_DIGIT_TO_LETTER[d];
+    }
+    return d;
+  });
+  return { text: corrected, hadDigitCorrection, usedLowConfidenceCorrection };
+}
+
+/**
+ * A line is "digit-dominant" (and therefore genuine noise, not a
+ * misread name line) when digits make up at least half of its
+ * alphanumeric characters — e.g. a stray duplicate of the ID number, a
+ * course-code fragment, or background clutter. A name line with a single
+ * misread character, like "Mark Darren 0." (one stray '0' among ten
+ * letters), is nowhere near this ratio and is kept + corrected instead of
+ * discarded.
+ */
+function isDigitDominant(text: string): boolean {
+  const digitCount = (text.match(/\d/g) ?? []).length;
+  const letterCount = (text.match(/[A-Za-z]/g) ?? []).length;
+  return digitCount > 0 && digitCount >= letterCount;
+}
+
 // Lines below this Tesseract confidence (0-100) are treated as noise (logo
 // artifacts, background texture, watermark bleed-through, etc.) and
 // discarded before field matching. Real card text usually scores 90+, but
@@ -16,12 +78,6 @@ const MIDDLE_INITIAL_REGEX = /^[A-Za-z]\.?$/;
 // noise is kept out mainly by content/position matching in locateFields,
 // not by this threshold alone.
 const LINE_CONFIDENCE_THRESHOLD = 35;
-
-// Per-field minimum confidence. Individual fields whose OCR confidence
-// falls below this threshold are set to null rather than returned with
-// garbled text. The raw fullName text is still preserved in the result
-// for reference, but lastName/middleInitial aren't trusted enough to use.
-const FIELD_CONFIDENCE_THRESHOLD = 70;
 
 // Page segmentation modes to try, in order, per preprocessed image variant.
 // SPARSE_TEXT looks for text anywhere without assuming a uniform layout,
@@ -42,6 +98,14 @@ export interface OcrResult {
   firstName: string | null;
   middleInitial: string | null;
   extracted: boolean;
+  // True when at least one digit in the recognized name text (e.g. a "0"
+  // in "Mark Darren 0.") had to be reinterpreted as a letter to produce
+  // lastName/firstName/middleInitial. The name fields above already
+  // reflect the correction — this is purely a signal for the caller to
+  // surface a "please double-check this name" notice, since even the
+  // high-confidence corrections (0->O, 1->I, ...) are still a guess, not
+  // a certainty.
+  digitCorrectedInName: boolean;
 }
 
 function normalizeText(text: string): string {
@@ -91,7 +155,7 @@ function parseFullName(text: string): {
     const nameWords = firstNameBlock.split(/\s+/);
     const lastWord = nameWords[nameWords.length - 1];
     if (MIDDLE_INITIAL_REGEX.test(lastWord)) {
-      middleInitial = lastWord.replace(".", "");
+      middleInitial = lastWord;
       firstName = nameWords.slice(0, -1).join(" ") || null;
     } else {
       firstName = firstNameBlock;
@@ -128,16 +192,15 @@ function parseFullName(text: string): {
  * rather than by fixed geometry. But sharper OCR input still improves
  * character-level accuracy on the ID number and name, so we keep it.
  */
-async function correctRotation(inputBuffer: Buffer, filename?: string): Promise<Buffer> {
+async function correctRotation(inputBuffer: Buffer): Promise<Buffer> {
   const worker = await createWorker("eng", 1, { legacyCore: true } as any);
   let working = inputBuffer;
-  let coarseAngle = 0;
   try {
     try {
       const { data } = await (worker as any).detect(working);
-      coarseAngle = data?.orientation_degrees ?? 0;
-      if (coarseAngle && coarseAngle % 360 !== 0) {
-        working = await sharp(working).rotate(360 - coarseAngle).toBuffer();
+      const angle = data?.orientation_degrees ?? 0;
+      if (angle && angle % 360 !== 0) {
+        working = await sharp(working).rotate(360 - angle).toBuffer();
       }
     } catch {
       // OSD can fail on very small/blank crops — non-fatal, skip coarse step.
@@ -180,9 +243,6 @@ async function correctRotation(inputBuffer: Buffer, filename?: string): Promise<
     }
   }
 
-  const cleanLabel = filename ? filename.split(/[/\\]/).pop() : "in-memory";
-  console.log(`[OCR-DEBUG] ${cleanLabel} rotation: coarse=${coarseAngle}° fine=${bestAngle}° (score=${bestScore.toFixed(0)})`);
-
   if (bestAngle === 0) return working;
   return sharp(working).rotate(bestAngle, { background: "#ffffff" }).toBuffer();
 }
@@ -206,15 +266,12 @@ async function correctRotation(inputBuffer: Buffer, filename?: string): Promise<
  * Full-page OCR + content-based field matching (below) sidesteps the
  * problem entirely — it doesn't need to know where the card is at all.
  */
-async function prepareVariants(imageBuffer: Buffer, filename?: string): Promise<Buffer[]> {
-  const upright = await correctRotation(imageBuffer, filename);
+async function prepareVariants(imageBuffer: Buffer): Promise<Buffer[]> {
+  const upright = await correctRotation(imageBuffer);
   const base = sharp(upright).rotate(); // normalize any remaining EXIF orientation
 
   const variantA = await base.clone().grayscale().normalize().sharpen().toBuffer();
   const variantB = await base.clone().grayscale().normalize().threshold(160).toBuffer();
-
-  const cleanLabel = filename ? filename.split(/[/\\]/).pop() : "in-memory";
-  console.log(`[OCR-DEBUG] ${cleanLabel} variants prepared: A=sharpen (${variantA.length} bytes), B=threshold (${variantB.length} bytes)`);
 
   return [variantA, variantB];
 }
@@ -227,7 +284,6 @@ interface DetectedLine {
   text: string;
   y0: number;
   y1: number;
-  confidence: number;
 }
 
 /**
@@ -235,38 +291,20 @@ interface DetectedLine {
  * and returns the recognized lines, sorted top-to-bottom, filtered to those
  * Tesseract is at least somewhat confident about.
  */
-async function recognizeLines(imageBuffer: Buffer, psm: PSM, label?: string): Promise<DetectedLine[]> {
+async function recognizeLines(imageBuffer: Buffer, psm: PSM): Promise<DetectedLine[]> {
   const worker = await createWorker("eng");
   try {
     await worker.setParameters({ tessedit_pageseg_mode: psm });
     const { data } = await worker.recognize(imageBuffer);
-
-    const allLines = data.lines
-      .filter((line) => line.text.trim().length > 0)
-      .sort((a, b) => a.bbox.y0 - b.bbox.y0);
-
-    const tag = label ?? "?";
-    if (allLines.length === 0) {
-      console.log(`[OCR-DEBUG] ${tag} PSM=${psm}: 0 lines`);
-      return [];
-    }
-
-    const avgConf = allLines.reduce((s, l) => s + l.confidence, 0) / allLines.length;
-    const maxConf = Math.max(...allLines.map((l) => l.confidence));
-    const minConf = Math.min(...allLines.map((l) => l.confidence));
-    console.log(`[OCR-DEBUG] ${tag} PSM=${psm}: ${allLines.length} lines, conf avg=${avgConf.toFixed(1)} min=${minConf.toFixed(1)} max=${maxConf.toFixed(1)}`);
-
-    for (const line of allLines) {
-      console.log(`[OCR-DEBUG] ${tag} PSM=${psm}:  y=${line.bbox.y0}-${line.bbox.y1} conf=${line.confidence.toFixed(1)} text="${line.text.trim()}"`);
-    }
-
-    return allLines
-      .filter((line) => line.confidence >= LINE_CONFIDENCE_THRESHOLD && line.text.trim().length > 0)
+    return data.lines
+      .filter(
+        (line) =>
+          line.confidence >= LINE_CONFIDENCE_THRESHOLD && line.text.trim().length > 0
+      )
       .map((line) => ({
         text: line.text.trim(),
         y0: line.bbox.y0,
         y1: line.bbox.y1,
-        confidence: line.confidence,
       }))
       .sort((a, b) => a.y0 - b.y0);
   } finally {
@@ -279,116 +317,119 @@ async function recognizeLines(imageBuffer: Buffer, psm: PSM, label?: string): Pr
  * lines, using content and relative vertical position rather than fixed
  * coordinates:
  *  - the student ID is whichever line matches the ##-#### pattern
- *  - the name block is the text found below the ID line, preferring a line
- *    that looks like "SURNAME," (the card's actual format) plus the line(s)
- *    immediately after it; if no comma-terminated line is found, falls back
- *    to the first couple of non-numeric lines below the ID.
+ *  - candidate name lines are those below the ID line that aren't
+ *    digit-dominant (see isDigitDominant) — this keeps a line like
+ *    "Mark Darren 0." (one misread character) while still discarding
+ *    genuine noise like a duplicated ID fragment, and corrects likely
+ *    digit/letter misreads (0->O, 1->I, etc.) within the ones that are kept
+ *  - among those, prefer a line that looks like "SURNAME," (the card's
+ *    actual format) plus the line(s) immediately after it; if no
+ *    comma-terminated line is found, falls back to the first couple of
+ *    candidate lines below the ID
  */
 function locateFields(lines: DetectedLine[]): {
   studentId: string | null;
-  studentIdConfidence: number | null;
   fullNameText: string | null;
-  surnameConfidence: number | null;
-  givenNameConfidence: number | null;
+  hadDigitCorrection: boolean;
+  usedLowConfidenceCorrection: boolean;
 } {
   let studentId: string | null = null;
-  let studentIdConfidence: number | null = null;
   let idBottomY: number | null = null;
 
   for (const line of lines) {
     const candidate = extractStudentId(line.text);
     if (candidate) {
       studentId = candidate;
-      studentIdConfidence = line.confidence;
       idBottomY = line.y1;
       break;
     }
   }
 
   if (studentId === null) {
-    return { studentId: null, studentIdConfidence: null, fullNameText: null, surnameConfidence: null, givenNameConfidence: null };
+    return {
+      studentId: null,
+      fullNameText: null,
+      hadDigitCorrection: false,
+      usedLowConfidenceCorrection: false,
+    };
   }
 
-  const belowLines = lines.filter(
-    (line) => line.y0 > (idBottomY as number) && !/\d/.test(line.text)
-  );
+  const belowLines = lines
+    .filter((line) => line.y0 > (idBottomY as number) && !isDigitDominant(line.text))
+    .map((line) => {
+      const normalized = normalizeNameOcrConfusions(line.text);
+      return {
+        ...line,
+        text: normalized.text,
+        hadDigitCorrection: normalized.hadDigitCorrection,
+        usedLowConfidenceCorrection: normalized.usedLowConfidenceCorrection,
+      };
+    });
 
   const surnameIdx = belowLines.findIndex((line) => /,\s*$/.test(line.text));
   let fullNameText: string | null = null;
-  let surnameConfidence: number | null = null;
-  let givenNameConfidence: number | null = null;
+  let usedLines: typeof belowLines = [];
 
   if (surnameIdx !== -1) {
-    surnameConfidence = belowLines[surnameIdx].confidence;
-    const givenLine = belowLines[surnameIdx + 1];
-    givenNameConfidence = givenLine?.confidence ?? null;
-    fullNameText = belowLines
-      .slice(surnameIdx, surnameIdx + 2)
-      .map((line) => line.text)
-      .join(" ");
+    usedLines = belowLines.slice(surnameIdx, surnameIdx + 2);
   } else if (belowLines.length > 0) {
-    surnameConfidence = belowLines[0].confidence;
-    const givenLine = belowLines[1];
-    givenNameConfidence = givenLine?.confidence ?? null;
-    fullNameText = belowLines
-      .slice(0, 2)
-      .map((line) => line.text)
-      .join(" ");
+    usedLines = belowLines.slice(0, 2);
   }
 
-  return { studentId, studentIdConfidence, fullNameText, surnameConfidence, givenNameConfidence };
+  if (usedLines.length > 0) {
+    fullNameText = usedLines.map((line) => line.text).join(" ");
+  }
+
+  return {
+    studentId,
+    fullNameText,
+    hadDigitCorrection: usedLines.some((line) => line.hadDigitCorrection),
+    usedLowConfidenceCorrection: usedLines.some((line) => line.usedLowConfidenceCorrection),
+  };
 }
 
-async function extractFromVariant(imageBuffer: Buffer, psm: PSM, label?: string): Promise<OcrResult> {
-  const lines = await recognizeLines(imageBuffer, psm, label);
-  const { studentId, studentIdConfidence, fullNameText, surnameConfidence, givenNameConfidence } = locateFields(lines);
+async function extractFromVariant(
+  imageBuffer: Buffer,
+  psm: PSM
+): Promise<{ result: OcrResult; usedLowConfidenceCorrection: boolean }> {
+  const lines = await recognizeLines(imageBuffer, psm);
+  const { studentId, fullNameText, hadDigitCorrection, usedLowConfidenceCorrection } =
+    locateFields(lines);
   const parsed = parseFullName(fullNameText ?? "");
 
-  let lastName = parsed.lastName;
-  let firstName = parsed.firstName;
-  let middleInitial = parsed.middleInitial;
-
-  if (surnameConfidence !== null && surnameConfidence < FIELD_CONFIDENCE_THRESHOLD) {
-    lastName = null;
-  }
-  if (givenNameConfidence !== null && givenNameConfidence < FIELD_CONFIDENCE_THRESHOLD) {
-    firstName = null;
-    middleInitial = null;
-  }
-
-  const resolvedStudentId =
-    studentIdConfidence !== null && studentIdConfidence < FIELD_CONFIDENCE_THRESHOLD ? null : studentId;
-
-  const result = {
-    studentId: resolvedStudentId,
-    fullName: fullNameText,
-    lastName,
-    firstName,
-    middleInitial,
-    extracted: resolvedStudentId !== null,
+  return {
+    result: {
+      studentId,
+      fullName: fullNameText,
+      lastName: parsed.lastName,
+      firstName: parsed.firstName,
+      middleInitial: parsed.middleInitial,
+      extracted: studentId !== null,
+      digitCorrectedInName: hadDigitCorrection,
+    },
+    usedLowConfidenceCorrection,
   };
-
-  console.log(
-    `[OCR-DEBUG] ${label} PSM=${psm}: extracted=${result.extracted} ` +
-    `studentId=${result.studentId} (conf=${studentIdConfidence ?? "?"}) ` +
-    `lastName=${result.lastName} (conf=${surnameConfidence ?? "?"}) ` +
-    `firstName=${result.firstName} (conf=${givenNameConfidence ?? "?"}) ` +
-    `fullName="${result.fullName}"`
-  );
-
-  return result;
 }
 
 /**
  * A result only short-circuits the retry loop if the name looks well-formed
- * (i.e. we actually found a "SURNAME," line, not just leftover fragments).
- * Otherwise a pass can find the student ID correctly but silently produce a
- * garbage name — e.g. SPARSE_TEXT dropping a surname line that overlaps a
- * handwritten signature while still reading the ID fine — and we'd stop
- * before trying the mode that would have recovered the name too.
+ * (i.e. we actually found a "SURNAME," line, not just leftover fragments)
+ * AND didn't need a low-confidence digit/letter guess (2->Z, 3->B, etc.) to
+ * get there. Otherwise a pass can find the student ID correctly but
+ * silently produce a garbage — or shakily-guessed — name, e.g. SPARSE_TEXT
+ * dropping a surname line that overlaps a handwritten signature while
+ * still reading the ID fine, or a low-confidence digit substitution that
+ * happens to be wrong; we'd rather try the other preprocessing
+ * variant/PSM mode first and see if it reads the character cleanly without
+ * needing a guess at all.
  */
-function isConfidentMatch(result: OcrResult): boolean {
-  return result.studentId !== null && result.lastName !== null && !!result.fullName?.includes(",");
+function isConfidentMatch(result: OcrResult, usedLowConfidenceCorrection: boolean): boolean {
+  return (
+    result.studentId !== null &&
+    result.lastName !== null &&
+    !!result.fullName?.includes(",") &&
+    !usedLowConfidenceCorrection
+  );
 }
 
 function isBetter(a: OcrResult, b: OcrResult | null): boolean {
@@ -399,17 +440,21 @@ function isBetter(a: OcrResult, b: OcrResult | null): boolean {
   return (a.fullName?.length ?? 0) > (b.fullName?.length ?? 0);
 }
 
-export async function extractFields(imageBuffer: Buffer, filename?: string): Promise<OcrResult> {
-  const labels = ["A", "B"];
-  const variants = await prepareVariants(imageBuffer, filename);
+export async function extractFields(
+  imageBuffer: Buffer,
+  // Not used in extraction logic today — accepted so callers can pass the
+  // upload's original filename through for logging/debugging without a
+  // signature change later, and to match the (buffer, originalname) call
+  // shape used at the call site.
+  _originalname?: string
+): Promise<OcrResult> {
+  const variants = await prepareVariants(imageBuffer);
 
   let best: OcrResult | null = null;
-  for (let vi = 0; vi < variants.length; vi++) {
+  for (const variant of variants) {
     for (const psm of PSM_ATTEMPTS) {
-      const result = await extractFromVariant(variants[vi], psm, labels[vi]);
-      if (isConfidentMatch(result)) {
-        const cleanLabel = filename ? filename.split(/[/\\]/).pop() : "in-memory";
-        console.log(`[OCR-DEBUG] ${cleanLabel}: CONFIRMED on variant ${labels[vi]} PSM=${psm} → returning early`);
+      const { result, usedLowConfidenceCorrection } = await extractFromVariant(variant, psm);
+      if (isConfidentMatch(result, usedLowConfidenceCorrection)) {
         return result;
       }
       if (isBetter(result, best)) {
@@ -417,13 +462,6 @@ export async function extractFields(imageBuffer: Buffer, filename?: string): Pro
       }
     }
   }
-
-  const excerpt = (s: string | null) => (s ? `"${s.substring(0, 40)}"` : "null");
-  const cleanLabel = filename ? filename.split(/[/\\]/).pop() : "in-memory";
-  console.log(
-    `[OCR-DEBUG] ${cleanLabel}: no confident match, best=` +
-    `studentId=${best?.studentId ?? "null"} lastName=${best?.lastName ?? "null"} fullName=${excerpt(best?.fullName ?? null)}`
-  );
 
   return (
     best ?? {
@@ -433,6 +471,7 @@ export async function extractFields(imageBuffer: Buffer, filename?: string): Pro
       firstName: null,
       middleInitial: null,
       extracted: false,
+      digitCorrectedInName: false,
     }
   );
 }

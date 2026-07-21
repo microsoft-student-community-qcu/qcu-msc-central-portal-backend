@@ -9,6 +9,7 @@ interface OcrSession {
   manualRequired: boolean;
   attemptsRemaining: number;
   imagePath: string | null;
+  digitCorrectedInName: boolean;
   createdAt: number;
 }
 
@@ -44,6 +45,10 @@ export const ocrStore = {
     return sessions.get(sessionId);
   },
 
+  deleteSession(sessionId: string): void {
+    sessions.delete(sessionId);
+  },
+
   createSession(data: {
     studentId: string | null;
     lastName: string | null;
@@ -52,6 +57,7 @@ export const ocrStore = {
     manualRequired: boolean;
     attemptsRemaining: number;
     imagePath: string | null;
+    digitCorrectedInName: boolean;
   }): OcrSession {
     const session: OcrSession = {
       ocrSessionId: uuidv4(),

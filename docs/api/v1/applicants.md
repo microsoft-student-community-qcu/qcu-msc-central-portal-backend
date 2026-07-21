@@ -1,7 +1,7 @@
 # Applicant Tracking API
 
 ## Overview
-The Applicant Tracking API manages the recruitment and application pipeline for prospective MSC members. It tracks applications from submission through admin review and final decision (PENDING_REVIEW → APPROVED / REJECTED / CANCELLED).
+The Applicant Tracking API manages the recruitment and application pipeline for prospective MSC members. It tracks applications from submission through admin review and final decision (PENDING_REVIEW → APPROVED / REJECTED / CANCELLED / RESUBMIT).
 
 The submission endpoint accepts **multipart/form-data** to support file uploads (Certificate of Registration, Curriculum Vitae).
 
@@ -189,8 +189,9 @@ curl -X POST http://localhost:5000/api/v1/applicants \
     "portfolio": null,
     "githubOrProjectLinks": null,
     "previousWorksAchievements": null,
-    "status": "APPLIED",
+    "status": "PENDING_REVIEW",
     "manual_application": false,
+    "adminMessage": null,
     "createdAt": "2026-06-15T10:30:00Z",
     "updatedAt": "2026-06-15T10:30:00Z"
   },
@@ -275,8 +276,9 @@ Retrieves a specific applicant's details by their ID.
     "portfolio": string | null,
     "githubOrProjectLinks": string | null,
     "previousWorksAchievements": string | null,
-    "status": "APPLIED" | "INTERVIEWING" | "ACCEPTED" | "REJECTED",
+    "status": "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "CANCELLED" | "RESUBMIT",
     "manual_application": boolean,
+    "adminMessage": string | null,
     "createdAt": string (ISO 8601),
     "updatedAt": string (ISO 8601)
   },
@@ -318,7 +320,7 @@ curl -X GET http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-4466
     "portfolio": null,
     "githubOrProjectLinks": null,
     "previousWorksAchievements": null,
-    "status": "APPLIED",
+    "status": "PENDING_REVIEW",
     "manual_application": false,
     "createdAt": "2026-06-15T10:30:00Z",
     "updatedAt": "2026-06-15T10:30:00Z"
@@ -340,7 +342,7 @@ Retrieves all applicants with optional filtering by status, campus, or gender.
 **Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Query Parameters:**
-- `status` (optional): Filter by status — `APPROVED`, `PENDING_REVIEW`, `REJECTED`, `CANCELLED`
+- `status` (optional): Filter by status — `APPROVED`, `PENDING_REVIEW`, `REJECTED`, `CANCELLED`, `RESUBMIT`
 - `campus` (optional): Filter by campus — `SAN_BARTOLOME_MAIN`, `SAN_FRANCISCO`, `BATASAN`
 - `gender` (optional): Filter by gender — `MALE`, `FEMALE`, `LGBTQIA`, `PREFER_NOT_TO_SAY`
 - `manual_application` (optional): Filter by manual application flag — `true` or `false`
@@ -369,6 +371,7 @@ Retrieves all applicants with optional filtering by status, campus, or gender.
         "membershipRole": string,
         "status": string,
         "manual_application": boolean,
+        "adminMessage": string | null,
         "createdAt": string
       }
     ]
@@ -379,7 +382,7 @@ Retrieves all applicants with optional filtering by status, campus, or gender.
 
 **Example Request:**
 ```bash
-curl -X GET "http://localhost:5000/api/v1/applicants?status=APPLIED&campus=SAN_BARTOLOME_MAIN&limit=20" \
+curl -X GET "http://localhost:5000/api/v1/applicants?status=PENDING_REVIEW&campus=SAN_BARTOLOME_MAIN&limit=20" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
@@ -396,7 +399,8 @@ Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
 **Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Request Parameters:**
-- `status` (enum, required): New status — `APPROVED`, `PENDING_REVIEW`, `REJECTED`, or `CANCELLED`
+- `status` (enum, required): New status — `APPROVED`, `PENDING_REVIEW`, `REJECTED`, `CANCELLED`, or `RESUBMIT`
+- `message` (string, optional): Admin remark to show the applicant (typically used when setting `RESUBMIT`)
 
 **Response Format:**
 ```json
@@ -409,21 +413,23 @@ Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
     "middleInitial": string | null,
     "email": string,
     "studentId": string | null,
-    "status": "APPROVED" | "PENDING_REVIEW" | "REJECTED" | "CANCELLED",
+    "status": "APPROVED" | "PENDING_REVIEW" | "REJECTED" | "CANCELLED" | "RESUBMIT",
     "manual_application": boolean,
+    "adminMessage": string | null,
     "updatedAt": string (ISO 8601)
   },
   "message": string
 }
 ```
 
-**Example Request:**
+**Example Request (set status to RESUBMIT with message):**
 ```bash
 curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-446655440001/status \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -d '{
-    "status": "PENDING_REVIEW"
+    "status": "RESUBMIT",
+    "message": "Please upload a clearer copy of your Certificate of Registration."
   }'
 ```
 
@@ -438,8 +444,9 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
     "middleInitial": "B",
     "email": "jane@example.com",
     "studentId": "23-5678",
-    "status": "PENDING_REVIEW",
+    "status": "RESUBMIT",
     "manual_application": false,
+    "adminMessage": "Please upload a clearer copy of your Certificate of Registration.",
     "updatedAt": "2026-06-15T11:00:00Z"
   },
   "message": "Applicant status updated successfully"
@@ -448,7 +455,70 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
 
 ---
 
-### 6. Manual ID Override
+### 6. Cancel Application (Applicant)
+
+**Description:**  
+Allows an authenticated applicant to cancel their own application. The applicant must have a linked User account (completed setup).
+
+**Method:** `POST`  
+**Path:** `/api/v1/applicants/:applicantId/cancel`
+
+**Authentication:** Required (Bearer token, applicant must own the application)
+
+**Response Format:**
+```json
+{
+  "success": boolean,
+  "data": {
+    "id": string,
+    "status": "CANCELLED",
+    "updatedAt": string (ISO 8601)
+  },
+  "message": "Application cancelled successfully"
+}
+```
+
+**Status Codes:**
+- `200`: Application cancelled
+- `400`: Application is already approved (cannot cancel)
+- `403`: Not the owner of this application
+- `404`: Applicant not found
+
+---
+
+### 7. Resubmit Application (Applicant)
+
+**Description:**  
+Allows an applicant to resubmit their application after being asked to by an admin (status must be `RESUBMIT`). Sets status back to `PENDING_REVIEW` and clears the admin message.
+
+**Method:** `POST`  
+**Path:** `/api/v1/applicants/:applicantId/resubmit`
+
+**Authentication:** Required (Bearer token, applicant must own the application)
+
+**Response Format:**
+```json
+{
+  "success": boolean,
+  "data": {
+    "id": string,
+    "status": "PENDING_REVIEW",
+    "adminMessage": null,
+    "updatedAt": string (ISO 8601)
+  },
+  "message": "Application resubmitted successfully"
+}
+```
+
+**Status Codes:**
+- `200`: Application resubmitted
+- `400`: Application is not in `RESUBMIT` status
+- `403`: Not the owner of this application
+- `404`: Applicant not found
+
+---
+
+### 8. Manual ID Override
 
 **Description:**  
 Allows ADMIN_HR staff to review and approve or reject applicants who were flagged for manual ID verification (`manual_application: true`). Approval requires a student ID and clears the quarantine state; rejection preserves the audit flag and sets the applicant to `REJECTED`.
@@ -473,8 +543,9 @@ Allows ADMIN_HR staff to review and approve or reject applicants who were flagge
     "middleInitial": string | null,
     "email": string,
     "studentId": string | null,
-    "status": "APPROVED" | "PENDING_REVIEW" | "REJECTED" | "CANCELLED",
+    "status": "APPROVED" | "PENDING_REVIEW" | "REJECTED" | "CANCELLED" | "RESUBMIT",
     "manual_application": boolean,
+    "adminMessage": string | null,
     "updatedAt": string (ISO 8601)
   },
   "message": string

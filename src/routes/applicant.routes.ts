@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import multer, { MulterError } from "multer";
 import rateLimit from "express-rate-limit";
-import { requireAdminHR } from "./authMiddleware";
+import { requireAdminHR, requireAuth } from "./authMiddleware";
 import {
   createApplicant,
   getApplicant,
@@ -9,6 +9,11 @@ import {
   updateApplicantStatus,
   updateApplicant,
   approveManualId,
+  cancelApplication,
+  resubmitApplication,
+  getApplicantMe,
+  serveDocument,
+  serveImage,
 } from "../controllers/applicant.controller";
 
 const upload = multer({
@@ -71,6 +76,16 @@ router.post(
   createApplicant
 );
 
+// ── Applicant Self-Service Routes (Authenticated) ───────────────────────
+
+/**
+ * GET /api/v1/applicants/me
+ *
+ * Allows an authenticated applicant to fetch their own live applicant record.
+ * Must be defined BEFORE /:applicantId to prevent shadowing and 403 blocks.
+ */
+router.get("/me", requireAuth, getApplicantMe);
+
 // ── Admin Routes (ADMIN_HR only) ─────────────────────────────────────────
 
 /**
@@ -107,5 +122,34 @@ router.patch("/:applicantId", requireAdminHR, updateApplicant);
  * Manual ID verification override for quarantined applicants. ADMIN_HR only.
  */
 router.patch("/:applicantId/approve-id", requireAdminHR, approveManualId);
+
+// ── Applicant Routes (authenticated, ownership-checked) ───────────────────
+
+/**
+ * POST /api/v1/applicants/:applicantId/cancel
+ *
+ * Allows an authenticated applicant to cancel their own application.
+ */
+router.post("/:applicantId/cancel", requireAuth, cancelApplication);
+
+/**
+ * POST /api/v1/applicants/:applicantId/resubmit
+ *
+ * Allows an applicant to resubmit after being asked to RESUBMIT.
+ */
+router.post(
+  "/:applicantId/resubmit",
+  requireAuth,
+  upload.fields([
+    { name: "certificateOfRegistration", maxCount: 1 },
+    { name: "curriculumVitae", maxCount: 1 },
+  ]),
+  handleMulterError,
+  resubmitApplication
+);
+
+// ── Protected File Proxy Routes ──────────────────────────────────────────
+router.get("/documents/:filename", requireAuth, serveDocument);
+router.get("/images/:filename", requireAuth, serveImage);
 
 export default router;
