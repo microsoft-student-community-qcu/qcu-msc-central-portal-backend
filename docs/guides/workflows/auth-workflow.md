@@ -330,22 +330,67 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
 
 ## Login (Email + Password)
 
+The generic `/api/auth/sign-in/email` endpoint is **disabled**. Each frontend has a dedicated sign-in endpoint that enforces role boundaries:
+
+| Portal | Endpoint | Allowed Roles |
+|--------|----------|---------------|
+| **Student Portal** | `POST /api/v1/auth/student/sign-in` | `APPLICANT`, `MEMBER` |
+| **Admin Portal** | `POST /api/v1/auth/admin/sign-in` | `ADMIN_HR`, `ADMIN_LOGISTICS` |
+
+### Student Portal Login Flow
+
 ```
-User visits login page
+User visits Student Portal login page
 	↓
 User enters email and password
 	↓
-Frontend sends POST /api/auth/sign-in/email
+Frontend sends POST /api/v1/auth/student/sign-in
 	↓
-Better Auth validates credentials
+Backend looks up user by email
 	↓
-Invalid? → Error response
+User is ADMIN_HR or ADMIN_LOGISTICS?
+	├── Yes → Return 403: "Admin accounts cannot sign in through
+	│            the Student Portal. Please use the Admin Portal."
+	│            → User is blocked (no session created)
+	└── No → Forward to Better Auth
+	             ↓
+          Better Auth validates credentials
+	             ↓
+          Invalid? → Error response
+	             ↓
+          Create Session record
+	             ↓
+          Return session + user data
+	             ↓
+          User authenticated ✓
+```
+
+### Admin Portal Login Flow
+
+```
+User visits Admin Portal login page
 	↓
-Create Session record
+User enters email and password
 	↓
-Return session + user data
+Frontend sends POST /api/v1/auth/admin/sign-in
 	↓
-User authenticated ✓
+Backend looks up user by email
+	↓
+User is APPLICANT, MEMBER, or does not exist?
+	├── Yes → Return 403: "Access denied. Only admin accounts can
+	│            sign in through the Admin Portal."
+	│            → User is blocked (no session created)
+	└── No (role is ADMIN_HR or ADMIN_LOGISTICS) → Forward to Better Auth
+	             ↓
+          Better Auth validates credentials
+	             ↓
+          Invalid? → Error response
+	             ↓
+          Create Session record
+	             ↓
+          Return session + user data
+	             ↓
+          User authenticated ✓
 ```
 
 ---
@@ -404,7 +449,9 @@ Route uses require* guard to block unauthorized requests
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/auth/sign-up/email` | Public | Create account via applicant activation link (not public registration) |
-| POST | `/api/auth/sign-in/email` | Public | Sign in with email + password |
+| POST | `/api/auth/sign-in/email` | Public | **Disabled** — redirects to use portal-specific endpoints |
+| POST | `/api/v1/auth/student/sign-in` | Public | Sign in via Student Portal (APPLICANT / MEMBER only) |
+| POST | `/api/v1/auth/admin/sign-in` | Public | Sign in via Admin Portal (ADMIN_HR / ADMIN_LOGISTICS only) |
 | POST | `/api/auth/sign-in/google` | Public | Sign in with Google (OAuth) |
 | POST | `/api/auth/sign-in/github` | Public | Sign in with GitHub (OAuth) |
 | GET | `/api/auth/get-session` | Required | Get current session |
