@@ -21,7 +21,7 @@ const DOCUMENTS_CONTAINER = "documents";
 export async function saveImage(buffer: Buffer, filename: string, mimetype?: string): Promise<string> {
   const client = getBlobServiceClient();
   const containerClient = client.getContainerClient(OCR_CONTAINER);
-  await containerClient.createIfNotExists({ access: "container" });
+  await containerClient.createIfNotExists();
   const blockBlobClient = containerClient.getBlockBlobClient(filename);
   await blockBlobClient.upload(buffer, buffer.length, {
     blobHTTPHeaders: mimetype ? { blobContentType: mimetype } : undefined,
@@ -38,7 +38,7 @@ export function getImagePath(filename: string): string {
 export async function saveDocument(buffer: Buffer, filename: string, mimetype?: string): Promise<string> {
   const client = getBlobServiceClient();
   const containerClient = client.getContainerClient(DOCUMENTS_CONTAINER);
-  await containerClient.createIfNotExists({ access: "container" });
+  await containerClient.createIfNotExists();
   const blockBlobClient = containerClient.getBlockBlobClient(filename);
   await blockBlobClient.upload(buffer, buffer.length, {
     blobHTTPHeaders: mimetype ? { blobContentType: mimetype } : undefined,
