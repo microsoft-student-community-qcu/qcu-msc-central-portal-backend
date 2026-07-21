@@ -72,6 +72,7 @@ async function handleRequest(request: HttpRequest, context: InvocationContext): 
 
 // Register the HTTP trigger under "express-api" routing all sub-paths
 azureApp.http("express-api", {
+  authLevel: "anonymous",
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
   route: "{*segments}",
   handler: handleRequest,
