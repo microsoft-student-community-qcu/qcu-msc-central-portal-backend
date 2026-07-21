@@ -20,11 +20,8 @@ async function handleRequest(request: HttpRequest, context: InvocationContext): 
         headers[key.toLowerCase()] = value;
       });
 
-      const reqStream: any = new Readable({
-        read() {}
-      });
-      reqStream.push(bodyBuffer);
-      reqStream.push(null);
+      // Create stream from bodyBuffer safely
+      const reqStream: any = Readable.from(bodyBuffer.length > 0 ? [bodyBuffer] : []);
 
       reqStream.method = request.method;
       reqStream.url = url.pathname + url.search;
@@ -34,7 +31,6 @@ async function handleRequest(request: HttpRequest, context: InvocationContext): 
 
       const resHeaders: Record<string, string> = {};
       const chunks: Buffer[] = [];
-      let statusCode = 200;
 
       const resStream: any = new Writable({
         write(chunk, encoding, callback) {
@@ -43,13 +39,14 @@ async function handleRequest(request: HttpRequest, context: InvocationContext): 
         }
       });
 
+      resStream.statusCode = 200;
       resStream.setHeader = (name: string, value: any) => {
         resHeaders[name.toLowerCase()] = String(value);
       };
       resStream.getHeader = (name: string) => resHeaders[name.toLowerCase()];
       resStream.removeHeader = (name: string) => delete resHeaders[name.toLowerCase()];
       resStream.writeHead = (code: number, headersObj?: any) => {
-        statusCode = code;
+        resStream.statusCode = code;
         if (headersObj) {
           Object.entries(headersObj).forEach(([k, v]) => {
             resHeaders[k.toLowerCase()] = String(v);
@@ -60,7 +57,7 @@ async function handleRequest(request: HttpRequest, context: InvocationContext): 
       resStream.on("finish", () => {
         const bodyText = Buffer.concat(chunks).toString("utf-8");
         resolve({
-          status: statusCode,
+          status: resStream.statusCode || 200,
           headers: resHeaders,
           body: bodyText
         });
