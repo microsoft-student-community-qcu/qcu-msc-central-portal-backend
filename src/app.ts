@@ -20,7 +20,24 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: [env.FRONTEND_URL, env.ADMIN_FRONTEND_URL],
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const allowed = [
+      env.FRONTEND_URL,
+      env.ADMIN_FRONTEND_URL,
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "http://localhost:8081",
+    ];
+    if (
+      allowed.includes(origin) ||
+      /\.z23\.web\.core\.windows\.net$/.test(origin) ||
+      /\.azurestaticapps\.net$/.test(origin)
+    ) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
   credentials: true,
 }));
 app.use(express.json());
