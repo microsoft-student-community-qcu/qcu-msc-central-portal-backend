@@ -3,7 +3,7 @@ local.settings.json
 .git*
 .vscode
 .idea
-src/
+/src/
 __tests__/
 tsconfig.json
 vitest.config.ts
