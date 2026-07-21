@@ -16,7 +16,14 @@ async function handleRequest(request: HttpRequest, context: InvocationContext): 
 
   // Build the target URL for local proxy
   const url = new URL(request.url);
-  const localUrl = `http://127.0.0.1:${port}${url.pathname}${url.search}`;
+  let pathname = url.pathname;
+
+  // Handle both Azure Functions default /api prefix and direct paths
+  if (!pathname.startsWith('/api') && !pathname.startsWith('/health')) {
+    pathname = `/api${pathname}`;
+  }
+
+  const localUrl = `http://127.0.0.1:${port}${pathname}${url.search}`;
   
   context.log(`Proxying request: ${request.method} ${url.pathname} -> ${localUrl}`);
 
