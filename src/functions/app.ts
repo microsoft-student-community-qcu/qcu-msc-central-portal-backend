@@ -16,14 +16,7 @@ async function handleRequest(request: HttpRequest, context: InvocationContext): 
 
   // Build the target URL for local proxy
   const url = new URL(request.url);
-  
-  // Normalize pathname to map Azure Functions /api prefix to Express routes
-  let pathname = url.pathname;
-  if (pathname.startsWith('/api') && !pathname.startsWith('/api/v1')) {
-    pathname = pathname.substring(4) || '/';
-  }
-  
-  const localUrl = `http://127.0.0.1:${port}${pathname}${url.search}`;
+  const localUrl = `http://127.0.0.1:${port}${url.pathname}${url.search}`;
   
   context.log(`Proxying request: ${request.method} ${url.pathname} -> ${localUrl}`);
 
