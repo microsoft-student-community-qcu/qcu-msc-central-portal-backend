@@ -6,11 +6,15 @@ import { env } from "./config/env";
 import { auth } from "./config/auth";
 import { prisma } from "./config/database";
 import { authMiddleware } from "./routes/authMiddleware";
+import * as Sentry from "@sentry/node";
+import { initSentry } from "./config/sentry";
 import ocrRoutes from "./routes/ocr.routes";
 import applicantRoutes from "./routes/applicant.routes";
 import { resendSetupLink } from "./controllers/applicant.controller";
 import eventRoutes from "./routes/event.routes";
 import userRoutes from "./routes/user.routes";
+
+initSentry();
 
 const app = express();
 
@@ -425,6 +429,11 @@ app.get("/health", async (_req, res) => {
     res.status(500).json({ status: "unhealthy", database: "disconnected", error: error.message });
   }
 });
+
+/**
+ * Sentry error handler — captures unhandled errors and sends reports
+ */
+Sentry.setupExpressErrorHandler(app);
 
 /**
  * 404 handler for undefined routes
