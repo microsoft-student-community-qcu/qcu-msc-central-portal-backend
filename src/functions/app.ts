@@ -30,7 +30,8 @@ async function handleRequest(request: HttpRequest, context: InvocationContext): 
   // Copy headers
   const headers: Record<string, string> = {};
   request.headers.forEach((value, key) => {
-    if (key.toLowerCase() !== 'host') {
+    const lowerKey = key.toLowerCase();
+    if (lowerKey !== 'host' && lowerKey !== 'content-length' && lowerKey !== 'connection') {
       headers[key] = value;
     }
   });
