@@ -2,10 +2,10 @@ import { app as azureApp, HttpRequest, HttpResponseInit, InvocationContext } fro
 import expressApp from "../app";
 
 let port: number = 0;
-const server = expressApp.listen(0, () => {
+const server = expressApp.listen(0, "127.0.0.1", () => {
   const address = server.address();
   port = typeof address === 'string' ? 0 : address?.port || 0;
-  console.log(`Express app listening internally on port ${port}`);
+  console.log(`Express app listening internally on 127.0.0.1:${port}`);
 });
 
 async function handleRequest(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
