@@ -1,0 +1,11 @@
+*.ts
+local.settings.json
+.git*
+.vscode
+.idea
+src/
+__tests__/
+tsconfig.json
+vitest.config.ts
+*.log
+deploy.zip
