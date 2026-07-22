@@ -32,7 +32,8 @@ app.use(cors({
     if (
       allowed.includes(origin) ||
       /\.z23\.web\.core\.windows\.net$/.test(origin) ||
-      /\.azurestaticapps\.net$/.test(origin)
+      /\.azurestaticapps\.net$/.test(origin) ||
+      /^https:\/\/([a-z0-9-]+\.)?msc-qcu\.tech$/.test(origin)
     ) {
       return callback(null, true);
     }
