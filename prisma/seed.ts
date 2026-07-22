@@ -12,9 +12,24 @@ async function main() {
   const logisticsAdminEmail = process.env.SEED_LOGISTICS_ADMIN_EMAIL;
   const logisticsAdminPassword = process.env.SEED_LOGISTICS_ADMIN_PASSWORD;
 
+  const applicantEmail = process.env.SEED_APPLICANT_EMAIL;
+  const applicantPassword = process.env.SEED_APPLICANT_PASSWORD;
+
+  const memberEmail = process.env.SEED_MEMBER_EMAIL;
+  const memberPassword = process.env.SEED_MEMBER_PASSWORD;
+
   // Enforce secrets strictly on production or main branch to prevent insecure defaults
   if (isProd) {
-    if (!hrAdminEmail || !hrAdminPassword || !logisticsAdminEmail || !logisticsAdminPassword) {
+    if (
+      !hrAdminEmail ||
+      !hrAdminPassword ||
+      !logisticsAdminEmail ||
+      !logisticsAdminPassword ||
+      !applicantEmail ||
+      !applicantPassword ||
+      !memberEmail ||
+      !memberPassword
+    ) {
       throw new Error("Seeding on production or main branch requires all SEED_* environment variables to be defined.");
     }
   }
@@ -29,6 +44,16 @@ async function main() {
   const finalLogisticsPassword = logisticsAdminPassword || "AdminPassLogistics123!";
   const finalLogisticsName = "System Logistics Admin";
   const finalLogisticsStudentId = "00-0002";
+
+  const finalApplicantEmail = applicantEmail || "applicant_sample@qcu.edu.ph";
+  const finalApplicantPassword = applicantPassword || "ApplicantPass123!";
+  const applicantName = "Sample Applicant";
+  const applicantStudentId = "00-0003";
+
+  const finalMemberEmail = memberEmail || "member_sample@qcu.edu.ph";
+  const finalMemberPassword = memberPassword || "MemberPass123!";
+  const memberName = "Sample Member";
+  const memberStudentId = "00-0004";
 
   console.log("Seeding started...");
 
@@ -84,6 +109,60 @@ async function main() {
     console.log("Logistics Admin created and role updated.");
   } else {
     console.log(`Logistics Admin ${finalLogisticsEmail} already exists.`);
+  }
+
+  // 3. Sample Applicant
+  const existingApplicant = await prisma.user.findUnique({
+    where: { email: finalApplicantEmail },
+  });
+
+  if (!existingApplicant) {
+    console.log(`Creating Sample Applicant: ${finalApplicantEmail}`);
+    await auth.api.signUpEmail({
+      body: {
+        email: finalApplicantEmail,
+        password: finalApplicantPassword,
+        name: applicantName,
+        firstName: "Sample",
+        lastName: "Applicant",
+        studentId: applicantStudentId,
+      },
+    });
+
+    await prisma.user.update({
+      where: { email: finalApplicantEmail },
+      data: { role: "APPLICANT" },
+    });
+    console.log("Sample Applicant created and role updated.");
+  } else {
+    console.log(`Sample Applicant ${finalApplicantEmail} already exists.`);
+  }
+
+  // 4. Sample Member
+  const existingMember = await prisma.user.findUnique({
+    where: { email: finalMemberEmail },
+  });
+
+  if (!existingMember) {
+    console.log(`Creating Sample Member: ${finalMemberEmail}`);
+    await auth.api.signUpEmail({
+      body: {
+        email: finalMemberEmail,
+        password: finalMemberPassword,
+        name: memberName,
+        firstName: "Sample",
+        lastName: "Member",
+        studentId: memberStudentId,
+      },
+    });
+
+    await prisma.user.update({
+      where: { email: finalMemberEmail },
+      data: { role: "MEMBER" },
+    });
+    console.log("Sample Member created and role updated.");
+  } else {
+    console.log(`Sample Member ${finalMemberEmail} already exists.`);
   }
 
   console.log("Seeding complete.");
