@@ -1,81 +1,62 @@
 import { app as azureApp, HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
-import { Readable, Writable } from "stream";
+import serverless from "serverless-http";
 import expressApp from "../app";
 
+// Bridge Express to Azure Functions v4 using serverless-http.
+//
+// Why not a hand-rolled Readable/Writable adapter: Express's `init` middleware
+// reassigns req.__proto__ = app.request and res.__proto__ = app.response, whose
+// prototype chains are Node's http.IncomingMessage / http.ServerResponse. Those
+// built-in methods require real socket internals — e.g. req.protocol reads
+// req.socket.encrypted, res.end() pushes into res.outputData. Fake stream stubs
+// don't have them, so any request throws asynchronously (uncaughtException) and
+// the worker returns an empty-body 500.
+//
+// serverless-http's ServerlessRequest extends http.IncomingMessage (with a socket
+// stub exposing `encrypted`) and ServerlessResponse extends http.ServerResponse,
+// so Express, cors, and the Sentry error handler all run against real objects.
+const serverlessHandler = serverless(expressApp, {
+  provider: "azure",
+  // Content types returned as base64 by the azure provider (decoded to Buffer below).
+  binary: ["image/*", "application/pdf", "application/octet-stream", "application/zip"],
+});
+
 async function handleRequest(request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
-  return new Promise<HttpResponseInit>(async (resolve) => {
-    try {
-      const url = new URL(request.url);
-      
-      // Parse body if present
-      let bodyBuffer: Buffer = Buffer.alloc(0);
-      if (request.body) {
-        const arrayBuffer = await request.arrayBuffer();
-        bodyBuffer = Buffer.from(arrayBuffer);
-      }
+  const url = new URL(request.url);
 
-      // Convert request headers
-      const headers: Record<string, string | string[]> = {};
-      request.headers.forEach((value, key) => {
-        headers[key.toLowerCase()] = value;
-      });
-
-      // Create stream from bodyBuffer safely
-      const reqStream: any = Readable.from(bodyBuffer.length > 0 ? [bodyBuffer] : []);
-
-      reqStream.method = request.method;
-      reqStream.url = url.pathname + url.search;
-      reqStream.originalUrl = url.pathname + url.search;
-      reqStream.headers = headers;
-      reqStream.rawHeaders = Object.entries(headers).flatMap(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v]);
-
-      const resHeaders: Record<string, string> = {};
-      const chunks: Buffer[] = [];
-
-      const resStream: any = new Writable({
-        write(chunk, encoding, callback) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding));
-          callback();
-        }
-      });
-
-      resStream.statusCode = 200;
-      resStream.setHeader = (name: string, value: any) => {
-        resHeaders[name.toLowerCase()] = String(value);
-      };
-      resStream.getHeader = (name: string) => resHeaders[name.toLowerCase()];
-      resStream.removeHeader = (name: string) => delete resHeaders[name.toLowerCase()];
-      resStream.writeHead = (code: number, headersObj?: any) => {
-        resStream.statusCode = code;
-        if (headersObj) {
-          Object.entries(headersObj).forEach(([k, v]) => {
-            resHeaders[k.toLowerCase()] = String(v);
-          });
-        }
-      };
-
-      resStream.on("finish", () => {
-        const bodyText = Buffer.concat(chunks).toString("utf-8");
-        resolve({
-          status: resStream.statusCode || 200,
-          headers: resHeaders,
-          body: bodyText
-        });
-      });
-
-      expressApp(reqStream, resStream);
-    } catch (err: any) {
-      context.error("Error in Azure Function Express bridge:", err);
-      resolve({
-        status: 500,
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ error: "Internal Server Error", message: err.message })
-      });
-    }
+  const headers: Record<string, string> = {};
+  request.headers.forEach((value, key) => {
+    headers[key.toLowerCase()] = value;
   });
+
+  const query: Record<string, string> = {};
+  url.searchParams.forEach((value, key) => {
+    query[key] = value;
+  });
+
+  const rawBody = request.body ? Buffer.from(await request.arrayBuffer()) : Buffer.alloc(0);
+
+  // serverless-http's azure provider expects the v3-style (context, req) shape.
+  // It reads: method, url (pathname), headers, query, rawBody. Query is merged
+  // back onto the URL internally, so pass pathname only here to avoid duplication.
+  const azureReq = {
+    method: request.method,
+    url: url.pathname,
+    headers,
+    query,
+    rawBody,
+  };
+
+  const result: any = await serverlessHandler(context as any, azureReq as any);
+
+  return {
+    status: result.status,
+    headers: result.headers,
+    body: result.isBase64Encoded ? Buffer.from(result.body, "base64") : result.body,
+  };
 }
 
-// Register the HTTP trigger under "express-api" routing all sub-paths
+// Register the HTTP trigger under "express-api" routing all sub-paths.
 azureApp.http("express-api", {
   authLevel: "anonymous",
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
