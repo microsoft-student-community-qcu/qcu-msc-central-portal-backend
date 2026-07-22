@@ -35,22 +35,22 @@ async function main() {
   }
 
   // Fallback to local defaults if not in production
-  const finalHREmail = hrAdminEmail || "hr_admin@qcu.edu.ph";
+  const finalHREmail = hrAdminEmail || "hr_admin@gmail.com";
   const finalHRPassword = hrAdminPassword || "AdminPassHR123!";
   const hrAdminName = "System HR Admin";
   const hrAdminStudentId = "00-0001";
 
-  const finalLogisticsEmail = logisticsAdminEmail || "logistics_admin@qcu.edu.ph";
+  const finalLogisticsEmail = logisticsAdminEmail || "logistics_admin@gmail.com";
   const finalLogisticsPassword = logisticsAdminPassword || "AdminPassLogistics123!";
   const finalLogisticsName = "System Logistics Admin";
   const finalLogisticsStudentId = "00-0002";
 
-  const finalApplicantEmail = applicantEmail || "applicant_sample@qcu.edu.ph";
+  const finalApplicantEmail = applicantEmail || "applicant_sample@gmail.com";
   const finalApplicantPassword = applicantPassword || "ApplicantPass123!";
   const applicantName = "Sample Applicant";
   const applicantStudentId = "00-0003";
 
-  const finalMemberEmail = memberEmail || "member_sample@qcu.edu.ph";
+  const finalMemberEmail = memberEmail || "member_sample@gmail.com";
   const finalMemberPassword = memberPassword || "MemberPass123!";
   const memberName = "Sample Member";
   const memberStudentId = "00-0004";
