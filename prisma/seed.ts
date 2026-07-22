@@ -58,8 +58,8 @@ async function main() {
   console.log("Seeding started...");
 
   // 1. HR Admin
-  const existingHR = await prisma.user.findUnique({
-    where: { email: finalHREmail },
+  const existingHR = await prisma.user.findFirst({
+    where: { OR: [{ email: finalHREmail }, { studentId: hrAdminStudentId }] },
   });
 
   if (!existingHR) {
@@ -81,12 +81,20 @@ async function main() {
     });
     console.log("HR Admin created and role updated.");
   } else {
-    console.log(`HR Admin ${finalHREmail} already exists.`);
+    if (existingHR.email !== finalHREmail) {
+      console.log(`Updating HR Admin email from ${existingHR.email} to ${finalHREmail}...`);
+      await prisma.user.update({
+        where: { id: existingHR.id },
+        data: { email: finalHREmail, role: "ADMIN_HR" },
+      });
+    } else {
+      console.log(`HR Admin ${finalHREmail} already exists.`);
+    }
   }
 
   // 2. Logistics Admin
-  const existingLogistics = await prisma.user.findUnique({
-    where: { email: finalLogisticsEmail },
+  const existingLogistics = await prisma.user.findFirst({
+    where: { OR: [{ email: finalLogisticsEmail }, { studentId: finalLogisticsStudentId }] },
   });
 
   if (!existingLogistics) {
@@ -108,12 +116,20 @@ async function main() {
     });
     console.log("Logistics Admin created and role updated.");
   } else {
-    console.log(`Logistics Admin ${finalLogisticsEmail} already exists.`);
+    if (existingLogistics.email !== finalLogisticsEmail) {
+      console.log(`Updating Logistics Admin email from ${existingLogistics.email} to ${finalLogisticsEmail}...`);
+      await prisma.user.update({
+        where: { id: existingLogistics.id },
+        data: { email: finalLogisticsEmail, role: "ADMIN_LOGISTICS" },
+      });
+    } else {
+      console.log(`Logistics Admin ${finalLogisticsEmail} already exists.`);
+    }
   }
 
   // 3. Sample Applicant
-  const existingApplicant = await prisma.user.findUnique({
-    where: { email: finalApplicantEmail },
+  const existingApplicant = await prisma.user.findFirst({
+    where: { OR: [{ email: finalApplicantEmail }, { studentId: applicantStudentId }] },
   });
 
   if (!existingApplicant) {
@@ -135,12 +151,20 @@ async function main() {
     });
     console.log("Sample Applicant created and role updated.");
   } else {
-    console.log(`Sample Applicant ${finalApplicantEmail} already exists.`);
+    if (existingApplicant.email !== finalApplicantEmail) {
+      console.log(`Updating Sample Applicant email from ${existingApplicant.email} to ${finalApplicantEmail}...`);
+      await prisma.user.update({
+        where: { id: existingApplicant.id },
+        data: { email: finalApplicantEmail, role: "APPLICANT" },
+      });
+    } else {
+      console.log(`Sample Applicant ${finalApplicantEmail} already exists.`);
+    }
   }
 
   // 4. Sample Member
-  const existingMember = await prisma.user.findUnique({
-    where: { email: finalMemberEmail },
+  const existingMember = await prisma.user.findFirst({
+    where: { OR: [{ email: finalMemberEmail }, { studentId: memberStudentId }] },
   });
 
   if (!existingMember) {
@@ -162,7 +186,15 @@ async function main() {
     });
     console.log("Sample Member created and role updated.");
   } else {
-    console.log(`Sample Member ${finalMemberEmail} already exists.`);
+    if (existingMember.email !== finalMemberEmail) {
+      console.log(`Updating Sample Member email from ${existingMember.email} to ${finalMemberEmail}...`);
+      await prisma.user.update({
+        where: { id: existingMember.id },
+        data: { email: finalMemberEmail, role: "MEMBER" },
+      });
+    } else {
+      console.log(`Sample Member ${finalMemberEmail} already exists.`);
+    }
   }
 
   console.log("Seeding complete.");
