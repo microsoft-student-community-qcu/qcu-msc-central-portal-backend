@@ -14,3 +14,20 @@ export function initSentry(): void {
     console.log("[Sentry] Backend monitoring initialized.");
   }
 }
+
+/**
+ * Capture database-specific errors in Sentry tagged with category: database.
+ */
+export function captureDatabaseError(error: unknown, context?: Record<string, any>): void {
+  if (env.SENTRY_DSN) {
+    Sentry.withScope((scope) => {
+      scope.setTag("category", "database");
+      scope.setTag("db.system", "mysql");
+      if (context) {
+        scope.setContext("database_context", context);
+      }
+      Sentry.captureException(error);
+    });
+  }
+}
+

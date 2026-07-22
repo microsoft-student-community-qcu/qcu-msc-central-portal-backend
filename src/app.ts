@@ -7,7 +7,7 @@ import { auth } from "./config/auth";
 import { prisma } from "./config/database";
 import { authMiddleware } from "./routes/authMiddleware";
 import * as Sentry from "@sentry/node";
-import { initSentry } from "./config/sentry";
+import { initSentry, captureDatabaseError } from "./config/sentry";
 import ocrRoutes from "./routes/ocr.routes";
 import applicantRoutes from "./routes/applicant.routes";
 import { resendSetupLink } from "./controllers/applicant.controller";
@@ -15,6 +15,7 @@ import eventRoutes from "./routes/event.routes";
 import userRoutes from "./routes/user.routes";
 
 initSentry();
+
 
 const app = express();
 
@@ -444,9 +445,11 @@ app.get("/health", async (_req, res) => {
     await prisma.$queryRaw`SELECT 1`;
     res.json({ status: "healthy", database: "connected" });
   } catch (error: any) {
+    captureDatabaseError(error, { endpoint: "/health", action: "SELECT 1" });
     res.status(500).json({ status: "unhealthy", database: "disconnected", error: error.message });
   }
 });
+
 
 /**
  * Sentry error handler — captures unhandled errors and sends reports
