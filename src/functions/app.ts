@@ -49,10 +49,17 @@ async function handleRequest(request: HttpRequest, context: InvocationContext): 
 
   const result: any = await serverlessHandler(context as any, azureReq as any);
 
+  const decoded = result.isBase64Encoded ? Buffer.from(result.body, "base64") : result.body;
+  // Null-body statuses (204/304/etc.) must NOT carry a body: the Fetch Response
+  // constructor Azure builds internally throws "Invalid response status code 204"
+  // if given one. serverless-http returns "" for a bodyless response (e.g. the
+  // cors preflight 204), so map empty bodies to undefined.
+  const hasBody = decoded && decoded.length > 0;
+
   return {
     status: result.status,
     headers: result.headers,
-    body: result.isBase64Encoded ? Buffer.from(result.body, "base64") : result.body,
+    body: hasBody ? decoded : undefined,
   };
 }
 
