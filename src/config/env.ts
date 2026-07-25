@@ -8,7 +8,7 @@ expand(rawEnv);
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z.enum(["development", "production", "staging", "release", "test"]).default("development"),
   DATABASE_URL: z.string().url(),
   BETTER_AUTH_SECRET: z.string().min(8),
   BETTER_AUTH_URL: z.string().url(),
