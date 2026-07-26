@@ -14,10 +14,15 @@ import { resendSetupLink } from "./controllers/applicant.controller";
 import eventRoutes from "./routes/event.routes";
 import userRoutes from "./routes/user.routes";
 
+import path from "node:path";
+
 initSentry();
 
 
 const app = express();
+
+// Serve local uploaded files when Azure Blob Storage fallback is used in dev
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // Middleware
 app.use(cors({
