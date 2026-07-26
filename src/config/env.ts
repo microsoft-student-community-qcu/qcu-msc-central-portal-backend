@@ -20,6 +20,9 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().default("http://localhost:5173"),
   ADMIN_FRONTEND_URL: z.string().url().default("http://localhost:8081"),
   AZURE_STORAGE_ACCOUNT_NAME: z.string().min(1),
+  AZURE_CLIENT_ID: z.string().optional(),
+  AZURE_CLIENT_SECRET: z.string().optional(),
+  AZURE_TENANT_ID: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
 
   // Email provider selection
