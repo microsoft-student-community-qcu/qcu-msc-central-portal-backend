@@ -123,12 +123,9 @@ export const createApplicantSchema = z.object({
     ),
 
   qcuMscEmail: z
-    .string({ message: "QCU MSC email address is required" })
+    .string({ message: "QCU MSC email must be a text value" })
     .email("QCU MSC email must be a valid email address")
-    .regex(
-      /@qcu\.edu\.ph$/i,
-      "QCU MSC email must end with @qcu.edu.ph"
-    ),
+    .optional(),
 
   facebookLink: z
     .string({ message: "Facebook link is required" })
@@ -276,7 +273,6 @@ export const updateApplicantSchema = z.object({
   qcuMscEmail: z
     .string({ message: "QCU MSC email must be a text value" })
     .email("QCU MSC email must be a valid email address")
-    .regex(/@qcu\.edu\.ph$/i, "QCU MSC email must end with @qcu.edu.ph")
     .optional(),
 
   facebookLink: z
