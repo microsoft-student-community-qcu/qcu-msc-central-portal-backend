@@ -21,8 +21,13 @@ initSentry();
 
 const app = express();
 
-// Serve local uploaded files when Azure Blob Storage fallback is used in dev
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+// Serve local uploaded files when the Azure Blob Storage fallback is used.
+// DEVELOPMENT ONLY — the fallback itself is disabled outside development
+// (see src/utils/imageStorage.ts), so this route would only ever expose a
+// stale/empty directory in a deployed environment. Do not remove the guard.
+if (env.NODE_ENV === "development") {
+  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+}
 
 // Middleware
 app.use(cors({
