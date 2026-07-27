@@ -159,7 +159,7 @@ export async function createApplicant(
         curriculumVitae: curriculumVitaePath,
         houseAddress,
         cellphoneNumber,
-        qcuMscEmail,
+        qcuMscEmail: qcuMscEmail ?? email,
         facebookLink,
         interestsSkillsHobbies,
         organizationHistory,
