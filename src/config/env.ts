@@ -8,7 +8,7 @@ expand(rawEnv);
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z.enum(["development", "production", "staging", "release", "test"]).default("development"),
   DATABASE_URL: z.string().url(),
   BETTER_AUTH_SECRET: z.string().min(8),
   BETTER_AUTH_URL: z.string().url(),
@@ -20,6 +20,9 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().default("http://localhost:5173"),
   ADMIN_FRONTEND_URL: z.string().url().default("http://localhost:8081"),
   AZURE_STORAGE_ACCOUNT_NAME: z.string().min(1),
+  AZURE_CLIENT_ID: z.string().optional(),
+  AZURE_CLIENT_SECRET: z.string().optional(),
+  AZURE_TENANT_ID: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
 
   // Email provider selection
