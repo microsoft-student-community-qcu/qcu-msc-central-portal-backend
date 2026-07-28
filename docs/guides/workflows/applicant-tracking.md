@@ -17,7 +17,7 @@ The applicant pipeline is managed exclusively by ADMIN_HR users. Applications ar
    - Application form is automatically pre-filled using extracted data.
    - User reviews and completes the multi-section form:
      - **Personal Information** — firstName, lastName, middleName, gender, campus, dateOfBirth, nationality
-     - **Contact Information** — phoneNumber, qcuMscEmail, emergencyContactName, emergencyContactNumber
+     - **Contact Information** — phoneNumber, emergencyContactName, emergencyContactNumber
      - **Academic Information** — college, program, yearLevel, studentType
      - **Supporting Requirements (Optional)** — portfolio, githubOrProjectLinks, previousWorksAchievements
      - **Why Join** — reasonForJoining, expectations
