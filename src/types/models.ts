@@ -18,7 +18,7 @@ export type UserRole = "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS";
 /**
  * Strict union of all applicant pipeline statuses.
  */
-export type ApplicantStatus = "APPROVED" | "PENDING_REVIEW" | "REJECTED" | "CANCELLED" | "RESUBMIT";
+export type ApplicantStatus = "APPROVED" | "PENDING_REVIEW" | "FOR_INTERVIEW" | "REJECTED" | "CANCELLED" | "RESUBMIT";
 
 /**
  * Strict union of gender options for membership application.

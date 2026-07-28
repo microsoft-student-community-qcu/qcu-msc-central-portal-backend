@@ -105,6 +105,11 @@ Dashboard refreshed with new status
 
 ```
 PENDING_REVIEW (initial submission)
+  ├─→ FOR_INTERVIEW (admin marks for interview)
+  │     ├─→ APPROVED (admin accepts → User becomes MEMBER)
+  │     ├─→ REJECTED (admin denies)
+  │     └─→ RESUBMIT (admin requests changes + message)
+  │           └─→ PENDING_REVIEW (applicant resubmits → clears message)
   ├─→ APPROVED (admin accepts → User becomes MEMBER)
   ├─→ REJECTED (admin denies)
   └─→ RESUBMIT (admin requests changes + message)

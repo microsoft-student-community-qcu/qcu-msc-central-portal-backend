@@ -26,6 +26,7 @@ enum UserRole {
 enum ApplicantStatus {
   APPROVED
   PENDING_REVIEW
+  FOR_INTERVIEW
   REJECTED
   CANCELLED
   RESUBMIT
