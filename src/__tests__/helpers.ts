@@ -14,7 +14,6 @@ export const mockApplicantInput = {
   membershipRole: "MEMBER",
   houseAddress: "123 Main St",
   cellphoneNumber: "09171234567",
-  qcuMscEmail: "john.doe@qcu.edu.ph",
   facebookLink: "https://facebook.com/johndoe",
   interestsSkillsHobbies: "Coding, gaming",
   organizationHistory: "None",

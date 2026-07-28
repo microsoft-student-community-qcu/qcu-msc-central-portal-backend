@@ -101,7 +101,6 @@ export interface Applicant {
   /** Contact Information */
   houseAddress: string;
   cellphoneNumber: string;
-  qcuMscEmail: string;
   facebookLink: string;
   /** Additional Information */
   interestsSkillsHobbies: string;
