@@ -38,7 +38,6 @@ Event (1) ──→ (Many) Registration
 | `User` | `email` | Unique |
 | `User` | `studentId` | Unique |
 | `Applicant` | `email` | Unique |
-| `Applicant` | `qcuMscEmail` | Unique |
 | `Applicant` | `userId` | Unique |
 | `Session` | `token` | Unique |
 | `Registration` | `qrPayload` | Unique |

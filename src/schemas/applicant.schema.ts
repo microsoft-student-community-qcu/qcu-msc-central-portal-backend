@@ -122,11 +122,6 @@ export const createApplicantSchema = z.object({
       "Cellphone number must be 11 digits starting with 09 (e.g., 09123456789)"
     ),
 
-  qcuMscEmail: z
-    .string({ message: "QCU MSC email must be a text value" })
-    .email("QCU MSC email must be a valid email address")
-    .optional(),
-
   facebookLink: z
     .string({ message: "Facebook link is required" })
     .url("Facebook link must be a valid URL (e.g., https://facebook.com/...)"),
@@ -268,11 +263,6 @@ export const updateApplicantSchema = z.object({
       /^09\d{9}$/,
       "Cellphone number must be 11 digits starting with 09 (e.g., 09123456789)"
     )
-    .optional(),
-
-  qcuMscEmail: z
-    .string({ message: "QCU MSC email must be a text value" })
-    .email("QCU MSC email must be a valid email address")
     .optional(),
 
   facebookLink: z

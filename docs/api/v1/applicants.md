@@ -46,7 +46,6 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
 |-------|------|----------|------------|
 | `houseAddress` | string | Yes | 1-500 characters |
 | `cellphoneNumber` | string | Yes | 11 digits starting with 09 (e.g., 09123456789) |
-| `qcuMscEmail` | string | Yes | Must end with @qcu.edu.ph (must be unique) |
 | `facebookLink` | string | Yes | Valid URL (e.g., https://facebook.com/...) |
 
 #### Additional Information
@@ -86,7 +85,6 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
     "membershipRole": string,
     "houseAddress": string,
     "cellphoneNumber": string,
-    "qcuMscEmail": string,
     "facebookLink": string,
     "interestsSkillsHobbies": string,
     "organizationHistory": string,
@@ -105,7 +103,7 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
 **Status Codes:**
 - `201`: Applicant created successfully
 - `400`: Validation error (invalid fields, missing studentId, missing files, expired OCR session)
-- `409`: Conflict (email or qcuMscEmail already exists)
+- `409`: Conflict (email already exists)
 - `429`: Rate limit exceeded
 - `500`: Internal server error
 
@@ -126,7 +124,6 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "membershipRole=Active Member" \
   -F "houseAddress=123 Mabini St., Brgy. San Jose, Quezon City" \
   -F "cellphoneNumber=09123456789" \
-  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
   -F "facebookLink=https://facebook.com/janesmith" \
   -F "interestsSkillsHobbies=Programming, photography, badminton" \
   -F "organizationHistory=Former VP of CCS Student Government" \
@@ -151,7 +148,6 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "membershipRole=Active Member" \
   -F "houseAddress=123 Mabini St., Brgy. San Jose, Quezon City" \
   -F "cellphoneNumber=09123456789" \
-  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
   -F "facebookLink=https://facebook.com/janesmith" \
   -F "interestsSkillsHobbies=Programming, photography, badminton" \
   -F "organizationHistory=Former VP of CCS Student Government" \
@@ -182,7 +178,6 @@ curl -X POST http://localhost:5000/api/v1/applicants \
     "membershipRole": "Active Member",
     "houseAddress": "123 Mabini St., Brgy. San Jose, Quezon City",
     "cellphoneNumber": "09123456789",
-    "qcuMscEmail": "jane.smith@qcu.edu.ph",
     "facebookLink": "https://facebook.com/janesmith",
     "interestsSkillsHobbies": "Programming, photography, badminton",
     "organizationHistory": "Former VP of CCS Student Government",
@@ -269,7 +264,6 @@ Retrieves a specific applicant's details by their ID.
     "membershipRole": string,
     "houseAddress": string,
     "cellphoneNumber": string,
-    "qcuMscEmail": string,
     "facebookLink": string,
     "interestsSkillsHobbies": string,
     "organizationHistory": string,
@@ -313,7 +307,6 @@ curl -X GET http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-4466
     "membershipRole": "Active Member",
     "houseAddress": "123 Mabini St., Brgy. San Jose, Quezon City",
     "cellphoneNumber": "09123456789",
-    "qcuMscEmail": "jane.smith@qcu.edu.ph",
     "facebookLink": "https://facebook.com/janesmith",
     "interestsSkillsHobbies": "Programming, photography, badminton",
     "organizationHistory": "Former VP of CCS Student Government",
@@ -615,7 +608,6 @@ All fields from the create schema are available as optional parameters. See [Cre
     "membershipRole": string,
     "houseAddress": string,
     "cellphoneNumber": string,
-    "qcuMscEmail": string,
     "facebookLink": string,
     "interestsSkillsHobbies": string,
     "organizationHistory": string,
@@ -683,19 +675,6 @@ All validation errors return `400` with the following shape:
 }
 ```
 
-**Example — invalid `qcuMscEmail`:**
-```json
-{
-  "success": false,
-  "message": "Validation error",
-  "errors": {
-    "qcuMscEmail": [
-      "QCU MSC email must end with @qcu.edu.ph"
-    ]
-  }
-}
-```
-
 ---
 
 ## Replication / Testing
@@ -734,7 +713,6 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "membershipRole=Active Member" \
   -F "houseAddress=123 Mabini St." \
   -F "cellphoneNumber=09123456789" \
-  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
   -F "facebookLink=https://facebook.com/janesmith" \
   -F "interestsSkillsHobbies=Programming, photography" \
   -F "organizationHistory=N/A" \
@@ -766,7 +744,6 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "membershipRole=Active Member" \
   -F "houseAddress=123 Mabini St." \
   -F "cellphoneNumber=09123456789" \
-  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
   -F "facebookLink=https://facebook.com/janesmith" \
   -F "interestsSkillsHobbies=Programming, photography" \
   -F "organizationHistory=N/A" \
@@ -795,7 +772,6 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "membershipRole=Active Member" \
   -F "houseAddress=123 Mabini St." \
   -F "cellphoneNumber=09123456789" \
-  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
   -F "facebookLink=https://facebook.com/janesmith" \
   -F "interestsSkillsHobbies=Programming" \
   -F "organizationHistory=N/A" \
@@ -813,6 +789,6 @@ All endpoints return appropriate HTTP status codes:
 - `401`: Unauthorized (missing or invalid token)
 - `403`: Forbidden (insufficient permissions)
 - `404`: Not found (applicant ID doesn't exist)
-- `409`: Conflict (email or qcuMscEmail already exists)
+- `409`: Conflict (email already exists)
 - `429`: Rate limit exceeded (5 req/min/IP)
 - `500`: Internal server error

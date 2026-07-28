@@ -151,7 +151,6 @@ model Applicant {
   curriculumVitae             String          // Filesystem path to uploaded Curriculum Vitae
   houseAddress                String
   cellphoneNumber             String
-  qcuMscEmail                 String          @unique
   facebookLink                String
   interestsSkillsHobbies      String          @db.Text
   organizationHistory         String          @db.Text
