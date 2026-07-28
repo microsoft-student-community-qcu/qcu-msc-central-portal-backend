@@ -37,7 +37,7 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
 | `dateOfBirth` | string | Yes | YYYY-MM-DD format (e.g., 2000-01-15) |
 | `placeOfBirth` | string | Yes | 1-300 characters |
 | `gender` | enum | Yes | `MALE`, `FEMALE`, `LGBTQIA`, or `PREFER_NOT_TO_SAY` |
-| `membershipRole` | string | Yes | 1-200 characters |
+| `office` | enum | Yes | `SECRETARIAT_OFFICE`, `RELATIONS_OFFICE`, `FINANCE_OFFICE`, `LOGISTICS_OFFICE`, `CREATIVES_OFFICE`, `MANAGEMENT_AND_DEVELOPMENT_OFFICE`, `STARTUP_DEVELOPERS_OFFICE` |
 | `certificateOfRegistration` | file | Yes | PDF, JPEG, PNG, or DOCX — max 10MB |
 | `curriculumVitae` | file | Yes | PDF, JPEG, PNG, or DOCX — max 10MB |
 
@@ -82,7 +82,7 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
     "dateOfBirth": string (ISO 8601),
     "placeOfBirth": string,
     "gender": "MALE" | "FEMALE" | "LGBTQIA" | "PREFER_NOT_TO_SAY",
-    "membershipRole": string,
+    "office": "SECRETARIAT_OFFICE" | "RELATIONS_OFFICE" | "FINANCE_OFFICE" | "LOGISTICS_OFFICE" | "CREATIVES_OFFICE" | "MANAGEMENT_AND_DEVELOPMENT_OFFICE" | "STARTUP_DEVELOPERS_OFFICE",
     "houseAddress": string,
     "cellphoneNumber": string,
     "facebookLink": string,
@@ -121,7 +121,7 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "dateOfBirth=2002-05-15" \
   -F "placeOfBirth=Quezon City" \
   -F "gender=FEMALE" \
-  -F "membershipRole=Active Member" \
+  -F "office=SECRETARIAT_OFFICE" \
   -F "houseAddress=123 Mabini St., Brgy. San Jose, Quezon City" \
   -F "cellphoneNumber=09123456789" \
   -F "facebookLink=https://facebook.com/janesmith" \
@@ -145,7 +145,7 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "dateOfBirth=2002-05-15" \
   -F "placeOfBirth=Quezon City" \
   -F "gender=FEMALE" \
-  -F "membershipRole=Active Member" \
+  -F "office=SECRETARIAT_OFFICE" \
   -F "houseAddress=123 Mabini St., Brgy. San Jose, Quezon City" \
   -F "cellphoneNumber=09123456789" \
   -F "facebookLink=https://facebook.com/janesmith" \
@@ -175,7 +175,7 @@ curl -X POST http://localhost:5000/api/v1/applicants \
     "dateOfBirth": "2002-05-15T00:00:00.000Z",
     "placeOfBirth": "Quezon City",
     "gender": "FEMALE",
-    "membershipRole": "Active Member",
+    "office": "SECRETARIAT_OFFICE",
     "houseAddress": "123 Mabini St., Brgy. San Jose, Quezon City",
     "cellphoneNumber": "09123456789",
     "facebookLink": "https://facebook.com/janesmith",
@@ -261,7 +261,7 @@ Retrieves a specific applicant's details by their ID.
     "dateOfBirth": string (ISO 8601),
     "placeOfBirth": string,
     "gender": "MALE" | "FEMALE" | "LGBTQIA" | "PREFER_NOT_TO_SAY",
-    "membershipRole": string,
+    "office": "SECRETARIAT_OFFICE" | "RELATIONS_OFFICE" | "FINANCE_OFFICE" | "LOGISTICS_OFFICE" | "CREATIVES_OFFICE" | "MANAGEMENT_AND_DEVELOPMENT_OFFICE" | "STARTUP_DEVELOPERS_OFFICE",
     "houseAddress": string,
     "cellphoneNumber": string,
     "facebookLink": string,
@@ -304,7 +304,7 @@ curl -X GET http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-4466
     "dateOfBirth": "2002-05-15T00:00:00.000Z",
     "placeOfBirth": "Quezon City",
     "gender": "FEMALE",
-    "membershipRole": "Active Member",
+    "office": "SECRETARIAT_OFFICE",
     "houseAddress": "123 Mabini St., Brgy. San Jose, Quezon City",
     "cellphoneNumber": "09123456789",
     "facebookLink": "https://facebook.com/janesmith",
@@ -361,7 +361,7 @@ Retrieves all applicants with optional filtering by status, campus, or gender.
         "campus": string,
         "studentId": string | null,
         "gender": string,
-        "membershipRole": string,
+        "office": "SECRETARIAT_OFFICE" | "RELATIONS_OFFICE" | "FINANCE_OFFICE" | "LOGISTICS_OFFICE" | "CREATIVES_OFFICE" | "MANAGEMENT_AND_DEVELOPMENT_OFFICE" | "STARTUP_DEVELOPERS_OFFICE",
         "status": string,
         "manual_application": boolean,
         "adminMessage": string | null,
@@ -605,7 +605,7 @@ All fields from the create schema are available as optional parameters. See [Cre
     "dateOfBirth": string (ISO 8601),
     "placeOfBirth": string,
     "gender": string,
-    "membershipRole": string,
+    "office": "SECRETARIAT_OFFICE" | "RELATIONS_OFFICE" | "FINANCE_OFFICE" | "LOGISTICS_OFFICE" | "CREATIVES_OFFICE" | "MANAGEMENT_AND_DEVELOPMENT_OFFICE" | "STARTUP_DEVELOPERS_OFFICE",
     "houseAddress": string,
     "cellphoneNumber": string,
     "facebookLink": string,
@@ -629,7 +629,7 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -d '{
     "program": "BS Data Science",
-    "membershipRole": "Senior Member"
+    "office": "SECRETARIAT_OFFICE"
   }'
 ```
 
@@ -710,7 +710,7 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "dateOfBirth=2002-05-15" \
   -F "placeOfBirth=Quezon City" \
   -F "gender=FEMALE" \
-  -F "membershipRole=Active Member" \
+  -F "office=SECRETARIAT_OFFICE" \
   -F "houseAddress=123 Mabini St." \
   -F "cellphoneNumber=09123456789" \
   -F "facebookLink=https://facebook.com/janesmith" \
@@ -741,7 +741,7 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "dateOfBirth=2002-05-15" \
   -F "placeOfBirth=Quezon City" \
   -F "gender=FEMALE" \
-  -F "membershipRole=Active Member" \
+  -F "office=SECRETARIAT_OFFICE" \
   -F "houseAddress=123 Mabini St." \
   -F "cellphoneNumber=09123456789" \
   -F "facebookLink=https://facebook.com/janesmith" \
@@ -769,7 +769,7 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "dateOfBirth=2002-05-15" \
   -F "placeOfBirth=Quezon City" \
   -F "gender=FEMALE" \
-  -F "membershipRole=Active Member" \
+  -F "office=SECRETARIAT_OFFICE" \
   -F "houseAddress=123 Mabini St." \
   -F "cellphoneNumber=09123456789" \
   -F "facebookLink=https://facebook.com/janesmith" \
