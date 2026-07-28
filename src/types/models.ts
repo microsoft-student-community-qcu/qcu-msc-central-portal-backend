@@ -31,6 +31,18 @@ export type Gender = "MALE" | "FEMALE" | "LGBTQIA" | "PREFER_NOT_TO_SAY";
 export type Campus = "SAN_BARTOLOME_MAIN" | "SAN_FRANCISCO" | "BATASAN";
 
 /**
+ * Strict union of offices a member can apply to join.
+ */
+export type Office =
+  | "SECRETARIAT_OFFICE"
+  | "RELATIONS_OFFICE"
+  | "FINANCE_OFFICE"
+  | "LOGISTICS_OFFICE"
+  | "CREATIVES_OFFICE"
+  | "MANAGEMENT_AND_DEVELOPMENT_OFFICE"
+  | "STARTUP_DEVELOPERS_OFFICE";
+
+/**
  * Strict union of event visibility types.
  */
 export type EventType = "PUBLIC" | "MEMBERS_ONLY";
@@ -173,6 +185,43 @@ export interface Registration {
   /** Unique UUID payload embedded in the generated QR code. */
   qrPayload: string;
   hasAttended: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ---------------------------------------------------------------------------
+// ApplicationDraft
+// ---------------------------------------------------------------------------
+
+export interface ApplicationDraft {
+  id: string;
+  currentStep: number;
+  ocrSessionId: string;
+  lastName: string | null;
+  firstName: string | null;
+  middleInitial: string | null;
+  email: string | null;
+  studentId: string | null;
+  idImagePath: string | null;
+  dateOfBirth: Date | null;
+  placeOfBirth: string | null;
+  gender: Gender | null;
+  cellphoneNumber: string | null;
+  houseAddress: string | null;
+  facebookLink: string | null;
+  college: string | null;
+  program: string | null;
+  section: string | null;
+  campus: Campus | null;
+  office: Office | null;
+  certificateOfRegistration: string | null;
+  curriculumVitae: string | null;
+  interestsSkillsHobbies: string | null;
+  organizationHistory: string | null;
+  portfolio: string | null;
+  githubOrProjectLinks: string | null;
+  previousWorksAchievements: string | null;
+  manual_application: boolean | null;
   createdAt: Date;
   updatedAt: Date;
 }

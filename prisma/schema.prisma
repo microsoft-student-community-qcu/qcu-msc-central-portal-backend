@@ -39,6 +39,17 @@ enum Gender {
   PREFER_NOT_TO_SAY
 }
 
+// Office enumeration for the office a member is applying to join.
+enum Office {
+  SECRETARIAT_OFFICE
+  RELATIONS_OFFICE
+  FINANCE_OFFICE
+  LOGISTICS_OFFICE
+  CREATIVES_OFFICE
+  MANAGEMENT_AND_DEVELOPMENT_OFFICE
+  STARTUP_DEVELOPERS_OFFICE
+}
+
 // Campus enumeration for QCU campuses.
 enum Campus {
   SAN_BARTOLOME_MAIN
@@ -217,4 +228,45 @@ model SponsorshipInquiry {
   status       SponsorshipStatus @default(NEW)
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
+}
+
+// Multi-step application draft — stores partial applicant submissions per batch step.
+// Deleted after the applicant record is created on final submission (step 3).
+model ApplicationDraft {
+  id                          String          @id @default(uuid())
+  currentStep                 Int             @default(0)
+  ocrSessionId                String          @unique
+
+  lastName                    String?
+  firstName                   String?
+  middleInitial               String?
+  email                       String?
+
+  studentId                   String?
+  idImagePath                 String?
+
+  dateOfBirth                 DateTime?
+  placeOfBirth                String?
+  gender                      Gender?
+  cellphoneNumber             String?
+  houseAddress                String?
+  facebookLink                String?
+
+  college                     String?
+  program                     String?
+  section                     String?
+  campus                      Campus?
+  office                      Office?
+  certificateOfRegistration   String?
+  curriculumVitae             String?
+
+  interestsSkillsHobbies      String?
+  organizationHistory         String?
+  portfolio                   String?
+  githubOrProjectLinks        String?
+  previousWorksAchievements   String?
+
+  manual_application          Boolean?
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
 }
