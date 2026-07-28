@@ -1,7 +1,7 @@
 # Applicant Tracking API
 
 ## Overview
-The Applicant Tracking API manages the recruitment and application pipeline for prospective MSC members. It tracks applications from submission through admin review and final decision (PENDING_REVIEW → APPROVED / REJECTED / CANCELLED / RESUBMIT).
+The Applicant Tracking API manages the recruitment and application pipeline for prospective MSC members. It tracks applications from submission through admin review and final decision (PENDING_REVIEW → FOR_INTERVIEW → APPROVED / REJECTED / CANCELLED / RESUBMIT).
 
 The submission endpoint accepts **multipart/form-data** to support file uploads (Certificate of Registration, Curriculum Vitae).
 
@@ -276,7 +276,7 @@ Retrieves a specific applicant's details by their ID.
     "portfolio": string | null,
     "githubOrProjectLinks": string | null,
     "previousWorksAchievements": string | null,
-    "status": "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "CANCELLED" | "RESUBMIT",
+    "status": "PENDING_REVIEW" | "FOR_INTERVIEW" | "APPROVED" | "REJECTED" | "CANCELLED" | "RESUBMIT",
     "manual_application": boolean,
     "adminMessage": string | null,
     "createdAt": string (ISO 8601),
@@ -342,7 +342,7 @@ Retrieves all applicants with optional filtering by status, campus, or gender.
 **Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Query Parameters:**
-- `status` (optional): Filter by status — `APPROVED`, `PENDING_REVIEW`, `REJECTED`, `CANCELLED`, `RESUBMIT`
+- `status` (optional): Filter by status — `APPROVED`, `PENDING_REVIEW`, `FOR_INTERVIEW`, `REJECTED`, `CANCELLED`, `RESUBMIT`
 - `campus` (optional): Filter by campus — `SAN_BARTOLOME_MAIN`, `SAN_FRANCISCO`, `BATASAN`
 - `gender` (optional): Filter by gender — `MALE`, `FEMALE`, `LGBTQIA`, `PREFER_NOT_TO_SAY`
 - `manual_application` (optional): Filter by manual application flag — `true` or `false`
@@ -399,7 +399,7 @@ Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
 **Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Request Parameters:**
-- `status` (enum, required): New status — `APPROVED`, `PENDING_REVIEW`, `REJECTED`, `CANCELLED`, or `RESUBMIT`
+- `status` (enum, required): New status — `APPROVED`, `PENDING_REVIEW`, `FOR_INTERVIEW`, `REJECTED`, `CANCELLED`, or `RESUBMIT`
 - `message` (string, optional): Admin remark to show the applicant (typically used when setting `RESUBMIT`)
 
 **Response Format:**

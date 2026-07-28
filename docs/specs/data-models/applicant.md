@@ -23,6 +23,7 @@ enum Campus {
 enum ApplicantStatus {
   APPROVED
   PENDING_REVIEW
+  FOR_INTERVIEW
   REJECTED
   CANCELLED
   RESUBMIT
@@ -135,7 +136,7 @@ Sent as file fields in `multipart/form-data` alongside the above text fields:
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `status` | ApplicantStatus | Yes | `PENDING_REVIEW`, `APPROVED`, `REJECTED`, `CANCELLED`, `RESUBMIT` |
+| `status` | ApplicantStatus | Yes | `PENDING_REVIEW`, `FOR_INTERVIEW`, `APPROVED`, `REJECTED`, `CANCELLED`, `RESUBMIT` |
 
 ### System Fields
 
