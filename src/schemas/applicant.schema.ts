@@ -24,6 +24,21 @@ export const campusEnum = z.enum(
   }
 );
 
+export const officeEnum = z.enum(
+  [
+    "SECRETARIAT_OFFICE",
+    "RELATIONS_OFFICE",
+    "FINANCE_OFFICE",
+    "LOGISTICS_OFFICE",
+    "CREATIVES_OFFICE",
+    "MANAGEMENT_AND_DEVELOPMENT_OFFICE",
+    "STARTUP_DEVELOPERS_OFFICE",
+  ],
+  {
+    error: "Office must be one of: Secretariat, Relations, Finance, Logistics, Creatives, Management & Development, or Startup Developers",
+  }
+);
+
 // ── Create Applicant Schema ──────────────────────────────────────────────
 
 /**
@@ -94,10 +109,7 @@ export const createApplicantSchema = z.object({
 
   gender: genderEnum,
 
-  membershipRole: z
-    .string({ message: "Membership role/participation is required" })
-    .min(1, "Membership role cannot be empty")
-    .max(200, "Membership role must be under 200 characters"),
+  office: officeEnum,
 
   // QCU Student ID in YY-NNNN format — only needed when the OCR session
   // returned studentId: null with manualRequired: true (manual entry fallback).
@@ -237,11 +249,7 @@ export const updateApplicantSchema = z.object({
 
   gender: genderEnum.optional(),
 
-  membershipRole: z
-    .string({ message: "Membership role must be a text value" })
-    .min(1, "Membership role cannot be empty")
-    .max(200, "Membership role must be under 200 characters")
-    .optional(),
+  office: officeEnum.optional(),
 
   studentId: z
     .string({ message: "Student ID must be a text value" })

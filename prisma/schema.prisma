@@ -40,6 +40,17 @@ enum Gender {
   PREFER_NOT_TO_SAY
 }
 
+// Office enumeration for the office a member is applying to join.
+enum Office {
+  SECRETARIAT_OFFICE
+  RELATIONS_OFFICE
+  FINANCE_OFFICE
+  LOGISTICS_OFFICE
+  CREATIVES_OFFICE
+  MANAGEMENT_AND_DEVELOPMENT_OFFICE
+  STARTUP_DEVELOPERS_OFFICE
+}
+
 // Campus enumeration for QCU campuses.
 enum Campus {
   SAN_BARTOLOME_MAIN
@@ -146,7 +157,7 @@ model Applicant {
   dateOfBirth                 DateTime
   placeOfBirth                String
   gender                      Gender
-  membershipRole              String
+  office                      Office
   certificateOfRegistration   String          // Filesystem path to uploaded Certificate of Registration
   curriculumVitae             String          // Filesystem path to uploaded Curriculum Vitae
   houseAddress                String

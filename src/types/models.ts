@@ -26,6 +26,18 @@ export type ApplicantStatus = "APPROVED" | "PENDING_REVIEW" | "FOR_INTERVIEW" | 
 export type Gender = "MALE" | "FEMALE" | "LGBTQIA" | "PREFER_NOT_TO_SAY";
 
 /**
+ * Strict union of offices a member can apply to join.
+ */
+export type Office =
+  | "SECRETARIAT_OFFICE"
+  | "RELATIONS_OFFICE"
+  | "FINANCE_OFFICE"
+  | "LOGISTICS_OFFICE"
+  | "CREATIVES_OFFICE"
+  | "MANAGEMENT_AND_DEVELOPMENT_OFFICE"
+  | "STARTUP_DEVELOPERS_OFFICE";
+
+/**
  * Strict union of QCU campus locations.
  */
 export type Campus = "SAN_BARTOLOME_MAIN" | "SAN_FRANCISCO" | "BATASAN";
@@ -93,7 +105,7 @@ export interface Applicant {
   dateOfBirth: Date;
   placeOfBirth: string;
   gender: Gender;
-  membershipRole: string;
+  office: Office;
   /** Filesystem path to uploaded Certificate of Registration. */
   certificateOfRegistration: string;
   /** Filesystem path to uploaded Curriculum Vitae. */

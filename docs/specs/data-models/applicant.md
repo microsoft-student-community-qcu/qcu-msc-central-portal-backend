@@ -43,7 +43,7 @@ model Applicant {
   dateOfBirth                 DateTime
   placeOfBirth                String
   gender                      Gender
-  membershipRole              String
+  office                      Office
   certificateOfRegistration   String
   curriculumVitae             String
   houseAddress                String
@@ -83,7 +83,7 @@ model Applicant {
 | `dateOfBirth` | DateTime | Yes | ISO date |
 | `placeOfBirth` | String | Yes | Max 300 chars |
 | `gender` | Gender (enum) | Yes | `MALE`, `FEMALE`, `LGBTQIA`, `PREFER_NOT_TO_SAY` |
-| `membershipRole` | String | Yes | Max 200 chars |
+| `office` | Office (enum) | Yes | `SECRETARIAT_OFFICE`, `RELATIONS_OFFICE`, `FINANCE_OFFICE`, `LOGISTICS_OFFICE`, `CREATIVES_OFFICE`, `MANAGEMENT_AND_DEVELOPMENT_OFFICE`, `STARTUP_DEVELOPERS_OFFICE` |
 
 ### Contact Information
 
