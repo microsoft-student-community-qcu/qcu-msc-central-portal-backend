@@ -11,7 +11,7 @@ export const mockApplicantInput = {
   dateOfBirth: "2000-01-15",
   placeOfBirth: "Manila",
   gender: "MALE" as const,
-  membershipRole: "MEMBER",
+  office: "SECRETARIAT_OFFICE",
   houseAddress: "123 Main St",
   cellphoneNumber: "09171234567",
   facebookLink: "https://facebook.com/johndoe",
