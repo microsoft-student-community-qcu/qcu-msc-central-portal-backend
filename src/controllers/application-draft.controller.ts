@@ -68,6 +68,24 @@ export async function createDraft(req: Request, res: Response): Promise<void> {
     });
   } catch (error) {
     console.error("Error creating draft:", error);
+
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as any).code === "P2002"
+    ) {
+      const target = (error as any).meta?.target as string[] | undefined;
+      if (target?.includes("ApplicationDraft_ocrSessionId_key")) {
+        res.status(400).json({
+          success: false,
+          message:
+            "This OCR session has already been used. Each verification can only be used once.",
+        });
+        return;
+      }
+    }
+
     res.status(500).json({
       success: false,
       message: "Failed to create application draft. Please try again.",
@@ -292,7 +310,6 @@ export async function submitDraft(req: Request, res: Response): Promise<void> {
         firstName: draft.firstName!,
         middleInitial: draft.middleInitial,
         email: draft.email!,
-        qcuMscEmail: draft.email!,
         college: draft.college!,
         program: draft.program!,
         section: draft.section!,
@@ -301,7 +318,7 @@ export async function submitDraft(req: Request, res: Response): Promise<void> {
         dateOfBirth: draft.dateOfBirth!,
         placeOfBirth: draft.placeOfBirth!,
         gender: draft.gender!,
-        membershipRole: draft.office!,
+        office: draft.office!,
         certificateOfRegistration: draft.certificateOfRegistration!,
         curriculumVitae: draft.curriculumVitae!,
         houseAddress: draft.houseAddress!,
@@ -332,6 +349,24 @@ export async function submitDraft(req: Request, res: Response): Promise<void> {
     });
   } catch (error) {
     console.error("Error submitting draft:", error);
+
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as any).code === "P2002"
+    ) {
+      const target = (error as any).meta?.target as string[] | undefined;
+      if (target?.includes("email")) {
+        res.status(409).json({
+          success: false,
+          message:
+            "An application with this email already exists. Please use a different email or contact support.",
+        });
+        return;
+      }
+    }
+
     res.status(500).json({
       success: false,
       message: "Failed to submit application. Please try again.",
