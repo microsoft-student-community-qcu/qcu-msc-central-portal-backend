@@ -4,9 +4,9 @@ import { z } from "zod";
 // ── Enums ────────────────────────────────────────────────────────────────
 
 export const applicantStatusEnum = z.enum(
-  ["APPROVED", "PENDING_REVIEW", "FOR_INTERVIEW", "REJECTED", "CANCELLED", "RESUBMIT"],
+  ["APPROVED", "PENDING_REVIEW", "REJECTED", "CANCELLED", "RESUBMIT"],
   {
-    error: "Status must be APPROVED, PENDING_REVIEW, FOR_INTERVIEW, REJECTED, CANCELLED, or RESUBMIT",
+    error: "Status must be APPROVED, PENDING_REVIEW, REJECTED, CANCELLED, or RESUBMIT",
   }
 );
 
@@ -21,21 +21,6 @@ export const campusEnum = z.enum(
   ["SAN_BARTOLOME_MAIN", "SAN_FRANCISCO", "BATASAN"],
   {
     error: "Campus must be San Bartolome (Main), San Francisco, or Batasan",
-  }
-);
-
-export const officeEnum = z.enum(
-  [
-    "SECRETARIAT_OFFICE",
-    "RELATIONS_OFFICE",
-    "FINANCE_OFFICE",
-    "LOGISTICS_OFFICE",
-    "CREATIVES_OFFICE",
-    "MANAGEMENT_AND_DEVELOPMENT_OFFICE",
-    "STARTUP_DEVELOPERS_OFFICE",
-  ],
-  {
-    error: "Office must be one of: Secretariat, Relations, Finance, Logistics, Creatives, Management & Development, or Startup Developers",
   }
 );
 
@@ -109,7 +94,10 @@ export const createApplicantSchema = z.object({
 
   gender: genderEnum,
 
-  office: officeEnum,
+  membershipRole: z
+    .string({ message: "Membership role/participation is required" })
+    .min(1, "Membership role cannot be empty")
+    .max(200, "Membership role must be under 200 characters"),
 
   // QCU Student ID in YY-NNNN format — only needed when the OCR session
   // returned studentId: null with manualRequired: true (manual entry fallback).
@@ -133,6 +121,11 @@ export const createApplicantSchema = z.object({
       /^09\d{9}$/,
       "Cellphone number must be 11 digits starting with 09 (e.g., 09123456789)"
     ),
+
+  qcuMscEmail: z
+    .string({ message: "QCU MSC email must be a text value" })
+    .email("QCU MSC email must be a valid email address")
+    .optional(),
 
   facebookLink: z
     .string({ message: "Facebook link is required" })
@@ -249,7 +242,11 @@ export const updateApplicantSchema = z.object({
 
   gender: genderEnum.optional(),
 
-  office: officeEnum.optional(),
+  membershipRole: z
+    .string({ message: "Membership role must be a text value" })
+    .min(1, "Membership role cannot be empty")
+    .max(200, "Membership role must be under 200 characters")
+    .optional(),
 
   studentId: z
     .string({ message: "Student ID must be a text value" })
@@ -271,6 +268,11 @@ export const updateApplicantSchema = z.object({
       /^09\d{9}$/,
       "Cellphone number must be 11 digits starting with 09 (e.g., 09123456789)"
     )
+    .optional(),
+
+  qcuMscEmail: z
+    .string({ message: "QCU MSC email must be a text value" })
+    .email("QCU MSC email must be a valid email address")
     .optional(),
 
   facebookLink: z

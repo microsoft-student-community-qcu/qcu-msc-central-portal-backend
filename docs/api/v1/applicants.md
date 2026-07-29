@@ -635,7 +635,188 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
 
 ---
 
-## Validation Errors
+## 6. Multi-Step Application Draft
+
+Alternative to the single `POST /api/v1/applicants` endpoint. Splits the submission into 4 batches so each step is validated immediately on the backend. Requires `POST /api/v1/ocr/verify` first (same as the single endpoint).
+
+**Rate Limit:** 10 requests per minute per IP (shared across all draft endpoints)
+
+---
+
+### 6.1 Create Draft (Batch 0)
+
+**Description:**  
+Creates an application draft after a successful OCR scan. Stores basic personal info and consumes the OCR session (extracts student ID and ID image path). Returns a `draftId` used as the continuation token for subsequent batches.
+
+**Method:** `POST`  
+**Path:** `/api/v1/applicants/draft`  
+**Content-Type:** `application/json`
+
+**Request Body:**
+```json
+{
+  "lastName": "Smith",
+  "firstName": "Jane",
+  "middleInitial": "B",
+  "email": "jane@example.com",
+  "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004"
+}
+```
+
+**Example Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "draftId": "770e8400-e29b-41d4-a716-446655440005"
+  },
+  "message": "Draft created successfully. Proceed to Batch 1."
+}
+```
+
+**Status Codes:**
+- `201`: Draft created
+- `400`: Validation error, or OCR session expired/invalid
+- `429`: Rate limit exceeded
+- `500`: Internal server error
+
+---
+
+### 6.2 Update Draft — Batch 1 (Personal Info)
+
+**Description:**  
+Saves personal information for the draft. The draft must be at step 0 (freshly created). Advances the draft to step 1.
+
+**Method:** `PATCH`  
+**Path:** `/api/v1/applicants/draft/:draftId/batch-1`  
+**Content-Type:** `application/json`
+
+**Request Body:**
+```json
+{
+  "dateOfBirth": "2002-05-15",
+  "placeOfBirth": "Quezon City",
+  "gender": "FEMALE",
+  "cellphoneNumber": "09123456789",
+  "houseAddress": "123 Mabini St., Brgy. San Jose, Quezon City",
+  "facebookLink": "https://facebook.com/janesmith"
+}
+```
+
+**Example Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "currentStep": 1
+  },
+  "message": "Batch 1 saved. Proceed to Batch 2."
+}
+```
+
+**Status Codes:**
+- `200`: Batch saved
+- `400`: Validation error, or draft is at wrong step
+- `404`: Draft not found
+- `429`: Rate limit exceeded
+- `500`: Internal server error
+
+---
+
+### 6.3 Update Draft — Batch 2 (Academic Info + Files)
+
+**Description:**  
+Saves academic information and uploads supporting documents. The draft must be at step 1. Advances the draft to step 2.
+
+**Method:** `PATCH`  
+**Path:** `/api/v1/applicants/draft/:draftId/batch-2`  
+**Content-Type:** `multipart/form-data`
+
+**Request Fields:**
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `college` | string | Yes | 1-200 characters |
+| `program` | string | Yes | 1-200 characters |
+| `section` | string | Yes | 1-100 characters |
+| `campus` | enum | Yes | `SAN_BARTOLOME_MAIN`, `SAN_FRANCISCO`, `BATASAN` |
+| `office` | enum | Yes | `SECRETARIAT_OFFICE`, `RELATIONS_OFFICE`, `FINANCE_OFFICE`, `LOGISTICS_OFFICE`, `CREATIVES_OFFICE`, `MANAGEMENT_AND_DEVELOPMENT_OFFICE`, `STARTUP_DEVELOPERS_OFFICE` |
+| `certificateOfRegistration` | file | Yes | PDF, JPEG, PNG, or DOCX — max 10MB |
+| `curriculumVitae` | file | Yes | PDF, JPEG, PNG, or DOCX — max 10MB |
+
+**Example Request:**
+```bash
+curl -X PATCH http://localhost:5000/api/v1/applicants/draft/770e8400-.../batch-2 \
+  -F "college=College of Engineering" \
+  -F "program=BS Computer Engineering" \
+  -F "section=CPE-3A" \
+  -F "campus=SAN_BARTOLOME_MAIN" \
+  -F "office=SECRETARIAT_OFFICE" \
+  -F "certificateOfRegistration=@cor.pdf" \
+  -F "curriculumVitae=@cv.pdf"
+```
+
+**Example Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "currentStep": 2
+  },
+  "message": "Batch 2 saved. Ready for final submission."
+}
+```
+
+**Status Codes:**
+- `200`: Batch saved
+- `400`: Validation error, file too large, or draft is at wrong step
+- `404`: Draft not found
+- `429`: Rate limit exceeded
+- `500`: Internal server error
+
+---
+
+### 6.4 Submit Draft (Batch 3 — Final)
+
+**Description:**  
+Final step. Saves additional information, creates the real `Applicant` record from all accumulated draft data, sends the setup link email, and deletes the draft. The draft must be at step 2.
+
+**Method:** `POST`  
+**Path:** `/api/v1/applicants/draft/:draftId/submit`  
+**Content-Type:** `application/json`
+
+**Request Body:**
+```json
+{
+  "interestsSkillsHobbies": "Programming, photography, badminton",
+  "organizationHistory": "Former VP of CCS Student Government",
+  "portfolio": "https://janesmith.dev",
+  "githubOrProjectLinks": "https://github.com/janesmith",
+  "previousWorksAchievements": "Dean's Lister AY 2024-2025"
+}
+```
+
+**Example Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "660e8400-e29b-41d4-a716-446655440001",
+    "status": "PENDING_REVIEW"
+  },
+  "message": "Application submitted successfully. Check your email for the setup link."
+}
+```
+
+**Status Codes:**
+- `201`: Applicant created
+- `400`: Validation error, or draft is at wrong step
+- `404`: Draft not found
+- `409`: Conflict (email already exists)
+- `429`: Rate limit exceeded
+- `500`: Internal server error
+
+---
 
 All validation errors return `400` with the following shape:
 
