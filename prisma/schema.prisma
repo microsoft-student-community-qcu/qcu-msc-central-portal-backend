@@ -26,6 +26,7 @@ enum UserRole {
 enum ApplicantStatus {
   APPROVED
   PENDING_REVIEW
+  FOR_INTERVIEW
   REJECTED
   CANCELLED
   RESUBMIT
@@ -156,12 +157,11 @@ model Applicant {
   dateOfBirth                 DateTime
   placeOfBirth                String
   gender                      Gender
-  membershipRole              String
+  office                      Office
   certificateOfRegistration   String          // Filesystem path to uploaded Certificate of Registration
   curriculumVitae             String          // Filesystem path to uploaded Curriculum Vitae
   houseAddress                String
   cellphoneNumber             String
-  qcuMscEmail                 String          @unique
   facebookLink                String
   interestsSkillsHobbies      String          @db.Text
   organizationHistory         String          @db.Text

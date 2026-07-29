@@ -83,10 +83,9 @@ export async function createApplicant(
       dateOfBirth,
       placeOfBirth,
       gender,
-      membershipRole,
+      office,
       houseAddress,
       cellphoneNumber,
-      qcuMscEmail,
       facebookLink,
       interestsSkillsHobbies,
       organizationHistory,
@@ -154,12 +153,11 @@ export async function createApplicant(
         dateOfBirth: new Date(dateOfBirth),
         placeOfBirth,
         gender,
-        membershipRole,
+        office,
         certificateOfRegistration: certificateOfRegistrationPath,
         curriculumVitae: curriculumVitaePath,
         houseAddress,
         cellphoneNumber,
-        qcuMscEmail: qcuMscEmail ?? email,
         facebookLink,
         interestsSkillsHobbies,
         organizationHistory,
@@ -196,10 +194,9 @@ export async function createApplicant(
         dateOfBirth: applicant.dateOfBirth,
         placeOfBirth: applicant.placeOfBirth,
         gender: applicant.gender,
-        membershipRole: applicant.membershipRole,
+        office: applicant.office,
         houseAddress: applicant.houseAddress,
         cellphoneNumber: applicant.cellphoneNumber,
-        qcuMscEmail: applicant.qcuMscEmail,
         facebookLink: applicant.facebookLink,
         interestsSkillsHobbies: applicant.interestsSkillsHobbies,
         organizationHistory: applicant.organizationHistory,
@@ -223,15 +220,6 @@ export async function createApplicant(
       "code" in error &&
       (error as any).code === "P2002"
     ) {
-      const target = (error as any).meta?.target as string[] | undefined;
-      if (target?.includes("qcuMscEmail")) {
-        res.status(409).json({
-          success: false,
-          message:
-            "An application with this QCU MSC email already exists. Please use a different email or contact support.",
-        });
-        return;
-      }
       res.status(409).json({
         success: false,
         message:
@@ -265,10 +253,9 @@ function formatApplicantResponse(applicant: Applicant) {
     dateOfBirth: applicant.dateOfBirth,
     placeOfBirth: applicant.placeOfBirth,
     gender: applicant.gender,
-    membershipRole: applicant.membershipRole,
+    office: applicant.office,
     houseAddress: applicant.houseAddress,
     cellphoneNumber: applicant.cellphoneNumber,
-    qcuMscEmail: applicant.qcuMscEmail,
     facebookLink: applicant.facebookLink,
     interestsSkillsHobbies: applicant.interestsSkillsHobbies,
     organizationHistory: applicant.organizationHistory,

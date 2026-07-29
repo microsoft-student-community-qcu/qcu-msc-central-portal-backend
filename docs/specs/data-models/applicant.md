@@ -23,6 +23,7 @@ enum Campus {
 enum ApplicantStatus {
   APPROVED
   PENDING_REVIEW
+  FOR_INTERVIEW
   REJECTED
   CANCELLED
   RESUBMIT
@@ -42,13 +43,12 @@ model Applicant {
   dateOfBirth                 DateTime
   placeOfBirth                String
   gender                      Gender
-  membershipRole              String
+  office                      Office
   certificateOfRegistration   String
   curriculumVitae             String
   houseAddress                String
   cellphoneNumber             String
-  qcuMscEmail                 String          @unique
-  facebookLink                String
+  facebookLink                 String
   interestsSkillsHobbies      String          @db.Text
   organizationHistory         String          @db.Text
   portfolio                   String?
@@ -83,7 +83,7 @@ model Applicant {
 | `dateOfBirth` | DateTime | Yes | ISO date |
 | `placeOfBirth` | String | Yes | Max 300 chars |
 | `gender` | Gender (enum) | Yes | `MALE`, `FEMALE`, `LGBTQIA`, `PREFER_NOT_TO_SAY` |
-| `membershipRole` | String | Yes | Max 200 chars |
+| `office` | Office (enum) | Yes | `SECRETARIAT_OFFICE`, `RELATIONS_OFFICE`, `FINANCE_OFFICE`, `LOGISTICS_OFFICE`, `CREATIVES_OFFICE`, `MANAGEMENT_AND_DEVELOPMENT_OFFICE`, `STARTUP_DEVELOPERS_OFFICE` |
 
 ### Contact Information
 
@@ -91,7 +91,6 @@ model Applicant {
 |-------|------|----------|------------|
 | `houseAddress` | String | Yes | Max 500 chars |
 | `cellphoneNumber` | String | Yes | 11 digits starting with `09` (`^09\d{9}$`) |
-| `qcuMscEmail` | String | Yes, unique | Must end with `@qcu.edu.ph` |
 | `facebookLink` | String | Yes | Valid URL |
 
 ### Additional Information
@@ -135,7 +134,7 @@ Sent as file fields in `multipart/form-data` alongside the above text fields:
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `status` | ApplicantStatus | Yes | `PENDING_REVIEW`, `APPROVED`, `REJECTED`, `CANCELLED`, `RESUBMIT` |
+| `status` | ApplicantStatus | Yes | `PENDING_REVIEW`, `FOR_INTERVIEW`, `APPROVED`, `REJECTED`, `CANCELLED`, `RESUBMIT` |
 
 ### System Fields
 
@@ -154,13 +153,11 @@ Sent as file fields in `multipart/form-data` alongside the above text fields:
 ## Indexes
 
 - `email` — unique
-- `qcuMscEmail` — unique
 - `userId` — unique
 
 ## Notes
 
-- The `email` field is the user's account/login email, not the QCU email
-- `qcuMscEmail` is a separate field for the official QCU MSC correspondence address
+- The `email` field is the user's account/login email
 - File presence is validated via injected `_certificateOfRegistration` / `_curriculumVitae` literal fields in Zod
 - File uploads are stored in Azure Blob Storage (`documents` container)
 - `manual_application` is **never client-settable** — derived server-side from OCR session's `manualRequired` flag

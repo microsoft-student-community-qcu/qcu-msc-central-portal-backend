@@ -18,12 +18,24 @@ export type UserRole = "APPLICANT" | "MEMBER" | "ADMIN_HR" | "ADMIN_LOGISTICS";
 /**
  * Strict union of all applicant pipeline statuses.
  */
-export type ApplicantStatus = "APPROVED" | "PENDING_REVIEW" | "REJECTED" | "CANCELLED" | "RESUBMIT";
+export type ApplicantStatus = "APPROVED" | "PENDING_REVIEW" | "FOR_INTERVIEW" | "REJECTED" | "CANCELLED" | "RESUBMIT";
 
 /**
  * Strict union of gender options for membership application.
  */
 export type Gender = "MALE" | "FEMALE" | "LGBTQIA" | "PREFER_NOT_TO_SAY";
+
+/**
+ * Strict union of offices a member can apply to join.
+ */
+export type Office =
+  | "SECRETARIAT_OFFICE"
+  | "RELATIONS_OFFICE"
+  | "FINANCE_OFFICE"
+  | "LOGISTICS_OFFICE"
+  | "CREATIVES_OFFICE"
+  | "MANAGEMENT_AND_DEVELOPMENT_OFFICE"
+  | "STARTUP_DEVELOPERS_OFFICE";
 
 /**
  * Strict union of QCU campus locations.
@@ -105,7 +117,7 @@ export interface Applicant {
   dateOfBirth: Date;
   placeOfBirth: string;
   gender: Gender;
-  membershipRole: string;
+  office: Office;
   /** Filesystem path to uploaded Certificate of Registration. */
   certificateOfRegistration: string;
   /** Filesystem path to uploaded Curriculum Vitae. */
@@ -113,7 +125,6 @@ export interface Applicant {
   /** Contact Information */
   houseAddress: string;
   cellphoneNumber: string;
-  qcuMscEmail: string;
   facebookLink: string;
   /** Additional Information */
   interestsSkillsHobbies: string;
