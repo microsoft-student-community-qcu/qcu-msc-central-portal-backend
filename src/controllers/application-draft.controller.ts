@@ -37,6 +37,15 @@ export async function createDraft(req: Request, res: Response): Promise<void> {
 
     const { lastName, firstName, middleInitial, email, ocrSessionId } = parsed.data;
 
+    const existing = await prisma.applicant.findUnique({ where: { email } });
+    if (existing) {
+      res.status(409).json({
+        success: false,
+        message: "An application with this email has already been submitted.",
+      });
+      return;
+    }
+
     const session = ocrStore.getSession(ocrSessionId);
     if (!session) {
       res.status(400).json({
