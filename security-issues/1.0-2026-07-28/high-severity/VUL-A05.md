@@ -48,3 +48,16 @@ const isSafeUrl = (url: string) => /^https:\/\//i.test(url);
 ```
 
 **References:** [CWE-79](https://cwe.mitre.org/data/definitions/79.html) — [OWASP XSS Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html)
+
+---
+
+## Remediation Status
+
+| Field | Value |
+|---|---|
+| Status | **Fixed (Backend)** |
+| Backend Fix | `src/schemas/applicant.schema.ts` — added `.startsWith("https://")` to facebookLink, portfolio, githubOrProjectLinks |
+| Frontend Fix | Separate PR in `msc-qcu-admin-frontend` — sanitize URL rendering in `ApplicantDetails.tsx` |
+| Branch | `fix/VUL-A05-sanitize-user-urls` |
+| Target | `security-1.0` |
+| Date | 2026-07-30 |
