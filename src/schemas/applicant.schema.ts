@@ -134,9 +134,10 @@ export const createApplicantSchema = z.object({
       "Cellphone number must be 11 digits starting with 09 (e.g., 09123456789)"
     ),
 
-  facebookLink: z
-    .string({ message: "Facebook link is required" })
-    .url("Facebook link must be a valid URL (e.g., https://facebook.com/...)"),
+ facebookLink: z
+  .string({ message: "Facebook link is required" })
+  .url("Facebook link must be a valid URL (e.g., https://facebook.com/...)")
+  .startsWith("https://", "Facebook link must use HTTPS (e.g., https://facebook.com/...)"),
 
   // ── Additional Information ──────────────────────────────────────────
   interestsSkillsHobbies: z
@@ -148,15 +149,17 @@ export const createApplicantSchema = z.object({
     .min(1, "Organization history cannot be empty"),
 
   // ── Supporting Requirements (Optional) ──────────────────────────────
-  portfolio: z
-    .string({ message: "Portfolio must be a text value" })
-    .url("Portfolio must be a valid URL (e.g., https://...)")
-    .optional(),
+ portfolio: z
+  .string({ message: "Portfolio must be a text value" })
+  .url("Portfolio must be a valid URL (e.g., https://...)")
+  .startsWith("https://", "Portfolio link must use HTTPS (e.g., https://...)")
+  .optional(),
 
-  githubOrProjectLinks: z
-    .string({ message: "GitHub or project links must be a text value" })
-    .url("GitHub or project links must be a valid URL (e.g., https://github.com/...)")
-    .optional(),
+ githubOrProjectLinks: z
+  .string({ message: "GitHub or project links must be a text value" })
+  .url("GitHub or project links must be a valid URL (e.g., https://github.com/...)")
+  .startsWith("https://", "GitHub or project links must use HTTPS (e.g., https://github.com/...)")
+  .optional(),
 
   previousWorksAchievements: z
     .string({ message: "Previous works or achievements must be a text value" })
@@ -274,9 +277,10 @@ export const updateApplicantSchema = z.object({
     .optional(),
 
   facebookLink: z
-    .string({ message: "Facebook link must be a text value" })
-    .url("Facebook link must be a valid URL (e.g., https://facebook.com/...)")
-    .optional(),
+  .string({ message: "Facebook link must be a text value" })
+  .url("Facebook link must be a valid URL (e.g., https://facebook.com/...)")
+  .startsWith("https://", "Facebook link must use HTTPS (e.g., https://facebook.com/...)")
+  .optional(),
 
   interestsSkillsHobbies: z
     .string({ message: "Interests, skills, and hobbies must be a text value" })
