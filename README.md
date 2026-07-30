@@ -89,6 +89,7 @@ All environment variables are validated via Zod in `src/config/env.ts` at startu
 qcu-msc-central-portal-backend/
 ├── docs/           # API docs, guides, specs
 ├── prisma/         # Schema + migrations
+├── security-issues/ # Versioned security assessment reports & vuln docs
 ├── src/            # Application source
 ├── .env.example
 ├── AGENTS.md
@@ -103,6 +104,7 @@ qcu-msc-central-portal-backend/
 | Resource | Description |
 | :--- | :--- |
 | [docs/](docs/) | API documentation, data models, workflow guides, flow diagrams, PRD |
+| [security-issues/](security-issues/) | Versioned security assessment reports and vulnerability documentation |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution workflow, branch strategy, PR process |
 | [AGENTS.md](AGENTS.md) | Engineering standards: code style, architecture, API rules, database, testing |
 
