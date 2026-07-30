@@ -65,3 +65,4 @@ Event (1) ──→ (Many) Registration
 | 2026-06-27 | Synced with PRD-V1 4-role model; added `Guest` behavioral role |
 | 2026-06-28 | Added `manual_application` field to Applicant; documented two-step OCR flow |
 | 2026-07-02 | Major Applicant model expansion: 22 new fields across Personal Info, Contact Info, Additional Info, Supporting Requirements; new `Gender` and `Campus` enums; data models split into per-entity files |
+| 2026-07-29 | Added auto-link-on-sign-in fallback: both sign-in endpoints now auto-link unmatched applicants by email |

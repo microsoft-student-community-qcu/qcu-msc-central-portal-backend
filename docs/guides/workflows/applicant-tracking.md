@@ -129,5 +129,5 @@ CANCELLED (applicant or admin, from any status other than APPROVED)
 **Key Decision Points:**
 - Only ADMIN_HR can update status
 - Setting status to `APPROVED` **automatically** updates the linked `User.role` to `MEMBER` (server-side)
-- Applicant must first be linked to a User account via `POST /api/v1/users/link-applicant` before approval
+- Applicant must be linked to a User account before approval. Linking happens primarily via `POST /api/v1/users/link-applicant` after sign-up. As a fallback, both sign-in endpoints auto-link unlinked applicants by matching email — simply logging in reconnects a previously unlinked application.
 - Email notifications sent at each status transition

@@ -52,6 +52,9 @@ Frontend calls POST /api/v1/users/link-applicant
   Body: { "applicantId": "abc-123" }
 	↓
 Backend sets Applicant.userId = User.id
+  Note: If link-applicant is never called (network error, page refresh, etc.),
+  the auto-link-on-sign-in fallback will reconnect the accounts the next time
+  the user signs in — see step 5 for details.
 	↓
 Admin approves application (PATCH /api/v1/applicants/:id/status)
   Body: { "status": "APPROVED" }
@@ -183,17 +186,18 @@ Juan is a QCU student who wants to join the Microsoft Student Community. Here's 
 │ Response back to frontend:                                           │
 │ { "token": "session-token-abc", "user": { "id": "user-1", ... } }  │
 │                                                                      │
-│  ⚠ The Applicant record (app-1) still has userId: null              │
-│    → No connection between Applicant and User yet                   │
-│    → If admin approves NOW, the role won't upgrade to MEMBER        │
+ │  The Applicant record (app-1) still has userId: null at this point.  │
+│  The link-applicant call (next step) or auto-link-on-sign-in          │
+│  fallback will connect them.                                          │
 └──────────────────────────────────────────────────────────────────────┘
                                   │
                                   ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│ 5. LINK APPLICANT (bridge the gap)                                  │
+│ 5. LINK APPLICANT (primary path) + Auto-link fallback               │
 │                                                                      │
-│ The frontend MUST call linkApplicant right after successful sign-up. │
-│ This is the step that connects the User account to the Applicant.   │
+│ The frontend should call linkApplicant right after successful        │
+│ sign-up. This is the primary path to connect the User account to    │
+│ the Applicant record.                                                │
 │                                                                      │
 │ Frontend calls: POST /api/v1/users/link-applicant                   │
 │   Authorization: Bearer session-token-abc                            │
@@ -212,6 +216,17 @@ Juan is a QCU student who wants to join the Microsoft Student Community. Here's 
 │ Database state now:                                                  │
 │   Applicant { id: "app-1", userId: "user-1" }  ← CONNECTED ✓       │
 │   User      { id: "user-1", role: "APPLICANT" }                     │
+│                                                                      │
+│ ════════════════════════════════════════════════════════════════════ │
+│ Auto-link fallback:                                                  │
+│ If link-applicant was never called (network error, page refresh,     │
+│ browser crash), the user can simply sign in again. Both sign-in      │
+│ endpoints (student and admin) automatically check:                   │
+│   "Does this user have an Applicant record with a matching email     │
+│    that is not yet linked?"                                          │
+│ If yes, they link it. This recovery is invisible to the user —      │
+│ they just log in as normal.                                          │
+│ ════════════════════════════════════════════════════════════════════ │
 └──────────────────────────────────────────────────────────────────────┘
                                   │
                                   ▼
@@ -257,11 +272,31 @@ If `applicant.userId` is null (because link-applicant was never called), the rol
 
 `linkApplicant` is the bridge that connects the two records so the auto-promotion works.
 
+### Auto-Link Recovery on Sign-In
+
+Because link-applicant is called from the frontend and can fail (network timeouts, page refreshes, browser crashes), both sign-in endpoints (`POST /api/v1/auth/student/sign-in` and `POST /api/v1/auth/admin/sign-in`) have a safety net:
+
+On every successful sign-in (status 200), the backend parses the response body, extracts the user's `email` and `id`, and runs:
+
+```typescript
+await prisma.applicant.updateMany({
+  where: { email, userId: null },
+  data: { userId },
+});
+```
+
+This is **idempotent**:
+- If already linked → `where: { email, userId: null }` matches zero rows → no-op
+- If not linked → `updateMany` sets `userId`, connecting the records
+- `email` is unique on Applicant → at most one match
+
+The recovery requires no special action from the user — they just log in again.
+
 ---
 
 ### What the Frontend Must Do
 
-After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up/email` and receives a session token, the frontend **must immediately** call `POST /api/v1/users/link-applicant` before redirecting the user.
+After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up/email` and receives a session token, the frontend **should** call `POST /api/v1/users/link-applicant` before redirecting the user. If this call fails or is skipped, the auto-link-on-sign-in fallback will recover — the user just needs to sign in again.
 
 #### Exact Sequence on `/auth/setup-password`
 
@@ -296,7 +331,7 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
 
 6. Save the token (sessionStorage or cookie for redirect)
 
-7. Call #3 — Link Applicant (REQUIRED — do NOT skip):
+7. Call #3 — Link Applicant (RECOMMENDED — fallback exists):
    POST /api/v1/users/link-applicant
    Authorization: Bearer abc...         // token from step 5
    Body: { "applicantId": "app-1" }     // from validation response (step 2)
@@ -307,10 +342,11 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
    → They can now view their application status
    → When admin approves, their role will auto-upgrade to MEMBER
 
-⚠ If step 7 fails or is skipped:
-  • Applicant and User stay disconnected
-  • Admin approval won't promote User to MEMBER
-  • User is stuck as APPLICANT indefinitely
+ℹ If step 7 fails or is skipped:
+  • The auto-link-on-sign-in fallback will recover automatically
+  • The next time the user signs in, the backend will find the unlinked
+    Applicant by email and connect it
+  • No manual intervention needed — just logging in fixes it
 ```
 
 #### Error Handling
