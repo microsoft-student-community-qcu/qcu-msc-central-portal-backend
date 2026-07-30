@@ -253,6 +253,7 @@ export async function linkApplicant(req: Request, res: Response): Promise<void> 
         firstName: applicant.firstName,
         lastName: applicant.lastName,
         middleInitial: applicant.middleInitial,
+        emailVerified: true,
       },
     });
 
