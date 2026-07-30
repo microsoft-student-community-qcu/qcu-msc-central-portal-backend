@@ -19,6 +19,7 @@ import {
   sendManualIdApprovedEmail,
   sendManualIdRejectedEmail,
 } from "../services/email.service";
+import { validateFileMimeType } from "../utils/fileValidation";
 
 /**
  * POST /api/v1/applicants
@@ -96,7 +97,28 @@ export async function createApplicant(
     let { studentId, ocrSessionId } = parsed.data;
 
     // ── 3. Handle file uploads ────────────────────────────────────────────
+    // ── 3. Handle file uploads ────────────────────────────────────────────
     const uploadedFiles = files as NonNullable<typeof files>;
+
+    // Validate magic bytes — prevents disguised HTML/script uploads (VUL-010)
+    const corValidation = await validateFileMimeType(
+      uploadedFiles.certificateOfRegistration[0].buffer,
+      "Certificate of Registration"
+    );
+    if (!corValidation.valid) {
+      res.status(400).json({ success: false, message: corValidation.message });
+      return;
+    }
+
+    const cvValidation = await validateFileMimeType(
+      uploadedFiles.curriculumVitae[0].buffer,
+      "Curriculum Vitae"
+    );
+    if (!cvValidation.valid) {
+      res.status(400).json({ success: false, message: cvValidation.message });
+      return;
+    }
+
     const certificateOfRegistrationPath = await saveDocument(
       uploadedFiles.certificateOfRegistration[0].buffer,
       `cor_${Date.now()}_${uploadedFiles.certificateOfRegistration[0].originalname}`,
@@ -859,6 +881,16 @@ export async function resubmitApplication(
     }
 
     if (files?.certificateOfRegistration?.length && unlocked.includes("certificateOfRegistration")) {
+      // Validate magic bytes (VUL-010)
+      const corValidation = await validateFileMimeType(
+        files.certificateOfRegistration[0].buffer,
+        "Certificate of Registration"
+      );
+      if (!corValidation.valid) {
+        res.status(400).json({ success: false, message: corValidation.message });
+        return;
+      }
+
       const path = await saveDocument(
         files.certificateOfRegistration[0].buffer,
         `cor_${Date.now()}_${files.certificateOfRegistration[0].originalname}`,
@@ -868,6 +900,16 @@ export async function resubmitApplication(
     }
 
     if (files?.curriculumVitae?.length && unlocked.includes("curriculumVitae")) {
+      // Validate magic bytes (VUL-010)
+      const cvValidation = await validateFileMimeType(
+        files.curriculumVitae[0].buffer,
+        "Curriculum Vitae"
+      );
+      if (!cvValidation.valid) {
+        res.status(400).json({ success: false, message: cvValidation.message });
+        return;
+      }
+
       const path = await saveDocument(
         files.curriculumVitae[0].buffer,
         `cv_${Date.now()}_${files.curriculumVitae[0].originalname}`,
@@ -952,16 +994,16 @@ export async function serveDocument(req: Request, res: Response): Promise<void> 
       res.status(404).json({ success: false, message: "Document not found" });
       return;
     }
-    
+
     let finalContentType = contentType || "application/octet-stream";
     if (finalContentType === "application/octet-stream") {
       finalContentType = getContentTypeFromFilename(filename);
     }
-    
+
     res.setHeader("Content-Type", finalContentType);
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(filename)}"`);
     if (contentLength) res.setHeader("Content-Length", contentLength);
-    
+
     stream.pipe(res);
   } catch (error: any) {
     console.error("Failed to serve document:", error);
@@ -978,16 +1020,16 @@ export async function serveImage(req: Request, res: Response): Promise<void> {
       res.status(404).json({ success: false, message: "Image not found" });
       return;
     }
-    
+
     let finalContentType = contentType || "application/octet-stream";
     if (finalContentType === "application/octet-stream") {
       finalContentType = getContentTypeFromFilename(filename);
     }
-    
+
     res.setHeader("Content-Type", finalContentType);
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(filename)}"`);
     if (contentLength) res.setHeader("Content-Length", contentLength);
-    
+
     stream.pipe(res);
   } catch (error: any) {
     console.error("Failed to serve image:", error);
