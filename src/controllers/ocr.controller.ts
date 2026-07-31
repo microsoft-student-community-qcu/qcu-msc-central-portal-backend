@@ -6,8 +6,7 @@ import { saveImage } from "../utils/imageStorage";
 import { env } from "../config/env";
 import { prisma } from "../config/database";
 import { signSetupToken } from "../utils/token";
-
-const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png"];
+import { validateFileMimeType } from "../utils/fileValidation";
 
 export async function verifyOcr(req: Request, res: Response): Promise<void> {
   try {
@@ -21,14 +20,14 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    const imageValidation = await validateFileMimeType(file.buffer, "Student ID image");
+    if (!imageValidation.valid) {
       res.status(400).json({
         success: false,
-        message: "Image must be JPEG or PNG",
+        message: imageValidation.message,
       });
       return;
     }
-
     const result = await extractFields(file.buffer, file.originalname);
 
     if (result.extracted && result.studentId) {

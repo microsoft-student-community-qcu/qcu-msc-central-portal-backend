@@ -2,6 +2,10 @@
 
 ## 3. Security Fixes
 
+### **VUL-016 — Mass Assignment Privilege Escalation on User Sign-Up** (2026-07-30)
+- **Root Cause:** The sign-up handler at `src/app.ts` forwarded raw `req.body` to Better Auth, allowing a malicious client to inject `role: "ADMIN_HR"` and escalate privileges at account creation.
+- **Fix:** Replaced `req.body.name = ...` with a full clean body reconstruction from Zod-validated `result.data`, omitting the `role` field entirely. Only `email`, `password`, `name`, `studentId`, and `middleInitial` are now forwarded to Better Auth.
+
 ### **VUL-004 — Account Pre-Hijacking via Unenforced Setup Token Validation** (2026-07-30)
 - **Root Cause:** `POST /api/auth/sign-up/email` accepted account registrations without requiring a setup token. An attacker who knew a victim's email could pre-register before the victim used their setup link.
 - **Fix:** Added `setupToken` to the Zod `signUpSchema`. Before forwarding to Better Auth, the handler verifies the JWT via `verifySetupToken()`, checks that the email matches the token payload, and confirms the applicant exists with `userId: null` (not already linked).
