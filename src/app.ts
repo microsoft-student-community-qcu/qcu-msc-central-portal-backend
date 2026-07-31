@@ -11,6 +11,7 @@ import { initSentry, captureDatabaseError } from "./config/sentry";
 import ocrRoutes from "./routes/ocr.routes";
 import applicantRoutes from "./routes/applicant.routes";
 import { resendSetupLink } from "./controllers/applicant.controller";
+import { verifySetupToken } from "./utils/token";
 import eventRoutes from "./routes/event.routes";
 import userRoutes from "./routes/user.routes";
 
@@ -86,6 +87,7 @@ const signUpSchema = z.object({
     .regex(/^[A-Za-z]\.?$/, "Middle initial must be a single letter, optionally followed by a dot")
     .optional(),
   studentId: z.string({ message: "Student ID is required" }),
+  setupToken: z.string({ message: "Setup token is required" }).min(1, "Setup token is required"),
 });
 
 const signInSchema = z.object({
@@ -129,6 +131,55 @@ app.use("/api/auth", async (req, res, next) => {
           res.status(400).json({
             success: false,
             message: "Student ID already taken",
+          });
+          return;
+        }
+
+        // Validate setup token — prevents account pre-hijacking (see VUL-004).
+        // Every account creation must be authorized by a valid one-time
+        // setup token obtained through the approved applicant flow.
+        const tokenPayload = await verifySetupToken(result.data.setupToken);
+        if (!tokenPayload) {
+          res.status(400).json({
+            success: false,
+            message: "Invalid or expired setup link. Please request a new one.",
+          });
+          return;
+        }
+
+        if (tokenPayload.email !== result.data.email) {
+          res.status(400).json({
+            success: false,
+            message: "Email does not match the setup link.",
+          });
+          return;
+        }
+
+        const applicant = await prisma.applicant.findUnique({
+          where: { id: tokenPayload.applicantId },
+          select: { userId: true, email: true },
+        });
+
+        if (!applicant) {
+          res.status(400).json({
+            success: false,
+            message: "Setup link is invalid. Please contact support.",
+          });
+          return;
+        }
+
+        if (applicant.userId !== null) {
+          res.status(400).json({
+            success: false,
+            message: "This setup link has already been used.",
+          });
+          return;
+        }
+
+        if (applicant.email !== result.data.email) {
+          res.status(400).json({
+            success: false,
+            message: "Email does not match the applicant record.",
           });
           return;
         }
