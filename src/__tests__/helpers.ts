@@ -85,6 +85,23 @@ export const mockRegistrationRecord = {
   updatedAt: pastDate,
 };
 
+// ── Real File Fixtures ────────────────────────────────────────────────────
+// Real minimal file bytes so magic-byte validation (VUL-010) accepts them.
+// Fake buffers like Buffer.from("fake jpeg") fail file-type detection.
+
+export const pngFixture = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64"
+);
+
+export const pdfFixture = Buffer.from(
+  "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF"
+);
+
+export const gifFixture = Buffer.from(
+  "GIF89a\u0001\u0000\u0001\u0000\u0080\u0000\u0000\u0000\u0000\u0000\u00ff\u00ff\u00ff\u0021\u00f9\u0004\u0000\u0000\u0000\u0000\u0000\u002c\u0000\u0000\u0000\u0000\u0001\u0000\u0001\u0000\u0000\u0002\u0002\u0044\u0001\u0000\u003b"
+);
+
 // ── Auth Mock Factories ───────────────────────────────────────────────────
 // Each test file creates its own vi.fn() instances and wires them into
 // vi.mock('../routes/authMiddleware', ...).  The factory functions below

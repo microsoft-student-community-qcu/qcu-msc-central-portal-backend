@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import { extractFields } from "../services/ocr.service";
+import { pngFixture, gifFixture } from "./helpers";
 import app from "../app";
 
 describe("POST /api/v1/ocr/verify", () => {
@@ -21,13 +22,13 @@ describe("POST /api/v1/ocr/verify", () => {
   it("returns 400 for non-JPEG/PNG file", async () => {
     const res = await request(app)
       .post("/api/v1/ocr/verify")
-      .attach("image", Buffer.from("fake image data"), {
+      .attach("image", gifFixture, {
         filename: "test.gif",
         contentType: "image/gif",
       });
 
     expect(res.status).toBe(400);
-    expect(res.body.message).toContain("Image must be JPEG or PNG");
+    expect(res.body.message).toContain("Invalid file type (image/gif)");
   });
 
   it("returns 200 with OCR data on successful extraction", async () => {
@@ -41,7 +42,7 @@ describe("POST /api/v1/ocr/verify", () => {
 
     const res = await request(app)
       .post("/api/v1/ocr/verify")
-      .attach("image", Buffer.from("fake jpeg data"), {
+      .attach("image", pngFixture, {
         filename: "id.jpg",
         contentType: "image/jpeg",
       });
@@ -64,7 +65,7 @@ describe("POST /api/v1/ocr/verify", () => {
 
     const res = await request(app)
       .post("/api/v1/ocr/verify")
-      .attach("image", Buffer.from("fake jpeg data"), {
+      .attach("image", pngFixture, {
         filename: "id.jpg",
         contentType: "image/jpeg",
       });
@@ -88,7 +89,7 @@ describe("POST /api/v1/ocr/verify", () => {
     for (let i = 0; i < 3; i++) {
       await request(app)
         .post("/api/v1/ocr/verify")
-        .attach("image", Buffer.from("fake jpeg data"), {
+        .attach("image", pngFixture, {
           filename: "id.jpg",
           contentType: "image/jpeg",
         });
@@ -96,7 +97,7 @@ describe("POST /api/v1/ocr/verify", () => {
 
     const res = await request(app)
       .post("/api/v1/ocr/verify")
-      .attach("image", Buffer.from("fake jpeg data"), {
+      .attach("image", pngFixture, {
         filename: "id.jpg",
         contentType: "image/jpeg",
       });
@@ -119,7 +120,7 @@ describe("POST /api/v1/ocr/verify", () => {
     for (let i = 0; i < 11; i++) {
       await request(app)
         .post("/api/v1/ocr/verify")
-        .attach("image", Buffer.from("fake jpeg data"), {
+        .attach("image", pngFixture, {
           filename: "id.jpg",
           contentType: "image/jpeg",
         });
@@ -128,7 +129,7 @@ describe("POST /api/v1/ocr/verify", () => {
     // The 11th should be rate-limited
     const res = await request(app)
       .post("/api/v1/ocr/verify")
-      .attach("image", Buffer.from("fake jpeg data"), {
+      .attach("image", pngFixture, {
         filename: "id.jpg",
         contentType: "image/jpeg",
       });
