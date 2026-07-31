@@ -39,6 +39,6 @@ describe("404 handler", () => {
   it("returns 404 for unknown routes", async () => {
     const res = await request(app).get("/api/v1/nonexistent");
     expect(res.status).toBe(404);
-    expect(res.body).toEqual({ success: false, error: "Endpoint not found" });
+    expect(res.body).toEqual({ success: false, message: "Endpoint not found" });
   });
 });
