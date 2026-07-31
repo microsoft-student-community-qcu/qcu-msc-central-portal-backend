@@ -97,7 +97,6 @@ export async function createApplicant(
     let { studentId, ocrSessionId } = parsed.data;
 
     // ── 3. Handle file uploads ────────────────────────────────────────────
-    // ── 3. Handle file uploads ────────────────────────────────────────────
     const uploadedFiles = files as NonNullable<typeof files>;
 
     // Validate magic bytes — prevents disguised HTML/script uploads (VUL-010)
