@@ -133,8 +133,16 @@ app.use("/api/auth", async (req, res, next) => {
           return;
         }
 
-        // Construct full name server-side from split fields (Better Auth requires `name`)
-        req.body.name = `${result.data.firstName} ${result.data.lastName}`.trim();
+        // Reconstruct clean request body with only safe fields.
+        // Never forward raw req.body — it may contain injected fields
+        // like `role` that bypass Zod validation (see VUL-016).
+        req.body = {
+          email: result.data.email,
+          password: result.data.password,
+          name: `${result.data.firstName} ${result.data.lastName}`.trim(),
+          studentId: result.data.studentId,
+          middleInitial: result.data.middleInitial,
+        };
       }
 
       // Pre-validate sign-in body
