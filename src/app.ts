@@ -10,6 +10,7 @@ import * as Sentry from "@sentry/node";
 import { initSentry, captureDatabaseError } from "./config/sentry";
 import ocrRoutes from "./routes/ocr.routes";
 import applicantRoutes from "./routes/applicant.routes";
+import applicationDraftRoutes from "./routes/application-draft.routes";
 import { resendSetupLink } from "./controllers/applicant.controller";
 import { verifySetupToken } from "./utils/token";
 import eventRoutes from "./routes/event.routes";
@@ -482,6 +483,7 @@ app.use("/api/v1/users", userRoutes);
 
 // Applicant routes
 app.use("/api/v1/applicants", applicantRoutes);
+app.use("/api/v1/applicants", applicationDraftRoutes);
 app.use("/api/v1/events", eventRoutes);
 
 /**

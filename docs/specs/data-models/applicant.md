@@ -162,3 +162,5 @@ Sent as file fields in `multipart/form-data` alongside the above text fields:
 - File uploads are stored in Azure Blob Storage (`documents` container)
 - `manual_application` is **never client-settable** — derived server-side from OCR session's `manualRequired` flag
 - OCR session ID (`ocrSessionId`) is stored in-memory (not in DB) — see OCR docs for details
+- Applicants may also be created via the **multi-step draft** flow (4 batch endpoints under `/api/v1/applicants/draft`). See [Applicants API](../../api/v1/applicants.md#6-multi-step-application-draft) for details.
+- The `Office` enum is defined in the Prisma schema and used by `ApplicationDraft.office`.

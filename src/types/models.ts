@@ -187,3 +187,40 @@ export interface Registration {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// ---------------------------------------------------------------------------
+// ApplicationDraft
+// ---------------------------------------------------------------------------
+
+export interface ApplicationDraft {
+  id: string;
+  currentStep: number;
+  ocrSessionId: string;
+  lastName: string | null;
+  firstName: string | null;
+  middleInitial: string | null;
+  email: string | null;
+  studentId: string | null;
+  idImagePath: string | null;
+  dateOfBirth: Date | null;
+  placeOfBirth: string | null;
+  gender: Gender | null;
+  cellphoneNumber: string | null;
+  houseAddress: string | null;
+  facebookLink: string | null;
+  college: string | null;
+  program: string | null;
+  section: string | null;
+  campus: Campus | null;
+  office: Office | null;
+  certificateOfRegistration: string | null;
+  curriculumVitae: string | null;
+  interestsSkillsHobbies: string | null;
+  organizationHistory: string | null;
+  portfolio: string | null;
+  githubOrProjectLinks: string | null;
+  previousWorksAchievements: string | null;
+  manual_application: boolean | null;
+  createdAt: Date;
+  updatedAt: Date;
+}

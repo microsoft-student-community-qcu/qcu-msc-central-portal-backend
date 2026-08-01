@@ -27,7 +27,16 @@ The applicant pipeline is managed exclusively by ADMIN_HR users. Applications ar
    - Frontend reveals the manual entry form (hidden by default).
    - User uploads a Student ID image and manually completes the entire form.
    - Application is flagged as `{ "manual_application": true }`.
-7. User submits the application via `POST /api/v1/applicants` (multipart/form-data) with the `ocrSessionId`, all text fields, and the two required file uploads.
+7. User submits the application via one of two methods:
+   - **Single submission** (legacy): `POST /api/v1/applicants` (multipart/form-data) with all fields, files, and `ocrSessionId` at once.
+   - **Multi-step draft** (recommended): 4 sequential endpoints that persist and validate each step:
+     - `POST /api/v1/applicants/draft` — Batch 0: name, email, ocrSessionId → returns `draftId`
+     - `PATCH /api/v1/applicants/draft/:draftId/batch-1` — Batch 1: personal info (DOB, gender, address, etc.)
+     - `PATCH /api/v1/applicants/draft/:draftId/batch-2` — Batch 2: academic info + file uploads
+     - `POST /api/v1/applicants/draft/:draftId/submit` — Batch 3 (final): additional info → creates Applicant record, sends setup email
+   - Each batch is validated immediately; errors are caught at the current step, not at the end.
+   - Steps cannot be skipped — each endpoint checks the previous step was completed.
+   - The `draftId` is stored in localStorage by the frontend, allowing users to resume after a page refresh.
 8. Backend validates the OCR session, saves uploaded files, and creates the applicant record.
    - If `manualRequired: true`, `manual_application` is set to `true`.
    - If OCR succeeded, `manual_application` remains `false`.
@@ -125,6 +134,10 @@ CANCELLED (applicant or admin, from any status other than APPROVED)
 | GET | `/api/v1/applicants/:id` | View applicant details | ADMIN_HR |
 | PATCH | `/api/v1/applicants/:id` | Update applicant fields | ADMIN_HR |
 | PATCH | `/api/v1/applicants/:id/status` | Update applicant status | ADMIN_HR |
+| POST | `/api/v1/applicants/draft` | Create application draft | Public |
+| PATCH | `/api/v1/applicants/draft/:id/batch-1` | Save personal info (Batch 1) | Public |
+| PATCH | `/api/v1/applicants/draft/:id/batch-2` | Save academic info + files (Batch 2) | Public |
+| POST | `/api/v1/applicants/draft/:id/submit` | Finalize draft → create Applicant (Batch 3) | Public |
 
 **Key Decision Points:**
 - Only ADMIN_HR can update status
