@@ -50,6 +50,14 @@ export const createDraftSchema = z.object({
     ),
 });
 
+// ── Resume Draft Schema ────────────────────────────────────────────────────
+
+export const resumeDraftSchema = z.object({
+  token: z
+    .string({ message: "Resume token is required" })
+    .min(1, "Resume token cannot be empty"),
+});
+
 // ── Update Draft Batch 1 Schema ───────────────────────────────────────────
 
 export const updateDraftBatch1Schema = z.object({

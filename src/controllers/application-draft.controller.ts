@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import {
   createDraftSchema,
+  resumeDraftSchema,
   updateDraftBatch1Schema,
   updateDraftBatch2Schema,
   submitDraftSchema,
@@ -8,8 +9,9 @@ import {
 import { prisma } from "../config/database";
 import { ocrStore } from "../config/ocrStore";
 import { saveDocument } from "../utils/imageStorage";
-import { signSetupToken } from "../utils/token";
+import { signSetupToken, verifyDraftResumeToken } from "../utils/token";
 import { sendSetupLinkEmail } from "../services/email.service";
+import { findResumableDraft, isDraftStale } from "../utils/draftResume";
 
 
 function getDraftOr404(id: string) {
@@ -54,6 +56,25 @@ export async function createDraft(req: Request, res: Response): Promise<void> {
           "OCR session expired or invalid. Please re-verify your Student ID via POST /api/v1/ocr/verify.",
       });
       return;
+    }
+
+    // Belt-and-braces guard (primary detection happens at OCR scan time):
+    // a resumable draft for this student ID blocks draft creation. Stale
+    // drafts are deleted lazily so a fresh application may proceed.
+    if (session.studentId) {
+      const resumable = await findResumableDraft(session.studentId);
+      if (resumable) {
+        if (isDraftStale(resumable.updatedAt)) {
+          await prisma.applicationDraft.delete({ where: { id: resumable.id } });
+        } else {
+          res.status(409).json({
+            success: false,
+            message:
+              "An in-progress application already exists for this Student ID. Check your email for the resume link.",
+          });
+          return;
+        }
+      }
     }
 
     const draft = await prisma.applicationDraft.create({
@@ -379,6 +400,72 @@ export async function submitDraft(req: Request, res: Response): Promise<void> {
     res.status(500).json({
       success: false,
       message: "Failed to submit application. Please try again.",
+    });
+  }
+}
+
+
+/**
+ * POST /api/v1/applicants/draft/resume
+ *
+ * Resumes an in-progress application via the emailed resume link.
+ * Validates the signed token, loads the draft, and returns every saved
+ * field so the frontend can rehydrate the multi-step form.
+ */
+export async function resumeDraft(req: Request, res: Response): Promise<void> {
+  try {
+    const parsed = resumeDraftSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    let payload;
+    try {
+      payload = await verifyDraftResumeToken(parsed.data.token);
+    } catch {
+      res.status(400).json({
+        success: false,
+        message:
+          "The resume link is invalid or has expired. Please scan your Student ID again to get a new link.",
+      });
+      return;
+    }
+
+    const draft = await getDraftOr404(payload.draftId);
+    if (!draft || isDraftStale(draft.updatedAt)) {
+      res.status(404).json({
+        success: false,
+        message:
+          "This application was completed or has expired. Please start a new application.",
+      });
+      return;
+    }
+
+    // Defense in depth: the token must belong to the draft it references.
+    if (draft.email !== payload.email) {
+      res.status(400).json({
+        success: false,
+        message:
+          "The resume link is invalid or has expired. Please scan your Student ID again to get a new link.",
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { draft },
+      message: "Application draft loaded. Continue where you left off.",
+    });
+  } catch (error) {
+    console.error("Error resuming draft:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to load your application draft. Please try again.",
     });
   }
 }
