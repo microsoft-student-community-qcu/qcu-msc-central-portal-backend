@@ -44,7 +44,7 @@ Checks if the link is authentic (not fake), not expired, and makes sure it can o
 ```json
 {
   "success": false,
-  "errors": ["Invalid or expired setup link. Please request a new one."]
+  "message": "Invalid or expired setup link. Please request a new one."
 }
 ```
 
@@ -52,7 +52,7 @@ Checks if the link is authentic (not fake), not expired, and makes sure it can o
 ```json
 {
   "success": false,
-  "errors": ["This setup link has already been used. Please sign in instead."]
+  "message": "This setup link has already been used. Please sign in instead."
 }
 ```
 
@@ -60,7 +60,7 @@ Checks if the link is authentic (not fake), not expired, and makes sure it can o
 ```json
 {
   "success": false,
-  "errors": ["Application not found. Please submit a new application."]
+  "message": "Application not found. Please submit a new application."
 }
 ```
 
@@ -71,7 +71,7 @@ Checks if the link is authentic (not fake), not expired, and makes sure it can o
 ```json
 {
   "success": false,
-  "errors": ["string"]
+  "message": "string"
 }
 ```
 

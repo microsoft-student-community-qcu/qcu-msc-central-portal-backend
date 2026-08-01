@@ -274,7 +274,7 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
    Body: { "token": token }
 
    → Success Response: { "success": true, "data": { "applicantId", "email", "firstName", "lastName", "studentId", ... } }
-   → Error Response:   { "success": false, "errors": ["..."] }
+   → Error Response:   { "success": false, "message": "..." }
 
 3. On success → store `applicantId` + `email` + `firstName` + `lastName` + `studentId` in memory, pre-fill form fields.
    On error   → show relevant error page (expired/used/not found).
@@ -320,7 +320,7 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
 | 2 | Invalid or expired token | "Your setup link has expired or is invalid." → Show "Resend setup link" button that navigates to /auth/resend-setup-link |
 | 2 | Already used | "Your account has already been created. Please sign in instead." → redirect to /auth/sign-in |
 | 2 | Application not found | "Your application was not found. Please submit a new application." |
-| 5 | `{ "errors": ["Student ID already taken"] }` | "An account with this Student ID already exists. Please contact support." |
+| 5 | `{ "message": "Student ID already taken" }` | "An account with this Student ID already exists. Please contact support." |
 | 5 | `{ "errors": ["Email is required", ...] }` | Show each error message as a list |
 | 7 | `404 Applicant not found` | "Your application was not found. Please submit a new application." |
 | 7 | `400 email mismatch` | "The email used to sign up does not match your application email." |

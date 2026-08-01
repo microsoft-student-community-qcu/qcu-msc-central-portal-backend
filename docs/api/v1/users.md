@@ -275,7 +275,7 @@ curl -X PATCH http://localhost:5000/api/v1/users/550e8400-e29b-41d4-a716-4466554
 ```json
 {
   "success": false,
-  "error": "string"
+  "message": "string"
 }
 ```
 
