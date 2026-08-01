@@ -2,11 +2,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import { prisma } from "../config/database";
 import { auth } from "../config/auth";
+import { verifySetupToken } from "../utils/token";
 import app from "../app";
 
 describe("POST /api/auth/sign-up/email", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Clear queued mockResolvedValueOnce values from previous tests — clearAllMocks
+    // keeps them, and failed validations leave unused responses that leak across tests.
+    (auth.handler as any).mockReset();
+    (prisma.user.findUnique as any).mockReset();
+    (prisma.applicant.findUnique as any).mockReset();
+    (verifySetupToken as any).mockReset();
   });
 
   it("returns 400 for invalid email", async () => {
@@ -21,7 +28,7 @@ describe("POST /api/auth/sign-up/email", () => {
       });
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toContain("Invalid email format");
+    expect(res.body.errors.email).toContain("Invalid email format");
   });
 
   it("returns 400 for short password", async () => {
@@ -36,7 +43,7 @@ describe("POST /api/auth/sign-up/email", () => {
       });
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toContain("Password must be at least 8 characters");
+    expect(res.body.errors.password).toContain("Password must be at least 8 characters");
   });
 
   it("returns 400 if studentId already taken", async () => {
@@ -50,14 +57,25 @@ describe("POST /api/auth/sign-up/email", () => {
         firstName: "Test",
         lastName: "User",
         studentId: "QCU-2020-001",
+        setupToken: "mock-setup-token",
       });
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toContain("Student ID already taken");
+    expect(res.body.message).toContain("Student ID already taken");
   });
 
   it("handles Better Auth 'Failed to create user' error", async () => {
     (prisma.user.findUnique as any).mockResolvedValueOnce(null);
+    // Mock the setup token chain (VUL-004): valid token payload + unlinked applicant.
+    (verifySetupToken as any).mockResolvedValueOnce({
+      applicantId: "applicant-test-id",
+      email: "test@example.com",
+      purpose: "password-setup",
+    });
+    (prisma.applicant.findUnique as any).mockResolvedValueOnce({
+      userId: null,
+      email: "test@example.com",
+    });
     const mockResponse = new Response(
       JSON.stringify({ message: "Failed to create user" }),
       { status: 422, headers: { "content-type": "application/json" } }
@@ -72,14 +90,25 @@ describe("POST /api/auth/sign-up/email", () => {
         firstName: "Test",
         lastName: "User",
         studentId: "QCU-2020-001",
+        setupToken: "mock-setup-token",
       });
 
     expect(res.status).toBe(400);
-    expect(res.body.errors).toContain("Failed to create user. Please check your input.");
+    expect(res.body.message).toContain("Failed to create user. Please check your input.");
   });
 
   it("calls auth.handler when validation passes", async () => {
     (prisma.user.findUnique as any).mockResolvedValueOnce(null);
+    // Mock the setup token chain (VUL-004): valid token payload + unlinked applicant.
+    (verifySetupToken as any).mockResolvedValueOnce({
+      applicantId: "applicant-test-id",
+      email: "test@example.com",
+      purpose: "password-setup",
+    });
+    (prisma.applicant.findUnique as any).mockResolvedValueOnce({
+      userId: null,
+      email: "test@example.com",
+    });
     const mockResponse = new Response(
       JSON.stringify({ user: { id: "new-id", email: "test@example.com" } }),
       { status: 200, headers: { "content-type": "application/json" } }
@@ -94,6 +123,7 @@ describe("POST /api/auth/sign-up/email", () => {
         firstName: "Test",
         lastName: "User",
         studentId: "QCU-2020-001",
+        setupToken: "mock-setup-token",
       });
 
     expect(res.status).toBe(200);
