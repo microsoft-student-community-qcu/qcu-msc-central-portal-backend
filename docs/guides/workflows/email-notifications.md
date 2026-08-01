@@ -11,6 +11,8 @@ The system supports two email providers, selected via the `EMAIL_PROVIDER` envir
 
 Selection happens once at module init in `src/services/email.service.ts`. Both providers implement the same `EmailProvider` interface with a single `sendEmail(to, subject, html)` method. Errors are caught internally inside each send function — email failure never throws or crashes the request.
 
+> **Exception:** `sendDraftResumeLinkEmail` deliberately **propagates errors** to the caller. The resume link is the only way forward for an applicant with an existing draft, so a failed send must surface (the OCR endpoint responds `502` and the cooldown is not recorded, letting the user retry by rescanning).
+
 ## Environment Variables
 
 | Variable | Required | Default | Description |
@@ -25,6 +27,8 @@ Selection happens once at module init in `src/services/email.service.ts`. Both p
 | `SMTP_PASS` | No | — | SMTP authentication password / app password |
 | `SMTP_FROM_NAME` | No | `Microsoft Student Community` | Display name on sent emails |
 | `SMTP_FROM_EMAIL` | No | Falls back to `SMTP_USER` | Sender email address |
+| `RESUME_EMAIL_COOLDOWN_MINUTES` | No | `30` | Min minutes between resume-link emails for the same draft (anti-spam) |
+| `RESUME_TOKEN_EXPIRY_MINUTES` | No | `30` | Resume-link JWT expiry — the link in the email points to `${FRONTEND_URL}/apply/resume?token=...` |
 
 ## Triggered Emails
 
@@ -35,6 +39,7 @@ All emails are sent from `src/services/email.service.ts`. Each function is a nam
 | Applicant account created | `sendSetupLinkEmail` | Welcome to QCU MSC — Set Up Your Password | Applicant email |
 | Manual ID approved | `sendManualIdApprovedEmail` | Student ID Approved — Application In Review | Applicant email |
 | Manual ID rejected | `sendManualIdRejectedEmail` | Student ID Rejected | Applicant email |
+| Draft resume link (existing in-progress application detected at OCR scan) | `sendDraftResumeLinkEmail` | Resume Your QCU MSC Application | Draft email |
 | Guest event registration (auto-approved) | `sendRegistrationConfirmedEmail` | Registration Confirmed — {event title} | Guest email |
 | Guest event registration (manual review) | `sendRegistrationPendingReviewEmail` | Registration Pending Review — {event title} | Guest email |
 | Registration approved (by admin) | `sendRegistrationApprovedEmail` | Registration Approved — {event title} | Registrant email |
@@ -50,3 +55,4 @@ All registration-related emails include the event title in the subject line; con
 | Date | Change |
 |------|--------|
 | 2026-07-13 | Added dual-provider architecture (Resend + SMTP), environment configuration table, and expanded triggered emails table |
+| 2026-08-02 | Added `sendDraftResumeLinkEmail` (resume-link email for existing drafts) with its error-propagation exception; added `RESUME_EMAIL_COOLDOWN_MINUTES` / `RESUME_TOKEN_EXPIRY_MINUTES` env vars |
