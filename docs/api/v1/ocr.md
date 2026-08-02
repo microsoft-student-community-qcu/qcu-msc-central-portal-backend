@@ -58,6 +58,20 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
 }
 ```
 
+**Already Submitted Response (application exists for this Student ID):**
+```json
+{
+  "success": true,
+  "data": {
+    "alreadySubmitted": true,
+    "setupToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  },
+  "message": "You have already submitted an application. Redirecting to account setup..."
+}
+```
+
+`setupToken` is the signed JWT from the password-setup email (`sendSetupLinkEmail`). The frontend must attach it to `/api/auth/sign-up/email` when creating the applicant account — the sign-up endpoint rejects requests without a valid setup token. The token is also verifiable via `POST /api/v1/users/validate-setup-token` (see [setup-token.md](setup-token.md)).
+
 **Error Response (OCR Failed — Retries Available):**
 ```json
 {

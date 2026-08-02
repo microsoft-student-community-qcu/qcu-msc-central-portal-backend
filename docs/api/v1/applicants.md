@@ -64,12 +64,15 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
 
 **Security note:** `manual_application` is never client-settable. If the OCR session indicates `manualRequired: true`, the backend sets `manual_application: true` regardless of the submitted `studentId` value.
 
+**`setupToken` note:** the `201` response includes `setupToken` — the signed JWT from the password-setup email. The frontend **must** forward it to `/api/auth/sign-up/email` when the applicant creates their account; sign-up is rejected with "Setup token is required" otherwise. The token is also verifiable via `POST /api/v1/users/validate-setup-token` (see [setup-token.md](setup-token.md)).
+
 **Response Format:**
 ```json
 {
   "success": boolean,
   "data": {
     "id": string (UUID),
+    "setupToken": string (JWT),
     "lastName": string,
     "firstName": string,
     "middleInitial": string | null,
@@ -163,6 +166,7 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   "success": true,
   "data": {
     "id": "660e8400-e29b-41d4-a716-446655440001",
+    "setupToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "lastName": "Smith",
     "firstName": "Jane",
     "middleInitial": "B",
