@@ -30,7 +30,7 @@ const envSchema = z.object({
 
   // Resend (production)
   RESEND_API_KEY: z.string().optional(),
-  RESEND_FROM_EMAIL: z.string().email().default("no-reply@anonimi.cloud"),
+  RESEND_FROM_EMAIL: z.string().email().default("no-reply@msc-qcu.tech"),
 
   // SMTP (development)
   SMTP_HOST: z.string().optional(),

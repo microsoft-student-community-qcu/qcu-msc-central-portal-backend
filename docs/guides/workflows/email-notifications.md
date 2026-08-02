@@ -17,7 +17,7 @@ Selection happens once at module init in `src/services/email.service.ts`. Both p
 |----------|----------|---------|-------------|
 | `EMAIL_PROVIDER` | No | `RESEND` | `RESEND` or `SMTP` |
 | `RESEND_API_KEY` | If `EMAIL_PROVIDER=RESEND` | — | Resend API key |
-| `RESEND_FROM_EMAIL` | No | `no-reply@anonimi.cloud` | Verified Resend sender address |
+| `RESEND_FROM_EMAIL` | No | `no-reply@msc-qcu.tech` | Verified Resend sender address |
 | `SMTP_HOST` | If `EMAIL_PROVIDER=SMTP` | — | SMTP server hostname |
 | `SMTP_PORT` | If `EMAIL_PROVIDER=SMTP` | — | SMTP server port (e.g. 465) |
 | `SMTP_SECURE` | No | `true` | TLS on connect (always `true` for port 465) |
