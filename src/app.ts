@@ -409,6 +409,28 @@ app.post("/api/v1/auth/student/sign-in", studentSignInLimiter, async (req, res) 
   // can only be consumed once.
   const bodyText = await webResponse.text();
 
+  // Auto-link applicant to user on successful sign-in.
+  // If link-applicant was never called after sign-up (network timeout,
+  // page refresh, frontend bug), this reconnects the accounts automatically
+  // — the user just needs to log in. Idempotent: `userId: null` only matches
+  // unlinked applicants, and `email` is unique on Applicant (one match max).
+  if (webResponse.status === 200 && bodyText) {
+    try {
+      const body = JSON.parse(bodyText);
+      const email = body?.user?.email;
+      const userId = body?.user?.id;
+      if (email && userId) {
+        await prisma.applicant.updateMany({
+          where: { email, userId: null },
+          data: { userId },
+        });
+      }
+    } catch {
+      // Log but never break sign-in
+      console.error("Auto-link on sign-in: failed to parse response body");
+    }
+  }
+
   // Copy the status code from Better Auth's response (e.g. 200 success,
   // 401 invalid credentials) to Express.
   res.status(webResponse.status);
@@ -463,6 +485,26 @@ app.post("/api/v1/auth/admin/sign-in", adminSignInLimiter, async (req, res) => {
 
   const webResponse = await auth.handler(webRequest);
   const bodyText = await webResponse.text();
+
+  // Auto-link applicant to user on successful sign-in.
+  // Same safety net as the student handler above, so an admin can also
+  // recover a disconnected Applicant just by signing in.
+  if (webResponse.status === 200 && bodyText) {
+    try {
+      const body = JSON.parse(bodyText);
+      const email = body?.user?.email;
+      const userId = body?.user?.id;
+      if (email && userId) {
+        await prisma.applicant.updateMany({
+          where: { email, userId: null },
+          data: { userId },
+        });
+      }
+    } catch {
+      // Log but never break sign-in
+      console.error("Auto-link on sign-in: failed to parse response body");
+    }
+  }
 
   res.status(webResponse.status);
   webResponse.headers.forEach((value, key) => {

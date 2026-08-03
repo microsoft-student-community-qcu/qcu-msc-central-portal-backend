@@ -257,11 +257,13 @@ If `applicant.userId` is null (because link-applicant was never called), the rol
 
 `linkApplicant` is the bridge that connects the two records so the auto-promotion works.
 
+> **Safety net:** even if `link-applicant` never runs, the **auto-link on sign-in** fallback reconnects the records. Both sign-in endpoints (`student` and `admin`) run the idempotent `updateMany` (see "Auto-link safety net" below). The user just has to log in.
+
 ---
 
 ### What the Frontend Must Do
 
-After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up/email` and receives a session token, the frontend **must immediately** call `POST /api/v1/users/link-applicant` before redirecting the user.
+After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up/email` and receives a session token, the frontend should call `POST /api/v1/users/link-applicant` before redirecting (best-effort — the backend auto-links on sign-in as a fallback).
 
 #### Exact Sequence on `/auth/setup-password`
 
@@ -296,12 +298,13 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
 
 6. Save the token (sessionStorage or cookie for redirect)
 
-7. Call #3 — Link Applicant (REQUIRED — do NOT skip):
+7. Call #3 — Link Applicant:
    POST /api/v1/users/link-applicant
    Authorization: Bearer abc...         // token from step 5
    Body: { "applicantId": "app-1" }     // from validation response (step 2)
 
    → Response: { "success": true, "message": "Applicant linked..." }
+   If this call fails or is skipped, do not block the user — see the auto-link note below.
 
 8. Redirect user to: /portal/tracking
    → They can now view their application status
@@ -310,8 +313,25 @@ After the `/auth/setup-password` page successfully calls `POST /api/auth/sign-up
 ⚠ If step 7 fails or is skipped:
   • Applicant and User stay disconnected
   • Admin approval won't promote User to MEMBER
-  • User is stuck as APPLICANT indefinitely
+  • The user is NOT stuck forever — the next successful sign-in auto-links them via
+    the auto-link safety net (see "Link Applicant" / Login sections below).
+
+#### Auto-link safety net
+
+Every successful sign-in (`POST /api/v1/auth/student/sign-in` and
+`POST /api/v1/auth/admin/sign-in`) runs an idempotent fallback:
+
 ```
+await prisma.applicant.updateMany({
+  where: { email: <signed-in user's email>, userId: null },
+  data:   { userId: <signed-in user's id> },
+});
+```
+
+- If `link-applicant` succeeded earlier → `userId: null` matches no rows → no-op.
+- If `link-applicant` never ran → the user just logs in again and the whisper is auto-healed.
+- `email` is unique on Applicant → at most one match.
+- Errors are caught and logged; they never break the sign-in response.
 
 #### Error Handling
 
@@ -458,5 +478,7 @@ Route uses require* guard to block unauthorized requests
 | POST | `/api/v1/users/validate-setup-token` | None | Validate password-setup JWT from email link |
 | POST | `/api/v1/applicants/resend-setup-link` | None | Resend setup email (3 req/min) |
 | GET | `/api/v1/users/me` | Required | Get user profile |
-| POST | `/api/v1/users/link-applicant` | Required | Link applicant record to user account |
+| POST | `/api/v1/users/link-applicant` | Optional¹ | Link applicant record to user account |
 | PATCH | `/api/v1/users/:userId/role` | ADMIN_HR | Update user role |
+
+> ¹ Best-effort: if skipped, the auto-link safety net on sign-in reconnects the records.

@@ -82,3 +82,4 @@ Draft lifecycle: created by the multi-step flow, blocks a new application while 
 | 2026-07-02 | Major Applicant model expansion: 22 new fields across Personal Info, Contact Info, Additional Info, Supporting Requirements; new `Gender` and `Campus` enums; data models split into per-entity files |
 | 2026-07-29 | Added `ApplicationDraft` model (multi-step batch submission); added `Office` enum |
 | 2026-08-02 | Added `lastResumeEmailSentAt` to `ApplicationDraft` for the draft resume-link cooldown; documented 7-day draft TTL and lazy expiry |
+| 2026-08-03 | Auto-link-on-sign-in fallback: `Applicant.userId` is now also populated during sign-in (idempotent `updateMany`) — no schema change |
