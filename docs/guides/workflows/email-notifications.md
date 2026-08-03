@@ -36,6 +36,7 @@ All emails are sent from `src/services/email.service.ts`. Each function is a nam
 
 | Event | Function | Subject | Recipient |
 |-------|----------|---------|-----------|
+| Application submitted successfully (under review) | `sendApplicationReceivedEmail` | Application Received — Under Review | Applicant email |
 | Applicant account created | `sendSetupLinkEmail` | Welcome to QCU MSC — Set Up Your Password | Applicant email |
 | Manual ID approved | `sendManualIdApprovedEmail` | Student ID Approved — Application In Review | Applicant email |
 | Manual ID rejected | `sendManualIdRejectedEmail` | Student ID Rejected | Applicant email |
@@ -58,3 +59,4 @@ All registration-related emails include the event title in the subject line; con
 | 2026-07-13 | Added dual-provider architecture (Resend + SMTP), environment configuration table, and expanded triggered emails table |
 | 2026-08-02 | Added `sendDraftResumeLinkEmail` (resume-link email for existing drafts) with its error-propagation exception; added `RESUME_EMAIL_COOLDOWN_MINUTES` / `RESUME_TOKEN_EXPIRY_MINUTES` env vars |
 | 2026-08-03 | Added `sendApplicantStatusEmail` — status-appropriate notification sent to the applicant on every status change (admin PATCH and user-initiated cancel); included admin message / resubmit fields where relevant |
+| 2026-08-03 | Added `sendApplicationReceivedEmail` — confirmation sent ahead of the setup-link email on both submission flows (draft submit + legacy single submission); states the application is under review |

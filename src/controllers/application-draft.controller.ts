@@ -10,7 +10,7 @@ import { prisma } from "../config/database";
 import { ocrStore } from "../config/ocrStore";
 import { saveDocument } from "../utils/imageStorage";
 import { signSetupToken, verifyDraftResumeToken } from "../utils/token";
-import { sendSetupLinkEmail } from "../services/email.service";
+import { sendSetupLinkEmail, sendApplicationReceivedEmail } from "../services/email.service";
 import { findResumableDraft, isDraftStale } from "../utils/draftResume";
 
 
@@ -366,6 +366,13 @@ export async function submitDraft(req: Request, res: Response): Promise<void> {
 
     await prisma.applicationDraft.delete({ where: { id: draftId } });
 
+    // 1. Tell the applicant their application was received and is under review.
+    await sendApplicationReceivedEmail(
+      applicant.email,
+      `${applicant.firstName} ${applicant.lastName}`.trim()
+    );
+
+    // 2. Send the password setup link email.
     const setupToken = await signSetupToken(applicant.id, applicant.email);
     await sendSetupLinkEmail(applicant.email, setupToken);
 

@@ -99,6 +99,7 @@ vi.mock("../config/auth", () => ({
 
 vi.mock("../services/email.service", () => ({
   sendSetupLinkEmail: vi.fn(() => Promise.resolve()),
+  sendApplicationReceivedEmail: vi.fn(() => Promise.resolve()),
   sendRegistrationConfirmedEmail: vi.fn(() => Promise.resolve()),
   sendRegistrationPendingReviewEmail: vi.fn(() => Promise.resolve()),
   sendRegistrationApprovedEmail: vi.fn(() => Promise.resolve()),

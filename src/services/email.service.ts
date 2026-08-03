@@ -100,6 +100,25 @@ export async function sendSetupLinkEmail(to: string, setupToken: string): Promis
   }
 }
 
+export async function sendApplicationReceivedEmail(to: string, applicantName: string): Promise<void> {
+  try {
+    await provider.sendEmail(
+      to,
+      "Application Received — Under Review",
+      htmlBody(`
+        <h2>Application received</h2>
+        ${applicantName ? `<p>Hello ${applicantName},</p>` : "<p>Hello,</p>"}
+        <p>Your application has been <strong>submitted successfully</strong> and is now under review.</p>
+        <p>If your application advances to the next stage, you will be notified about the interview.</p>
+        <p>A follow-up email containing your password setup link is on its way to activate your applicant account.</p>
+      `),
+    );
+    logSent("Application received", to);
+  } catch (err) {
+    logFailed("application received", to, err);
+  }
+}
+
 export async function sendRegistrationConfirmedEmail(to: string, eventTitle: string, qrPayload: string): Promise<void> {
   try {
     await provider.sendEmail(

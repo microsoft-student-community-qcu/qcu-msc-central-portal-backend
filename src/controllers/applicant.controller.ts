@@ -19,6 +19,7 @@ import {
   sendManualIdApprovedEmail,
   sendManualIdRejectedEmail,
   sendApplicantStatusEmail,
+  sendApplicationReceivedEmail,
 } from "../services/email.service";
 import { validateFileMimeType } from "../utils/fileValidation";
 
@@ -194,7 +195,14 @@ export async function createApplicant(
     // ── 5. Clean up OCR session ───────────────────────────────────────────
     ocrStore.deleteSession(ocrSessionId);
 
-    // ── 6. Send setup link email ──────────────────────────────────────────
+    // ── 6. Send emails ─────────────────────────────────────────────────────
+    // First the application-received notice (submitted + under review), then
+    // the password setup link. Both swallow send failures internally.
+    await sendApplicationReceivedEmail(
+      applicant.email,
+      `${applicant.firstName} ${applicant.lastName}`.trim()
+    );
+
     const setupToken = await signSetupToken(applicant.id, applicant.email);
     await sendSetupLinkEmail(applicant.email, setupToken);
 
