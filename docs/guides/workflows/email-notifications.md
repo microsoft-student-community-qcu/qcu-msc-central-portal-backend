@@ -1,5 +1,9 @@
 # Workflow — Email Notifications
 
+## Shared Template
+
+All emails render through `renderBrandedEmail` in `src/utils/emailTemplate.ts` — a single branded layout (org banner, wrapper, footer) that senders reuse. Senders only pass content options (`headline`, `greeting`, `paragraphs`, `bullets`, `note`, `button`, `qrPayload`, `expiryNote`, `supportLine`); no email duplicates the layout markup.
+
 ## Provider Architecture
 
 The system supports two email providers, selected via the `EMAIL_PROVIDER` environment variable at startup:
@@ -60,3 +64,4 @@ All registration-related emails include the event title in the subject line; con
 | 2026-08-02 | Added `sendDraftResumeLinkEmail` (resume-link email for existing drafts) with its error-propagation exception; added `RESUME_EMAIL_COOLDOWN_MINUTES` / `RESUME_TOKEN_EXPIRY_MINUTES` env vars |
 | 2026-08-03 | Added `sendApplicantStatusEmail` — status-appropriate notification sent to the applicant on every status change (admin PATCH and user-initiated cancel); included admin message / resubmit fields where relevant |
 | 2026-08-03 | Added `sendApplicationReceivedEmail` — confirmation sent ahead of the setup-link email on both submission flows (draft submit + legacy single submission); states the application is under review |
+| 2026-08-03 | Introduced shared branded layout `renderBrandedEmail` (`src/utils/emailTemplate.ts`) and rewired all senders to use it; added the org banner (600x150) and standard footer to every email |
