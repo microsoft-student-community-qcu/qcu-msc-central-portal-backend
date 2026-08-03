@@ -13,11 +13,11 @@ const TEXT_MUTED = "#6B7280";
 
 // ── Social links ───────────────────────────────────────────────────────────
 
-const SOCIALS: { name: string; href: string; color: string; mark: string }[] = [
-  { name: "Facebook", href: "https://www.facebook.com/MicrosoftStudentCommunityQCU", color: "#1877F2", mark: "f" },
-  { name: "Instagram", href: "https://www.instagram.com/mscqcu/", color: "#E4405F", mark: "Ig" },
-  { name: "LinkedIn", href: "https://www.linkedin.com/company/microsoft-student-community-quezon-city-university", color: "#0A66C2", mark: "in" },
-  { name: "TikTok", href: "https://www.tiktok.com/@mscqcu", color: "#010101", mark: "&#9834;" },
+const SOCIALS: { name: string; href: string; image: string }[] = [
+  { name: "Facebook", href: "https://www.facebook.com/MicrosoftStudentCommunityQCU", image: "https://upload.wikimedia.org/wikipedia/commons/6/6c/Facebook_Logo_2023.png" },
+  { name: "Instagram", href: "https://www.instagram.com/mscqcu/", image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Instagram_logo_2022.svg/960px-Instagram_logo_2022.svg.png" },
+  { name: "LinkedIn", href: "https://www.linkedin.com/company/microsoft-student-community-quezon-city-university", image: "https://upload.wikimedia.org/wikipedia/commons/e/e8/Linkedin-logo-blue-In-square-40px.png" },
+  { name: "TikTok", href: "https://www.tiktok.com/@mscqcu", image: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Tiktok_icon.svg/3840px-Tiktok_icon.svg.png" },
 ];
 
 // ── Exports ─────────────────────────────────────────────────────────────────
@@ -75,24 +75,29 @@ function qrBlock(payload?: string): string {
 }
 
 function socialRow(): string {
-  const chips = SOCIALS.map(
+  const icons = SOCIALS.map(
     (s) =>
       '<a href="' +
       escapeAttribute(s.href) +
-      '" target="_blank" rel="noopener" title="' +
+      '" target="_blank" rel="noopener" aria-label="' +
       esc(s.name) +
-      '" aria-label="' +
+      '" style="display:inline-block;text-align:center;margin:0 8px;text-decoration:none;">' +
+      '<img src="' +
+      s.image +
+      '" width="28" height="28" alt="' +
       esc(s.name) +
-      '" style="display:inline-block;width:34px;height:34px;line-height:34px;border-radius:50%;background:' +
-      s.color +
-      ';color:#FFFFFF;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:700;text-align:center;text-decoration:none;margin:0 6px;">' +
-      s.mark +
+      '" style="display:block;margin:0 auto;width:28px;height:28px;border:0;outline:none;" />' +
+      '<span style="display:block;margin:5px auto 0;font-size:11px;letter-spacing:0.4px;color:' +
+      TEXT_MUTED +
+      ';">' +
+      esc(s.name) +
+      "</span>" +
       "</a>"
-  ).join("");
+  ).join("\n");
 
   return `
     <p style="margin:0 0 16px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:${TEXT_MUTED};">Follow us</p>
-    <div style="text-align:center;margin-bottom:22px;">${chips}</div>
+    <div style="text-align:center;margin-bottom:22px;">${icons}</div>
     <p style="margin:0 0 4px;font-size:13px;color:${TEXT_BODY};">Questions? Reach us at</p>
     <p style="margin:0 0 20px;"><a href="mailto:msc-qcu@outlook.com" style="color:${CTA_COLOR};text-decoration:none;font-weight:600;">msc-qcu@outlook.com</a></p>
     <p style="margin:0 0 4px;font-size:12px;color:${TEXT_MUTED};">You received this email because you are part of the QCU Microsoft Student Community.</p>
