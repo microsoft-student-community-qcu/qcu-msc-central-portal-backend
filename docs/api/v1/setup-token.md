@@ -8,6 +8,20 @@ The token expires 48 hours after it is created.
 
 ---
 
+## Where Do Tokens Come From?
+
+The `setupToken` is a signed JWT generated server-side whenever a password-setup email is sent, and — in two cases — also returned directly in an API response so the frontend can forward it to `/api/auth/sign-up/email` (which **requires** it; requests without it fail with `"setupToken": ["Setup token is required"]`).
+
+| Endpoint | Token returned in response? |
+|----------|-----------------------------|
+| `POST /api/v1/applicants` (single submission, `201`) | Yes — `data.setupToken` |
+| `POST /api/v1/ocr/verify` (when `alreadySubmitted: true`, `200`) | Yes — `data.setupToken` |
+| `POST /api/v1/applicants/resend-setup-link` | No — email only (response always says "If an account exists, a new setup link has been sent.") |
+
+In all cases the same token is embedded in the password-setup email (`${FRONTEND_URL}/auth/setup-password?token=...`). The frontend flow: open the link → validate the token via this endpoint → show the password form → submit `{ email, password, firstName, lastName, studentId, setupToken }` to `/api/auth/sign-up/email`.
+
+---
+
 ## Validate Setup Token
 
 **Description:**  
