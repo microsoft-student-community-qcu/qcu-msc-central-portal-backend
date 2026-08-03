@@ -17,7 +17,7 @@ The applicant pipeline is managed exclusively by ADMIN_HR users. Applications ar
    - Application form is automatically pre-filled using extracted data.
    - User reviews and completes the multi-section form:
      - **Personal Information** — firstName, lastName, middleName, gender, campus, dateOfBirth, nationality
-     - **Contact Information** — phoneNumber, qcuMscEmail, emergencyContactName, emergencyContactNumber
+     - **Contact Information** — phoneNumber, emergencyContactName, emergencyContactNumber
      - **Academic Information** — college, program, yearLevel, studentType
      - **Supporting Requirements (Optional)** — portfolio, githubOrProjectLinks, previousWorksAchievements
      - **Why Join** — reasonForJoining, expectations
@@ -27,11 +27,25 @@ The applicant pipeline is managed exclusively by ADMIN_HR users. Applications ar
    - Frontend reveals the manual entry form (hidden by default).
    - User uploads a Student ID image and manually completes the entire form.
    - Application is flagged as `{ "manual_application": true }`.
-7. User submits the application via `POST /api/v1/applicants` (multipart/form-data) with the `ocrSessionId`, all text fields, and the two required file uploads.
+7. User submits the application via one of two methods:
+   - **Single submission** (legacy): `POST /api/v1/applicants` (multipart/form-data) with all fields, files, and `ocrSessionId` at once.
+   - **Multi-step draft** (recommended): 4 sequential endpoints that persist and validate each step:
+     - `POST /api/v1/applicants/draft` — Batch 0: name, email, ocrSessionId → returns `draftId`
+     - `PATCH /api/v1/applicants/draft/:draftId/batch-1` — Batch 1: personal info (DOB, gender, address, etc.)
+     - `PATCH /api/v1/applicants/draft/:draftId/batch-2` — Batch 2: academic info + file uploads
+     - `POST /api/v1/applicants/draft/:draftId/submit` — Batch 3 (final): additional info → creates Applicant record, sends confirmation + setup emails
+   - Each batch is validated immediately; errors are caught at the current step, not at the end.
+   - Steps cannot be skipped — each endpoint checks the previous step was completed.
+   - The `draftId` is stored in localStorage by the frontend, allowing users to resume after a page refresh on the same device.
+8. **Draft gate (cross-device resume):** If a draft already exists for the scanned Student ID, the OCR endpoint returns `resumePending: true` and the form is blocked. A resume link email is sent to the draft's email instead:
+   - `POST /api/v1/ocr/verify` → `{ resumePending: true, ocrSessionId: null }` (no session is issued)
+   - `POST /api/v1/applicants/draft/resume` → validates the signed token from the link, returns the full draft; the frontend rehydrates the form and continues from `currentStep`.
+   - One email per draft per 30 minutes (cooldown); links expire after 30 minutes; drafts expire after 7 days (`DRAFT_TTL_HOURS`) — expired drafts are deleted lazily at the next scan.
 8. Backend validates the OCR session, saves uploaded files, and creates the applicant record.
    - If `manualRequired: true`, `manual_application` is set to `true`.
    - If OCR succeeded, `manual_application` remains `false`.
-9. System sends an email containing:
+9. System sends two emails (in order):
+   - Application received — under review confirmation.
    - Password setup link (this link will also act as email verification link).
 
 ### Account Activation
@@ -105,6 +119,11 @@ Dashboard refreshed with new status
 
 ```
 PENDING_REVIEW (initial submission)
+  ├─→ FOR_INTERVIEW (admin marks for interview)
+  │     ├─→ APPROVED (admin accepts → User becomes MEMBER)
+  │     ├─→ REJECTED (admin denies)
+  │     └─→ RESUBMIT (admin requests changes + message)
+  │           └─→ PENDING_REVIEW (applicant resubmits → clears message)
   ├─→ APPROVED (admin accepts → User becomes MEMBER)
   ├─→ REJECTED (admin denies)
   └─→ RESUBMIT (admin requests changes + message)
@@ -120,9 +139,14 @@ CANCELLED (applicant or admin, from any status other than APPROVED)
 | GET | `/api/v1/applicants/:id` | View applicant details | ADMIN_HR |
 | PATCH | `/api/v1/applicants/:id` | Update applicant fields | ADMIN_HR |
 | PATCH | `/api/v1/applicants/:id/status` | Update applicant status | ADMIN_HR |
+| POST | `/api/v1/applicants/draft` | Create application draft | Public |
+| POST | `/api/v1/applicants/draft/resume` | Resume a draft via emailed resume link | Public |
+| PATCH | `/api/v1/applicants/draft/:id/batch-1` | Save personal info (Batch 1) | Public |
+| PATCH | `/api/v1/applicants/draft/:id/batch-2` | Save academic info + files (Batch 2) | Public |
+| POST | `/api/v1/applicants/draft/:id/submit` | Finalize draft → create Applicant (Batch 3) | Public |
 
 **Key Decision Points:**
 - Only ADMIN_HR can update status
 - Setting status to `APPROVED` **automatically** updates the linked `User.role` to `MEMBER` (server-side)
-- Applicant must first be linked to a User account via `POST /api/v1/users/link-applicant` before approval
-- Email notifications sent at each status transition
+- Applicant must first be linked to a User account via `POST /api/v1/users/link-applicant` before approval — if that call was skipped, every sign-in auto-links as a fallback (see `auth-workflow.md`)
+- Email notifications sent at each status transition (via `sendApplicantStatusEmail`) and on user-initiated cancellation

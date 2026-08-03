@@ -10,14 +10,26 @@ import * as Sentry from "@sentry/node";
 import { initSentry, captureDatabaseError } from "./config/sentry";
 import ocrRoutes from "./routes/ocr.routes";
 import applicantRoutes from "./routes/applicant.routes";
+import applicationDraftRoutes from "./routes/application-draft.routes";
 import { resendSetupLink } from "./controllers/applicant.controller";
+import { verifySetupToken } from "./utils/token";
 import eventRoutes from "./routes/event.routes";
 import userRoutes from "./routes/user.routes";
+
+import path from "node:path";
 
 initSentry();
 
 
 const app = express();
+
+// Serve local uploaded files when the Azure Blob Storage fallback is used.
+// DEVELOPMENT ONLY — the fallback itself is disabled outside development
+// (see src/utils/imageStorage.ts), so this route would only ever expose a
+// stale/empty directory in a deployed environment. Do not remove the guard.
+if (env.NODE_ENV === "development") {
+  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+}
 
 // Middleware
 app.use(cors({
@@ -76,6 +88,7 @@ const signUpSchema = z.object({
     .regex(/^[A-Za-z]\.?$/, "Middle initial must be a single letter, optionally followed by a dot")
     .optional(),
   studentId: z.string({ message: "Student ID is required" }),
+  setupToken: z.string({ message: "Setup token is required" }).min(1, "Setup token is required"),
 });
 
 const signInSchema = z.object({
@@ -123,8 +136,65 @@ app.use("/api/auth", async (req, res, next) => {
           return;
         }
 
-        // Construct full name server-side from split fields (Better Auth requires `name`)
-        req.body.name = `${result.data.firstName} ${result.data.lastName}`.trim();
+        // Validate setup token — prevents account pre-hijacking (see VUL-004).
+        // Every account creation must be authorized by a valid one-time
+        // setup token obtained through the approved applicant flow.
+        const tokenPayload = await verifySetupToken(result.data.setupToken);
+        if (!tokenPayload) {
+          res.status(400).json({
+            success: false,
+            message: "Invalid or expired setup link. Please request a new one.",
+          });
+          return;
+        }
+
+        if (tokenPayload.email !== result.data.email) {
+          res.status(400).json({
+            success: false,
+            message: "Email does not match the setup link.",
+          });
+          return;
+        }
+
+        const applicant = await prisma.applicant.findUnique({
+          where: { id: tokenPayload.applicantId },
+          select: { userId: true, email: true },
+        });
+
+        if (!applicant) {
+          res.status(400).json({
+            success: false,
+            message: "Setup link is invalid. Please contact support.",
+          });
+          return;
+        }
+
+        if (applicant.userId !== null) {
+          res.status(400).json({
+            success: false,
+            message: "This setup link has already been used.",
+          });
+          return;
+        }
+
+        if (applicant.email !== result.data.email) {
+          res.status(400).json({
+            success: false,
+            message: "Email does not match the applicant record.",
+          });
+          return;
+        }
+
+        // Reconstruct clean request body with only safe fields.
+        // Never forward raw req.body — it may contain injected fields
+        // like `role` that bypass Zod validation (see VUL-016).
+        req.body = {
+          email: result.data.email,
+          password: result.data.password,
+          name: `${result.data.firstName} ${result.data.lastName}`.trim(),
+          studentId: result.data.studentId,
+          middleInitial: result.data.middleInitial,
+        };
       }
 
       // Pre-validate sign-in body
@@ -339,6 +409,28 @@ app.post("/api/v1/auth/student/sign-in", studentSignInLimiter, async (req, res) 
   // can only be consumed once.
   const bodyText = await webResponse.text();
 
+  // Auto-link applicant to user on successful sign-in.
+  // If link-applicant was never called after sign-up (network timeout,
+  // page refresh, frontend bug), this reconnects the accounts automatically
+  // — the user just needs to log in. Idempotent: `userId: null` only matches
+  // unlinked applicants, and `email` is unique on Applicant (one match max).
+  if (webResponse.status === 200 && bodyText) {
+    try {
+      const body = JSON.parse(bodyText);
+      const email = body?.user?.email;
+      const userId = body?.user?.id;
+      if (email && userId) {
+        await prisma.applicant.updateMany({
+          where: { email, userId: null },
+          data: { userId },
+        });
+      }
+    } catch {
+      // Log but never break sign-in
+      console.error("Auto-link on sign-in: failed to parse response body");
+    }
+  }
+
   // Copy the status code from Better Auth's response (e.g. 200 success,
   // 401 invalid credentials) to Express.
   res.status(webResponse.status);
@@ -394,6 +486,26 @@ app.post("/api/v1/auth/admin/sign-in", adminSignInLimiter, async (req, res) => {
   const webResponse = await auth.handler(webRequest);
   const bodyText = await webResponse.text();
 
+  // Auto-link applicant to user on successful sign-in.
+  // Same safety net as the student handler above, so an admin can also
+  // recover a disconnected Applicant just by signing in.
+  if (webResponse.status === 200 && bodyText) {
+    try {
+      const body = JSON.parse(bodyText);
+      const email = body?.user?.email;
+      const userId = body?.user?.id;
+      if (email && userId) {
+        await prisma.applicant.updateMany({
+          where: { email, userId: null },
+          data: { userId },
+        });
+      }
+    } catch {
+      // Log but never break sign-in
+      console.error("Auto-link on sign-in: failed to parse response body");
+    }
+  }
+
   res.status(webResponse.status);
   webResponse.headers.forEach((value, key) => {
     res.setHeader(key, value);
@@ -413,6 +525,7 @@ app.use("/api/v1/users", userRoutes);
 
 // Applicant routes
 app.use("/api/v1/applicants", applicantRoutes);
+app.use("/api/v1/applicants", applicationDraftRoutes);
 app.use("/api/v1/events", eventRoutes);
 
 /**

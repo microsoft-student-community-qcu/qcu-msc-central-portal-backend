@@ -70,7 +70,7 @@ describe("POST /api/v1/users/validate-setup-token (public)", () => {
       .post("/api/v1/users/validate-setup-token")
       .send({});
     expect(res.status).toBe(400);
-    expect(res.body.errors).toContain("Token is required");
+    expect(res.body.errors.token).toContain("Token is required");
   });
 
   it("returns 400 for invalid or expired token", async () => {
@@ -79,7 +79,7 @@ describe("POST /api/v1/users/validate-setup-token (public)", () => {
       .post("/api/v1/users/validate-setup-token")
       .send({ token: "invalid-token" });
     expect(res.status).toBe(400);
-    expect(res.body.errors).toContain("Invalid or expired setup link. Please request a new one.");
+    expect(res.body.message).toContain("Invalid or expired setup link. Please request a new one.");
   });
 
   it("returns 400 if applicant already has userId", async () => {
@@ -96,7 +96,7 @@ describe("POST /api/v1/users/validate-setup-token (public)", () => {
       .post("/api/v1/users/validate-setup-token")
       .send({ token: "valid-token" });
     expect(res.status).toBe(400);
-    expect(res.body.errors).toContain("This setup link has already been used. Please sign in instead.");
+    expect(res.body.message).toContain("This setup link has already been used. Please sign in instead.");
   });
 
   it("returns 200 with applicant data for valid token", async () => {

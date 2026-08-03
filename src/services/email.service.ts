@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import nodemailer from "nodemailer";
 import { env } from "../config/env";
+import { renderBrandedEmail, type BrandedEmailOptions } from "../utils/emailTemplate";
 
 // ── Provider interface ─────────────────────────────────────────────────────
 
@@ -16,10 +17,6 @@ function logSent(type: string, to: string): void {
 
 function logFailed(type: string, to: string, err: unknown): void {
   console.error(`[EMAIL] Failed to send ${type} to ${to}:`, err);
-}
-
-function htmlBody(content: string): string {
-  return `<!DOCTYPE html><html><body style="font-family: Arial, sans-serif; padding: 24px;">${content}</body></html>`;
 }
 
 // ── Resend Provider ────────────────────────────────────────────────────────
@@ -87,16 +84,37 @@ export async function sendSetupLinkEmail(to: string, setupToken: string): Promis
     await provider.sendEmail(
       to,
       "Welcome to QCU MSC — Set Up Your Password",
-      htmlBody(`
-        <h2>Welcome to the Microsoft Student Community!</h2>
-        <p>Your applicant account has been created. Set your password to get started:</p>
-        <p><a href="${link}" style="display:inline-block;padding:12px 24px;background:#0078D4;color:#fff;text-decoration:none;border-radius:4px;">Set Up Password</a></p>
-        <p style="color:#666;font-size:12px;">This link expires in 24 hours.</p>
-      `),
+      renderBrandedEmail({
+        headline: "Welcome to the Microsoft Student Community!",
+        paragraphs: ["Your applicant account has been created. Set your password to get started:"],
+        button: { href: link, label: "Set Up Password" },
+        expiryNote: "This link expires in 24 hours.",
+      }),
     );
     logSent("Setup link", to);
   } catch (err) {
     logFailed("setup link", to, err);
+  }
+}
+
+export async function sendApplicationReceivedEmail(to: string, applicantName: string): Promise<void> {
+  try {
+    await provider.sendEmail(
+      to,
+      "Application Received — Under Review",
+      renderBrandedEmail({
+        headline: "Application received",
+        greeting: applicantName ? `Hello ${applicantName},` : "Hello,",
+        paragraphs: [
+          "Your application has been <strong>submitted successfully</strong> and is now under review.",
+          "If your application advances to the next stage, you will be notified about the interview.",
+          "A follow-up email containing your password setup link is on its way to activate your applicant account.",
+        ],
+      }),
+    );
+    logSent("Application received", to);
+  } catch (err) {
+    logFailed("application received", to, err);
   }
 }
 
@@ -105,12 +123,14 @@ export async function sendRegistrationConfirmedEmail(to: string, eventTitle: str
     await provider.sendEmail(
       to,
       `Registration Confirmed — ${eventTitle}`,
-      htmlBody(`
-        <h2>You're registered!</h2>
-        <p>Your registration for <strong>${eventTitle}</strong> is confirmed.</p>
-        <p>Show this QR code at the event entrance:</p>
-        <p style="font-size:24px;font-weight:bold;letter-spacing:2px;background:#f0f0f0;padding:12px;text-align:center;">${qrPayload}</p>
-      `),
+      renderBrandedEmail({
+        headline: "You're registered!",
+        paragraphs: [
+          `Your registration for <strong>${eventTitle}</strong> is confirmed.`,
+          "Show this QR code at the event entrance:",
+        ],
+        qrPayload,
+      }),
     );
     logSent("Registration confirmed", to);
   } catch (err) {
@@ -123,11 +143,13 @@ export async function sendRegistrationPendingReviewEmail(to: string, eventTitle:
     await provider.sendEmail(
       to,
       `Registration Pending Review — ${eventTitle}`,
-      htmlBody(`
-        <h2>Registration submitted for review</h2>
-        <p>Your registration for <strong>${eventTitle}</strong> has been submitted for manual review.</p>
-        <p>You will receive a follow-up email once an Admin approves your registration.</p>
-      `),
+      renderBrandedEmail({
+        headline: "Registration submitted for review",
+        paragraphs: [
+          `Your registration for <strong>${eventTitle}</strong> has been submitted for manual review.`,
+          "You will receive a follow-up email once an Admin approves your registration.",
+        ],
+      }),
     );
     logSent("Registration pending review", to);
   } catch (err) {
@@ -140,12 +162,14 @@ export async function sendRegistrationApprovedEmail(to: string, eventTitle: stri
     await provider.sendEmail(
       to,
       `Registration Approved — ${eventTitle}`,
-      htmlBody(`
-        <h2>Your registration has been approved!</h2>
-        <p>Your registration for <strong>${eventTitle}</strong> is now approved.</p>
-        <p>Show this QR code at the event entrance:</p>
-        <p style="font-size:24px;font-weight:bold;letter-spacing:2px;background:#f0f0f0;padding:12px;text-align:center;">${qrPayload}</p>
-      `),
+      renderBrandedEmail({
+        headline: "Your registration has been approved!",
+        paragraphs: [
+          `Your registration for <strong>${eventTitle}</strong> is now approved.`,
+          "Show this QR code at the event entrance:",
+        ],
+        qrPayload,
+      }),
     );
     logSent("Registration approved", to);
   } catch (err) {
@@ -158,11 +182,13 @@ export async function sendRegistrationRejectedEmail(to: string, eventTitle: stri
     await provider.sendEmail(
       to,
       `Registration Rejected — ${eventTitle}`,
-      htmlBody(`
-        <h2>Registration rejected</h2>
-        <p>Unfortunately, your registration for <strong>${eventTitle}</strong> has been rejected.</p>
-        <p>If you believe this is a mistake, please contact the Microsoft Student Community administrators.</p>
-      `),
+      renderBrandedEmail({
+        headline: "Registration rejected",
+        paragraphs: [
+          `Unfortunately, your registration for <strong>${eventTitle}</strong> has been rejected.`,
+        ],
+        supportLine: true,
+      }),
     );
     logSent("Registration rejected", to);
   } catch (err) {
@@ -175,11 +201,13 @@ export async function sendManualIdApprovedEmail(to: string): Promise<void> {
     await provider.sendEmail(
       to,
       "Student ID Approved — Application In Review",
-      htmlBody(`
-        <h2>Your Student ID has been verified</h2>
-        <p>Your manually uploaded Student ID has been approved. Your application is now in the review pipeline.</p>
-        <p>You will be notified once a decision has been made.</p>
-      `),
+      renderBrandedEmail({
+        headline: "Your Student ID has been verified",
+        paragraphs: [
+          "Your manually uploaded Student ID has been approved. Your application is now in the review pipeline.",
+          "You will be notified once a decision has been made.",
+        ],
+      }),
     );
     logSent("Manual ID approved", to);
   } catch (err) {
@@ -192,14 +220,182 @@ export async function sendManualIdRejectedEmail(to: string): Promise<void> {
     await provider.sendEmail(
       to,
       "Student ID Rejected",
-      htmlBody(`
-        <h2>Student ID verification failed</h2>
-        <p>Your manually uploaded Student ID could not be verified and your application has been rejected.</p>
-        <p>If you believe this is a mistake, please contact the Microsoft Student Community administrators.</p>
-      `),
+      renderBrandedEmail({
+        headline: "Student ID verification failed",
+        paragraphs: [
+          "Your manually uploaded Student ID could not be verified and your application has been rejected.",
+        ],
+        supportLine: true,
+      }),
     );
     logSent("Manual ID rejected", to);
   } catch (err) {
     logFailed("manual ID rejected", to, err);
   }
+}
+
+// ── Applicant status change (admin) ────────────────────────────────────────
+
+const APPLICANT_STATUS_LABELS: Record<string, string> = {
+  APPROVED: "Approved",
+  PENDING_REVIEW: "In Review",
+  FOR_INTERVIEW: "Interview",
+  REJECTED: "Rejected",
+  CANCELLED: "Cancelled",
+  RESUBMIT: "Updates Required",
+};
+
+/**
+ * Build the subject + content options for an applicant status-change email.
+ * Returns null for unknown statuses so the caller can silently skip.
+ */
+function buildApplicantStatusMail(
+  applicantName: string,
+  status: string,
+  adminMessage?: string | null,
+  resubmitFields?: string[] | null
+): { subject: string; options: BrandedEmailOptions } | null {
+  const greeting = `Dear ${applicantName},`;
+
+  switch (status) {
+    case "APPROVED":
+      return {
+        subject: "Your QCU MSC Application is Approved — Welcome!",
+        options: {
+          headline: "Congratulations!",
+          greeting,
+          paragraphs: [
+            "Your application has been <strong>approved</strong> and you are now an official member of the Microsoft Student Community at QCU.",
+            "Check your member dashboard to unlock member-only events and activities.",
+          ],
+        },
+      };
+    case "PENDING_REVIEW":
+      return {
+        subject: "Your QCU MSC Application is Under Review",
+        options: {
+          headline: "Application in progress",
+          greeting,
+          paragraphs: [
+            "Your application is now <strong>in review</strong>. Our admin team is going through it and you will hear from us once a decision is made.",
+          ],
+          note: adminMessage ?? undefined,
+        },
+      };
+    case "FOR_INTERVIEW":
+      return {
+        subject: "You're Invited for an Interview",
+        options: {
+          headline: "Interview invitation",
+          greeting,
+          paragraphs: [
+            "Your application has moved to the <strong>interview</strong> stage. Please wait for a separate invitation with the schedule and details.",
+          ],
+          note: adminMessage ?? undefined,
+        },
+      };
+    case "REJECTED":
+      return {
+        subject: "Update on Your QCU MSC Application",
+        options: {
+          headline: "Application status update",
+          greeting,
+          paragraphs: [
+            "Unfortunately, your application has been <strong>rejected</strong>.",
+          ],
+          note: adminMessage ?? undefined,
+          supportLine: true,
+        },
+      };
+    case "CANCELLED":
+      return {
+        subject: "Your QCU MSC Application Has Been Cancelled",
+        options: {
+          headline: "Application cancelled",
+          greeting,
+          paragraphs: [
+            "Your application has been <strong>cancelled</strong>. You can submit a new application at any time if you still wish to join.",
+          ],
+          note: adminMessage ?? undefined,
+          supportLine: true,
+        },
+      };
+    case "RESUBMIT":
+      return {
+        subject: "Action Required — Updates Needed on Your Application",
+        options: {
+          headline: "Updates needed",
+          greeting,
+          paragraphs: ["Please log in to the portal to make the changes, then resubmit."],
+          bullets:
+            resubmitFields && resubmitFields.length > 0
+              ? {
+                  label: "Please review and update the following section(s):",
+                  items: resubmitFields,
+                }
+              : undefined,
+          note: adminMessage ?? undefined,
+          supportLine: true,
+        },
+      };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Notify an applicant that their status changed.
+ *
+ * Swallows errors like the other applicant emails — a failed send must never
+ * break the admin's PATCH response.
+ */
+export async function sendApplicantStatusEmail(
+  applicant: {
+    email: string;
+    status: string;
+    adminMessage?: string | null;
+    resubmitFields?: string[] | null;
+  },
+  applicantName: string
+): Promise<void> {
+  const mail = buildApplicantStatusMail(
+    applicantName,
+    applicant.status,
+    applicant.adminMessage,
+    applicant.resubmitFields
+  );
+  if (!mail) return;
+
+  try {
+    await provider.sendEmail(applicant.email, mail.subject, renderBrandedEmail(mail.options));
+    logSent(`Applicant status (${APPLICANT_STATUS_LABELS[applicant.status] ?? applicant.status})`, applicant.email);
+  } catch (err) {
+    logFailed(`applicant status (${applicant.status})`, applicant.email, err);
+  }
+}
+
+/**
+ * Send the draft resume-link email.
+ *
+ * Deliberately does NOT swallow errors (unlike the other email functions):
+ * the resume link is the ONLY way forward for an applicant with an existing
+ * draft, so a failed send must surface to the caller, which will respond
+ * with 502 and keep the cooldown clear so the user can retry by rescanning.
+ */
+export async function sendDraftResumeLinkEmail(to: string, resumeToken: string): Promise<void> {
+  const link = `${env.FRONTEND_URL}/apply/resume?token=${resumeToken}`;
+  await provider.sendEmail(
+    to,
+    "Resume Your QCU MSC Application",
+    renderBrandedEmail({
+      headline: "Complete your application",
+      paragraphs: [
+        "We found an application in progress for your Student ID.",
+        "Resume where you left off:",
+      ],
+      button: { href: link, label: "Resume Application" },
+      expiryNote: `This link expires in ${env.RESUME_TOKEN_EXPIRY_MINUTES} minutes.`,
+    }),
+  );
+  logSent("Draft resume link", to);
 }

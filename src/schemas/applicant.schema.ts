@@ -4,9 +4,9 @@ import { z } from "zod";
 // ── Enums ────────────────────────────────────────────────────────────────
 
 export const applicantStatusEnum = z.enum(
-  ["APPROVED", "PENDING_REVIEW", "REJECTED", "CANCELLED", "RESUBMIT"],
+  ["APPROVED", "PENDING_REVIEW", "FOR_INTERVIEW", "REJECTED", "CANCELLED", "RESUBMIT"],
   {
-    error: "Status must be APPROVED, PENDING_REVIEW, REJECTED, CANCELLED, or RESUBMIT",
+    error: "Status must be APPROVED, PENDING_REVIEW, FOR_INTERVIEW, REJECTED, CANCELLED, or RESUBMIT",
   }
 );
 
@@ -21,6 +21,21 @@ export const campusEnum = z.enum(
   ["SAN_BARTOLOME_MAIN", "SAN_FRANCISCO", "BATASAN"],
   {
     error: "Campus must be San Bartolome (Main), San Francisco, or Batasan",
+  }
+);
+
+export const officeEnum = z.enum(
+  [
+    "SECRETARIAT_OFFICE",
+    "RELATIONS_OFFICE",
+    "FINANCE_OFFICE",
+    "LOGISTICS_OFFICE",
+    "CREATIVES_OFFICE",
+    "MANAGEMENT_AND_DEVELOPMENT_OFFICE",
+    "STARTUP_DEVELOPERS_OFFICE",
+  ],
+  {
+    error: "Office must be one of: Secretariat, Relations, Finance, Logistics, Creatives, Management & Development, or Startup Developers",
   }
 );
 
@@ -94,10 +109,7 @@ export const createApplicantSchema = z.object({
 
   gender: genderEnum,
 
-  membershipRole: z
-    .string({ message: "Membership role/participation is required" })
-    .min(1, "Membership role cannot be empty")
-    .max(200, "Membership role must be under 200 characters"),
+  office: officeEnum,
 
   // QCU Student ID in YY-NNNN format — only needed when the OCR session
   // returned studentId: null with manualRequired: true (manual entry fallback).
@@ -122,17 +134,10 @@ export const createApplicantSchema = z.object({
       "Cellphone number must be 11 digits starting with 09 (e.g., 09123456789)"
     ),
 
-  qcuMscEmail: z
-    .string({ message: "QCU MSC email address is required" })
-    .email("QCU MSC email must be a valid email address")
-    .regex(
-      /@qcu\.edu\.ph$/i,
-      "QCU MSC email must end with @qcu.edu.ph"
-    ),
-
-  facebookLink: z
-    .string({ message: "Facebook link is required" })
-    .url("Facebook link must be a valid URL (e.g., https://facebook.com/...)"),
+ facebookLink: z
+  .string({ message: "Facebook link is required" })
+  .url("Facebook link must be a valid URL (e.g., https://facebook.com/...)")
+  .startsWith("https://", "Facebook link must use HTTPS (e.g., https://facebook.com/...)"),
 
   // ── Additional Information ──────────────────────────────────────────
   interestsSkillsHobbies: z
@@ -144,15 +149,17 @@ export const createApplicantSchema = z.object({
     .min(1, "Organization history cannot be empty"),
 
   // ── Supporting Requirements (Optional) ──────────────────────────────
-  portfolio: z
-    .string({ message: "Portfolio must be a text value" })
-    .url("Portfolio must be a valid URL (e.g., https://...)")
-    .optional(),
+ portfolio: z
+  .string({ message: "Portfolio must be a text value" })
+  .url("Portfolio must be a valid URL (e.g., https://...)")
+  .startsWith("https://", "Portfolio link must use HTTPS (e.g., https://...)")
+  .optional(),
 
-  githubOrProjectLinks: z
-    .string({ message: "GitHub or project links must be a text value" })
-    .url("GitHub or project links must be a valid URL (e.g., https://github.com/...)")
-    .optional(),
+ githubOrProjectLinks: z
+  .string({ message: "GitHub or project links must be a text value" })
+  .url("GitHub or project links must be a valid URL (e.g., https://github.com/...)")
+  .startsWith("https://", "GitHub or project links must use HTTPS (e.g., https://github.com/...)")
+  .optional(),
 
   previousWorksAchievements: z
     .string({ message: "Previous works or achievements must be a text value" })
@@ -245,11 +252,7 @@ export const updateApplicantSchema = z.object({
 
   gender: genderEnum.optional(),
 
-  membershipRole: z
-    .string({ message: "Membership role must be a text value" })
-    .min(1, "Membership role cannot be empty")
-    .max(200, "Membership role must be under 200 characters")
-    .optional(),
+  office: officeEnum.optional(),
 
   studentId: z
     .string({ message: "Student ID must be a text value" })
@@ -273,16 +276,11 @@ export const updateApplicantSchema = z.object({
     )
     .optional(),
 
-  qcuMscEmail: z
-    .string({ message: "QCU MSC email must be a text value" })
-    .email("QCU MSC email must be a valid email address")
-    .regex(/@qcu\.edu\.ph$/i, "QCU MSC email must end with @qcu.edu.ph")
-    .optional(),
-
   facebookLink: z
-    .string({ message: "Facebook link must be a text value" })
-    .url("Facebook link must be a valid URL (e.g., https://facebook.com/...)")
-    .optional(),
+  .string({ message: "Facebook link must be a text value" })
+  .url("Facebook link must be a valid URL (e.g., https://facebook.com/...)")
+  .startsWith("https://", "Facebook link must use HTTPS (e.g., https://facebook.com/...)")
+  .optional(),
 
   interestsSkillsHobbies: z
     .string({ message: "Interests, skills, and hobbies must be a text value" })

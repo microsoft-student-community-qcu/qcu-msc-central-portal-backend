@@ -8,11 +8,17 @@ expand(rawEnv);
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z.enum(["development", "production", "staging", "release", "test"]).default("development"),
   DATABASE_URL: z.string().url(),
   BETTER_AUTH_SECRET: z.string().min(8),
   BETTER_AUTH_URL: z.string().url(),
   OCR_MAX_FAILURES: z.coerce.number().int().positive().default(3),
+
+  // Application draft & resume
+  DRAFT_TTL_HOURS: z.coerce.number().int().positive().default(168),
+  RESUME_EMAIL_COOLDOWN_MINUTES: z.coerce.number().int().positive().default(30),
+  RESUME_TOKEN_EXPIRY_MINUTES: z.coerce.number().int().positive().default(30),
+
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GITHUB_CLIENT_ID: z.string().optional(),
@@ -20,6 +26,9 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().default("http://localhost:5173"),
   ADMIN_FRONTEND_URL: z.string().url().default("http://localhost:8081"),
   AZURE_STORAGE_ACCOUNT_NAME: z.string().min(1),
+  AZURE_CLIENT_ID: z.string().optional(),
+  AZURE_CLIENT_SECRET: z.string().optional(),
+  AZURE_TENANT_ID: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
 
   // Email provider selection
@@ -27,7 +36,7 @@ const envSchema = z.object({
 
   // Resend (production)
   RESEND_API_KEY: z.string().optional(),
-  RESEND_FROM_EMAIL: z.string().email().default("no-reply@anonimi.cloud"),
+  RESEND_FROM_EMAIL: z.string().email().default("no-reply@msc-qcu.tech"),
 
   // SMTP (development)
   SMTP_HOST: z.string().optional(),

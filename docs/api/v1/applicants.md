@@ -1,7 +1,7 @@
 # Applicant Tracking API
 
 ## Overview
-The Applicant Tracking API manages the recruitment and application pipeline for prospective MSC members. It tracks applications from submission through admin review and final decision (PENDING_REVIEW → APPROVED / REJECTED / CANCELLED / RESUBMIT).
+The Applicant Tracking API manages the recruitment and application pipeline for prospective MSC members. It tracks applications from submission through admin review and final decision (PENDING_REVIEW → FOR_INTERVIEW → APPROVED / REJECTED / CANCELLED / RESUBMIT).
 
 The submission endpoint accepts **multipart/form-data** to support file uploads (Certificate of Registration, Curriculum Vitae).
 
@@ -12,7 +12,7 @@ The submission endpoint accepts **multipart/form-data** to support file uploads 
 ### 1. Create Applicant (Submit Application)
 
 **Description:**  
-Submits a new applicant to the MSC recruitment system. **Must** be preceded by a `POST /api/v1/ocr/verify` call to obtain an `ocrSessionId` — this enforces the two-step verification flow (see [applicant-tracking.md](../../guides/workflows/applicant-tracking.md)). The backend validates the OCR session and sets `manual_application` accordingly.
+Submits a new applicant to the MSC recruitment system. **Must** be preceded by a `POST /api/v1/ocr/verify` call to obtain an `ocrSessionId` — this enforces the two-step verification flow (see [applicant-tracking.md](../../guides/workflows/applicant-tracking.md)). The backend validates the OCR session and sets `manual_application` accordingly. On success the applicant receives two emails: an application-received confirmation (under review), then the password setup link.
 
 **Method:** `POST`  
 **Path:** `/api/v1/applicants`  
@@ -37,7 +37,7 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
 | `dateOfBirth` | string | Yes | YYYY-MM-DD format (e.g., 2000-01-15) |
 | `placeOfBirth` | string | Yes | 1-300 characters |
 | `gender` | enum | Yes | `MALE`, `FEMALE`, `LGBTQIA`, or `PREFER_NOT_TO_SAY` |
-| `membershipRole` | string | Yes | 1-200 characters |
+| `office` | enum | Yes | `SECRETARIAT_OFFICE`, `RELATIONS_OFFICE`, `FINANCE_OFFICE`, `LOGISTICS_OFFICE`, `CREATIVES_OFFICE`, `MANAGEMENT_AND_DEVELOPMENT_OFFICE`, `STARTUP_DEVELOPERS_OFFICE` |
 | `certificateOfRegistration` | file | Yes | PDF, JPEG, PNG, or DOCX — max 10MB |
 | `curriculumVitae` | file | Yes | PDF, JPEG, PNG, or DOCX — max 10MB |
 
@@ -46,7 +46,6 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
 |-------|------|----------|------------|
 | `houseAddress` | string | Yes | 1-500 characters |
 | `cellphoneNumber` | string | Yes | 11 digits starting with 09 (e.g., 09123456789) |
-| `qcuMscEmail` | string | Yes | Must end with @qcu.edu.ph (must be unique) |
 | `facebookLink` | string | Yes | Valid URL (e.g., https://facebook.com/...) |
 
 #### Additional Information
@@ -65,12 +64,15 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
 
 **Security note:** `manual_application` is never client-settable. If the OCR session indicates `manualRequired: true`, the backend sets `manual_application: true` regardless of the submitted `studentId` value.
 
+**`setupToken` note:** the `201` response includes `setupToken` — the signed JWT from the password-setup email. The frontend **must** forward it to `/api/auth/sign-up/email` when the applicant creates their account; sign-up is rejected with "Setup token is required" otherwise. The token is also verifiable via `POST /api/v1/users/validate-setup-token` (see [setup-token.md](setup-token.md)).
+
 **Response Format:**
 ```json
 {
   "success": boolean,
   "data": {
     "id": string (UUID),
+    "setupToken": string (JWT),
     "lastName": string,
     "firstName": string,
     "middleInitial": string | null,
@@ -83,10 +85,9 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
     "dateOfBirth": string (ISO 8601),
     "placeOfBirth": string,
     "gender": "MALE" | "FEMALE" | "LGBTQIA" | "PREFER_NOT_TO_SAY",
-    "membershipRole": string,
+    "office": "SECRETARIAT_OFFICE" | "RELATIONS_OFFICE" | "FINANCE_OFFICE" | "LOGISTICS_OFFICE" | "CREATIVES_OFFICE" | "MANAGEMENT_AND_DEVELOPMENT_OFFICE" | "STARTUP_DEVELOPERS_OFFICE",
     "houseAddress": string,
     "cellphoneNumber": string,
-    "qcuMscEmail": string,
     "facebookLink": string,
     "interestsSkillsHobbies": string,
     "organizationHistory": string,
@@ -105,7 +106,7 @@ Submits a new applicant to the MSC recruitment system. **Must** be preceded by a
 **Status Codes:**
 - `201`: Applicant created successfully
 - `400`: Validation error (invalid fields, missing studentId, missing files, expired OCR session)
-- `409`: Conflict (email or qcuMscEmail already exists)
+- `409`: Conflict (email already exists)
 - `429`: Rate limit exceeded
 - `500`: Internal server error
 
@@ -123,10 +124,9 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "dateOfBirth=2002-05-15" \
   -F "placeOfBirth=Quezon City" \
   -F "gender=FEMALE" \
-  -F "membershipRole=Active Member" \
+  -F "office=SECRETARIAT_OFFICE" \
   -F "houseAddress=123 Mabini St., Brgy. San Jose, Quezon City" \
   -F "cellphoneNumber=09123456789" \
-  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
   -F "facebookLink=https://facebook.com/janesmith" \
   -F "interestsSkillsHobbies=Programming, photography, badminton" \
   -F "organizationHistory=Former VP of CCS Student Government" \
@@ -148,10 +148,9 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "dateOfBirth=2002-05-15" \
   -F "placeOfBirth=Quezon City" \
   -F "gender=FEMALE" \
-  -F "membershipRole=Active Member" \
+  -F "office=SECRETARIAT_OFFICE" \
   -F "houseAddress=123 Mabini St., Brgy. San Jose, Quezon City" \
   -F "cellphoneNumber=09123456789" \
-  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
   -F "facebookLink=https://facebook.com/janesmith" \
   -F "interestsSkillsHobbies=Programming, photography, badminton" \
   -F "organizationHistory=Former VP of CCS Student Government" \
@@ -167,6 +166,7 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   "success": true,
   "data": {
     "id": "660e8400-e29b-41d4-a716-446655440001",
+    "setupToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "lastName": "Smith",
     "firstName": "Jane",
     "middleInitial": "B",
@@ -179,10 +179,9 @@ curl -X POST http://localhost:5000/api/v1/applicants \
     "dateOfBirth": "2002-05-15T00:00:00.000Z",
     "placeOfBirth": "Quezon City",
     "gender": "FEMALE",
-    "membershipRole": "Active Member",
+    "office": "SECRETARIAT_OFFICE",
     "houseAddress": "123 Mabini St., Brgy. San Jose, Quezon City",
     "cellphoneNumber": "09123456789",
-    "qcuMscEmail": "jane.smith@qcu.edu.ph",
     "facebookLink": "https://facebook.com/janesmith",
     "interestsSkillsHobbies": "Programming, photography, badminton",
     "organizationHistory": "Former VP of CCS Student Government",
@@ -266,17 +265,16 @@ Retrieves a specific applicant's details by their ID.
     "dateOfBirth": string (ISO 8601),
     "placeOfBirth": string,
     "gender": "MALE" | "FEMALE" | "LGBTQIA" | "PREFER_NOT_TO_SAY",
-    "membershipRole": string,
+    "office": "SECRETARIAT_OFFICE" | "RELATIONS_OFFICE" | "FINANCE_OFFICE" | "LOGISTICS_OFFICE" | "CREATIVES_OFFICE" | "MANAGEMENT_AND_DEVELOPMENT_OFFICE" | "STARTUP_DEVELOPERS_OFFICE",
     "houseAddress": string,
     "cellphoneNumber": string,
-    "qcuMscEmail": string,
     "facebookLink": string,
     "interestsSkillsHobbies": string,
     "organizationHistory": string,
     "portfolio": string | null,
     "githubOrProjectLinks": string | null,
     "previousWorksAchievements": string | null,
-    "status": "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "CANCELLED" | "RESUBMIT",
+    "status": "PENDING_REVIEW" | "FOR_INTERVIEW" | "APPROVED" | "REJECTED" | "CANCELLED" | "RESUBMIT",
     "manual_application": boolean,
     "adminMessage": string | null,
     "createdAt": string (ISO 8601),
@@ -310,10 +308,9 @@ curl -X GET http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-4466
     "dateOfBirth": "2002-05-15T00:00:00.000Z",
     "placeOfBirth": "Quezon City",
     "gender": "FEMALE",
-    "membershipRole": "Active Member",
+    "office": "SECRETARIAT_OFFICE",
     "houseAddress": "123 Mabini St., Brgy. San Jose, Quezon City",
     "cellphoneNumber": "09123456789",
-    "qcuMscEmail": "jane.smith@qcu.edu.ph",
     "facebookLink": "https://facebook.com/janesmith",
     "interestsSkillsHobbies": "Programming, photography, badminton",
     "organizationHistory": "Former VP of CCS Student Government",
@@ -342,7 +339,7 @@ Retrieves all applicants with optional filtering by status, campus, or gender.
 **Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Query Parameters:**
-- `status` (optional): Filter by status — `APPROVED`, `PENDING_REVIEW`, `REJECTED`, `CANCELLED`, `RESUBMIT`
+- `status` (optional): Filter by status — `APPROVED`, `PENDING_REVIEW`, `FOR_INTERVIEW`, `REJECTED`, `CANCELLED`, `RESUBMIT`
 - `campus` (optional): Filter by campus — `SAN_BARTOLOME_MAIN`, `SAN_FRANCISCO`, `BATASAN`
 - `gender` (optional): Filter by gender — `MALE`, `FEMALE`, `LGBTQIA`, `PREFER_NOT_TO_SAY`
 - `manual_application` (optional): Filter by manual application flag — `true` or `false`
@@ -368,7 +365,7 @@ Retrieves all applicants with optional filtering by status, campus, or gender.
         "campus": string,
         "studentId": string | null,
         "gender": string,
-        "membershipRole": string,
+        "office": "SECRETARIAT_OFFICE" | "RELATIONS_OFFICE" | "FINANCE_OFFICE" | "LOGISTICS_OFFICE" | "CREATIVES_OFFICE" | "MANAGEMENT_AND_DEVELOPMENT_OFFICE" | "STARTUP_DEVELOPERS_OFFICE",
         "status": string,
         "manual_application": boolean,
         "adminMessage": string | null,
@@ -393,13 +390,15 @@ curl -X GET "http://localhost:5000/api/v1/applicants?status=PENDING_REVIEW&campu
 **Description:**  
 Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
 
+> **Note:** Whenever the status actually changes, the applicant is emailed a status-appropriate notification (approved / in review / interview / rejected / cancelled / resubmit). The optional `message` is included in the email when present. A failed email send never affects the API response.
+
 **Method:** `PATCH`  
 **Path:** `/api/v1/applicants/:applicantId/status`
 
 **Authentication:** Required (Bearer token, ADMIN_HR only)
 
 **Request Parameters:**
-- `status` (enum, required): New status — `APPROVED`, `PENDING_REVIEW`, `REJECTED`, `CANCELLED`, or `RESUBMIT`
+- `status` (enum, required): New status — `APPROVED`, `PENDING_REVIEW`, `FOR_INTERVIEW`, `REJECTED`, `CANCELLED`, or `RESUBMIT`
 - `message` (string, optional): Admin remark to show the applicant (typically used when setting `RESUBMIT`)
 
 **Response Format:**
@@ -612,10 +611,9 @@ All fields from the create schema are available as optional parameters. See [Cre
     "dateOfBirth": string (ISO 8601),
     "placeOfBirth": string,
     "gender": string,
-    "membershipRole": string,
+    "office": "SECRETARIAT_OFFICE" | "RELATIONS_OFFICE" | "FINANCE_OFFICE" | "LOGISTICS_OFFICE" | "CREATIVES_OFFICE" | "MANAGEMENT_AND_DEVELOPMENT_OFFICE" | "STARTUP_DEVELOPERS_OFFICE",
     "houseAddress": string,
     "cellphoneNumber": string,
-    "qcuMscEmail": string,
     "facebookLink": string,
     "interestsSkillsHobbies": string,
     "organizationHistory": string,
@@ -637,13 +635,265 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-44
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -d '{
     "program": "BS Data Science",
-    "membershipRole": "Senior Member"
+    "office": "SECRETARIAT_OFFICE"
   }'
 ```
 
 ---
 
-## Validation Errors
+## 6. Multi-Step Application Draft
+
+Alternative to the single `POST /api/v1/applicants` endpoint. Splits the submission into 4 batches so each step is validated immediately on the backend. Requires `POST /api/v1/ocr/verify` first (same as the single endpoint).
+
+**Rate Limit:** 10 requests per minute per IP (shared across all draft endpoints)
+
+---
+
+### 6.1 Create Draft (Batch 0)
+
+**Description:**  
+Creates an application draft after a successful OCR scan. Stores basic personal info and consumes the OCR session (extracts student ID and ID image path). Returns a `draftId` used as the continuation token for subsequent batches.
+
+If a **resumable draft already exists** for the session's student ID (detected at scan time by the OCR endpoint, see [ocr.md](ocr.md)), creation is rejected with `409` — the resume email is the only way forward. Stale drafts (past `DRAFT_TTL_HOURS`) are deleted lazily and creation proceeds.
+
+**Method:** `POST`  
+**Path:** `/api/v1/applicants/draft`  
+**Content-Type:** `application/json`
+
+**Request Body:**
+```json
+{
+  "lastName": "Smith",
+  "firstName": "Jane",
+  "middleInitial": "B",
+  "email": "jane@example.com",
+  "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004"
+}
+```
+
+**Example Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "draftId": "770e8400-e29b-41d4-a716-446655440005"
+  },
+  "message": "Draft created successfully. Proceed to Batch 1."
+}
+```
+
+**Status Codes:**
+- `201`: Draft created
+- `400`: Validation error, or OCR session expired/invalid
+- `409`: Conflict — a resumable application draft already exists for this Student ID
+- `429`: Rate limit exceeded
+- `500`: Internal server error
+
+---
+
+### 6.2 Update Draft — Batch 1 (Personal Info)
+
+**Description:**  
+Saves personal information for the draft. The draft must be at step 0 (freshly created). Advances the draft to step 1.
+
+**Method:** `PATCH`  
+**Path:** `/api/v1/applicants/draft/:draftId/batch-1`  
+**Content-Type:** `application/json`
+
+**Request Body:**
+```json
+{
+  "dateOfBirth": "2002-05-15",
+  "placeOfBirth": "Quezon City",
+  "gender": "FEMALE",
+  "cellphoneNumber": "09123456789",
+  "houseAddress": "123 Mabini St., Brgy. San Jose, Quezon City",
+  "facebookLink": "https://facebook.com/janesmith"
+}
+```
+
+**Example Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "currentStep": 1
+  },
+  "message": "Batch 1 saved. Proceed to Batch 2."
+}
+```
+
+**Status Codes:**
+- `200`: Batch saved
+- `400`: Validation error, or draft is at wrong step
+- `404`: Draft not found
+- `429`: Rate limit exceeded
+- `500`: Internal server error
+
+---
+
+### 6.3 Update Draft — Batch 2 (Academic Info + Files)
+
+**Description:**  
+Saves academic information and uploads supporting documents. The draft must be at step 1. Advances the draft to step 2.
+
+**Method:** `PATCH`  
+**Path:** `/api/v1/applicants/draft/:draftId/batch-2`  
+**Content-Type:** `multipart/form-data`
+
+**Request Fields:**
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `college` | string | Yes | 1-200 characters |
+| `program` | string | Yes | 1-200 characters |
+| `section` | string | Yes | 1-100 characters |
+| `campus` | enum | Yes | `SAN_BARTOLOME_MAIN`, `SAN_FRANCISCO`, `BATASAN` |
+| `office` | enum | Yes | `SECRETARIAT_OFFICE`, `RELATIONS_OFFICE`, `FINANCE_OFFICE`, `LOGISTICS_OFFICE`, `CREATIVES_OFFICE`, `MANAGEMENT_AND_DEVELOPMENT_OFFICE`, `STARTUP_DEVELOPERS_OFFICE` |
+| `certificateOfRegistration` | file | Yes | PDF, JPEG, PNG, or DOCX — max 10MB |
+| `curriculumVitae` | file | Yes | PDF, JPEG, PNG, or DOCX — max 10MB |
+
+**Example Request:**
+```bash
+curl -X PATCH http://localhost:5000/api/v1/applicants/draft/770e8400-.../batch-2 \
+  -F "college=College of Engineering" \
+  -F "program=BS Computer Engineering" \
+  -F "section=CPE-3A" \
+  -F "campus=SAN_BARTOLOME_MAIN" \
+  -F "office=SECRETARIAT_OFFICE" \
+  -F "certificateOfRegistration=@cor.pdf" \
+  -F "curriculumVitae=@cv.pdf"
+```
+
+**Example Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "currentStep": 2
+  },
+  "message": "Batch 2 saved. Ready for final submission."
+}
+```
+
+**Status Codes:**
+- `200`: Batch saved
+- `400`: Validation error, file too large, or draft is at wrong step
+- `404`: Draft not found
+- `429`: Rate limit exceeded
+- `500`: Internal server error
+
+---
+
+### 6.4 Submit Draft (Batch 3 — Final)
+
+**Description:**  
+Final step. Saves additional information, creates the real `Applicant` record from all accumulated draft data, and deletes the draft. On success the applicant receives two emails: an application-received confirmation (under review), then the password setup link. The draft must be at step 2.
+
+**Method:** `POST`  
+**Path:** `/api/v1/applicants/draft/:draftId/submit`  
+**Content-Type:** `application/json`
+
+**Request Body:**
+```json
+{
+  "interestsSkillsHobbies": "Programming, photography, badminton",
+  "organizationHistory": "Former VP of CCS Student Government",
+  "portfolio": "https://janesmith.dev",
+  "githubOrProjectLinks": "https://github.com/janesmith",
+  "previousWorksAchievements": "Dean's Lister AY 2024-2025"
+}
+```
+
+**Example Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "660e8400-e29b-41d4-a716-446655440001",
+    "status": "PENDING_REVIEW"
+  },
+  "message": "Application submitted successfully. Check your email for the setup link."
+}
+```
+
+**Status Codes:**
+- `201`: Applicant created
+- `400`: Validation error, or draft is at wrong step
+- `404`: Draft not found
+- `409`: Conflict (email already exists)
+- `429`: Rate limit exceeded
+- `500`: Internal server error
+
+---
+
+### 6.5 Resume Draft
+
+**Description:**  
+Resumes an in-progress application via the emailed resume link (sent by the OCR endpoint when a draft exists — see [ocr.md](ocr.md)). Validates the signed token and returns the **full draft record** so the frontend can rehydrate the multi-step form.
+
+**Method:** `POST`  
+**Path:** `/api/v1/applicants/draft/resume`  
+**Content-Type:** `application/json`
+
+**Request Body:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Example Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "draft": {
+      "id": "770e8400-e29b-41d4-a716-446655440005",
+      "currentStep": 1,
+      "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004",
+      "lastName": "Smith",
+      "firstName": "Jane",
+      "middleInitial": "B",
+      "email": "jane@example.com",
+      "studentId": "23-5678",
+      "idImagePath": "ocr/1739000000000_id.jpg",
+      "dateOfBirth": "2002-05-15T00:00:00.000Z",
+      "placeOfBirth": "Quezon City",
+      "gender": "FEMALE",
+      "cellphoneNumber": "09123456789",
+      "houseAddress": "123 Mabini St., Brgy. San Jose, Quezon City",
+      "facebookLink": "https://facebook.com/janesmith",
+      "college": null,
+      "program": null,
+      "section": null,
+      "campus": null,
+      "office": null,
+      "certificateOfRegistration": null,
+      "curriculumVitae": null,
+      "interestsSkillsHobbies": null,
+      "organizationHistory": null,
+      "portfolio": null,
+      "githubOrProjectLinks": null,
+      "previousWorksAchievements": null,
+      "manual_application": false,
+      "lastResumeEmailSentAt": "2026-08-02T09:00:00.000Z",
+      "createdAt": "2026-08-02T08:30:00.000Z",
+      "updatedAt": "2026-08-02T09:00:00.000Z"
+    }
+  },
+  "message": "Application draft loaded. Continue where you left off."
+}
+```
+
+**Status Codes:**
+- `200`: Draft loaded — the `currentStep` field tells the frontend which batch to show
+- `400`: Validation error, or the resume token is invalid / expired / belongs to a different draft
+- `404`: Draft not found — completed or expired (past `DRAFT_TTL_HOURS`); user should start a new application
+- `429`: Rate limit exceeded
+- `500`: Internal server error
+
+---
 
 All validation errors return `400` with the following shape:
 
@@ -678,19 +928,6 @@ All validation errors return `400` with the following shape:
   "errors": {
     "cellphoneNumber": [
       "Cellphone number must be 11 digits starting with 09 (e.g., 09123456789)"
-    ]
-  }
-}
-```
-
-**Example — invalid `qcuMscEmail`:**
-```json
-{
-  "success": false,
-  "message": "Validation error",
-  "errors": {
-    "qcuMscEmail": [
-      "QCU MSC email must end with @qcu.edu.ph"
     ]
   }
 }
@@ -731,10 +968,9 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "dateOfBirth=2002-05-15" \
   -F "placeOfBirth=Quezon City" \
   -F "gender=FEMALE" \
-  -F "membershipRole=Active Member" \
+  -F "office=SECRETARIAT_OFFICE" \
   -F "houseAddress=123 Mabini St." \
   -F "cellphoneNumber=09123456789" \
-  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
   -F "facebookLink=https://facebook.com/janesmith" \
   -F "interestsSkillsHobbies=Programming, photography" \
   -F "organizationHistory=N/A" \
@@ -763,10 +999,9 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "dateOfBirth=2002-05-15" \
   -F "placeOfBirth=Quezon City" \
   -F "gender=FEMALE" \
-  -F "membershipRole=Active Member" \
+  -F "office=SECRETARIAT_OFFICE" \
   -F "houseAddress=123 Mabini St." \
   -F "cellphoneNumber=09123456789" \
-  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
   -F "facebookLink=https://facebook.com/janesmith" \
   -F "interestsSkillsHobbies=Programming, photography" \
   -F "organizationHistory=N/A" \
@@ -792,10 +1027,9 @@ curl -X POST http://localhost:5000/api/v1/applicants \
   -F "dateOfBirth=2002-05-15" \
   -F "placeOfBirth=Quezon City" \
   -F "gender=FEMALE" \
-  -F "membershipRole=Active Member" \
+  -F "office=SECRETARIAT_OFFICE" \
   -F "houseAddress=123 Mabini St." \
   -F "cellphoneNumber=09123456789" \
-  -F "qcuMscEmail=jane.smith@qcu.edu.ph" \
   -F "facebookLink=https://facebook.com/janesmith" \
   -F "interestsSkillsHobbies=Programming" \
   -F "organizationHistory=N/A" \
@@ -813,6 +1047,6 @@ All endpoints return appropriate HTTP status codes:
 - `401`: Unauthorized (missing or invalid token)
 - `403`: Forbidden (insufficient permissions)
 - `404`: Not found (applicant ID doesn't exist)
-- `409`: Conflict (email or qcuMscEmail already exists)
+- `409`: Conflict (email already exists)
 - `429`: Rate limit exceeded (5 req/min/IP)
 - `500`: Internal server error
