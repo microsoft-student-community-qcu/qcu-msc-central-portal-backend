@@ -10,6 +10,12 @@ interface SetupTokenPayload {
   purpose: "password-setup";
 }
 
+interface DraftResumeTokenPayload {
+  draftId: string;
+  email: string;
+  purpose: "resume-draft";
+}
+
 export async function signSetupToken(
   applicantId: string,
   email: string
@@ -36,5 +42,38 @@ export async function verifySetupToken(
     applicantId: payload.applicantId as string,
     email: payload.email as string,
     purpose: "password-setup",
+  };
+}
+
+/**
+ * Sign a short-lived resume token embedded in the draft resume-link email.
+ * Short expiry is fine — the token is only used to load a draft into the form.
+ */
+export async function signDraftResumeToken(
+  draftId: string,
+  email: string
+): Promise<string> {
+  return new SignJWT({ draftId, email, purpose: "resume-draft" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${env.RESUME_TOKEN_EXPIRY_MINUTES}m`)
+    .sign(SECRET);
+}
+
+export async function verifyDraftResumeToken(
+  token: string
+): Promise<DraftResumeTokenPayload> {
+  const { payload } = await jwtVerify(token, SECRET, {
+    algorithms: ["HS256"],
+  });
+
+  if (payload.purpose !== "resume-draft") {
+    throw new Error("Invalid token purpose");
+  }
+
+  return {
+    draftId: payload.draftId as string,
+    email: payload.email as string,
+    purpose: "resume-draft",
   };
 }

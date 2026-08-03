@@ -49,6 +49,18 @@ ApplicationDraft ──→ (references) OCR session (in-memory)
 
 ---
 
+## Application Draft — Resume Link Fields
+
+The `ApplicationDraft` model supports cross-device resume via emailed links:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `lastResumeEmailSentAt` | DateTime? | Timestamp of the last successful resume-link email — enforces the 30-min cooldown (`RESUME_EMAIL_COOLDOWN_MINUTES`) and is only set on successful sends so failed sends can retry |
+
+Draft lifecycle: created by the multi-step flow, blocks a new application while active, expires after `DRAFT_TTL_HOURS` (7 days, lazy delete at next scan). See the [Draft Resume Flow](../../api/v1/ocr.md) in the OCR API docs.
+
+---
+
 ## Data Migration Strategy
 
 1. Create new fields with backward-compatible defaults
@@ -69,3 +81,4 @@ ApplicationDraft ──→ (references) OCR session (in-memory)
 | 2026-06-28 | Added `manual_application` field to Applicant; documented two-step OCR flow |
 | 2026-07-02 | Major Applicant model expansion: 22 new fields across Personal Info, Contact Info, Additional Info, Supporting Requirements; new `Gender` and `Campus` enums; data models split into per-entity files |
 | 2026-07-29 | Added `ApplicationDraft` model (multi-step batch submission); added `Office` enum |
+| 2026-08-02 | Added `lastResumeEmailSentAt` to `ApplicationDraft` for the draft resume-link cooldown; documented 7-day draft TTL and lazy expiry |

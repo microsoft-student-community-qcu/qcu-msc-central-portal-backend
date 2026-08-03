@@ -3,6 +3,7 @@ import multer, { MulterError } from "multer";
 import rateLimit from "express-rate-limit";
 import {
   createDraft,
+  resumeDraft,
   updateDraftBatch1,
   updateDraftBatch2,
   submitDraft,
@@ -53,6 +54,19 @@ router.post(
   "/draft",
   draftLimiter,
   createDraft
+);
+
+/**
+ * POST /api/v1/applicants/draft/resume
+ *
+ * Public. Resumes an in-progress application from the emailed resume link.
+ * Accepts JSON body with a signed resume token; returns the full draft
+ * so the frontend can rehydrate the form.
+ */
+router.post(
+  "/draft/resume",
+  draftLimiter,
+  resumeDraft
 );
 
 /**

@@ -652,6 +652,8 @@ Alternative to the single `POST /api/v1/applicants` endpoint. Splits the submiss
 **Description:**  
 Creates an application draft after a successful OCR scan. Stores basic personal info and consumes the OCR session (extracts student ID and ID image path). Returns a `draftId` used as the continuation token for subsequent batches.
 
+If a **resumable draft already exists** for the session's student ID (detected at scan time by the OCR endpoint, see [ocr.md](ocr.md)), creation is rejected with `409` — the resume email is the only way forward. Stale drafts (past `DRAFT_TTL_HOURS`) are deleted lazily and creation proceeds.
+
 **Method:** `POST`  
 **Path:** `/api/v1/applicants/draft`  
 **Content-Type:** `application/json`
@@ -681,6 +683,7 @@ Creates an application draft after a successful OCR scan. Stores basic personal 
 **Status Codes:**
 - `201`: Draft created
 - `400`: Validation error, or OCR session expired/invalid
+- `409`: Conflict — a resumable application draft already exists for this Student ID
 - `429`: Rate limit exceeded
 - `500`: Internal server error
 
@@ -817,6 +820,74 @@ Final step. Saves additional information, creates the real `Applicant` record fr
 - `400`: Validation error, or draft is at wrong step
 - `404`: Draft not found
 - `409`: Conflict (email already exists)
+- `429`: Rate limit exceeded
+- `500`: Internal server error
+
+---
+
+### 6.5 Resume Draft
+
+**Description:**  
+Resumes an in-progress application via the emailed resume link (sent by the OCR endpoint when a draft exists — see [ocr.md](ocr.md)). Validates the signed token and returns the **full draft record** so the frontend can rehydrate the multi-step form.
+
+**Method:** `POST`  
+**Path:** `/api/v1/applicants/draft/resume`  
+**Content-Type:** `application/json`
+
+**Request Body:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Example Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "draft": {
+      "id": "770e8400-e29b-41d4-a716-446655440005",
+      "currentStep": 1,
+      "ocrSessionId": "990e8400-e29b-41d4-a716-446655440004",
+      "lastName": "Smith",
+      "firstName": "Jane",
+      "middleInitial": "B",
+      "email": "jane@example.com",
+      "studentId": "23-5678",
+      "idImagePath": "ocr/1739000000000_id.jpg",
+      "dateOfBirth": "2002-05-15T00:00:00.000Z",
+      "placeOfBirth": "Quezon City",
+      "gender": "FEMALE",
+      "cellphoneNumber": "09123456789",
+      "houseAddress": "123 Mabini St., Brgy. San Jose, Quezon City",
+      "facebookLink": "https://facebook.com/janesmith",
+      "college": null,
+      "program": null,
+      "section": null,
+      "campus": null,
+      "office": null,
+      "certificateOfRegistration": null,
+      "curriculumVitae": null,
+      "interestsSkillsHobbies": null,
+      "organizationHistory": null,
+      "portfolio": null,
+      "githubOrProjectLinks": null,
+      "previousWorksAchievements": null,
+      "manual_application": false,
+      "lastResumeEmailSentAt": "2026-08-02T09:00:00.000Z",
+      "createdAt": "2026-08-02T08:30:00.000Z",
+      "updatedAt": "2026-08-02T09:00:00.000Z"
+    }
+  },
+  "message": "Application draft loaded. Continue where you left off."
+}
+```
+
+**Status Codes:**
+- `200`: Draft loaded — the `currentStep` field tells the frontend which batch to show
+- `400`: Validation error, or the resume token is invalid / expired / belongs to a different draft
+- `404`: Draft not found — completed or expired (past `DRAFT_TTL_HOURS`); user should start a new application
 - `429`: Rate limit exceeded
 - `500`: Internal server error
 

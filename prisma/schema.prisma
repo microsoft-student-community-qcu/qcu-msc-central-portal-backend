@@ -267,6 +267,7 @@ model ApplicationDraft {
   previousWorksAchievements   String?
 
   manual_application          Boolean?
+  lastResumeEmailSentAt       DateTime?
   createdAt                   DateTime        @default(now())
   updatedAt                   DateTime        @updatedAt
 }

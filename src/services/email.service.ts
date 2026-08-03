@@ -203,3 +203,27 @@ export async function sendManualIdRejectedEmail(to: string): Promise<void> {
     logFailed("manual ID rejected", to, err);
   }
 }
+
+/**
+ * Send the draft resume-link email.
+ *
+ * Deliberately does NOT swallow errors (unlike the other email functions):
+ * the resume link is the ONLY way forward for an applicant with an existing
+ * draft, so a failed send must surface to the caller, which will respond
+ * with 502 and keep the cooldown clear so the user can retry by rescanning.
+ */
+export async function sendDraftResumeLinkEmail(to: string, resumeToken: string): Promise<void> {
+  const link = `${env.FRONTEND_URL}/apply/resume?token=${resumeToken}`;
+  await provider.sendEmail(
+    to,
+    "Resume Your QCU MSC Application",
+    htmlBody(`
+      <h2>Complete your application</h2>
+      <p>We found an application in progress for your Student ID.</p>
+      <p>Resume where you left off:</p>
+      <p><a href="${link}" style="display:inline-block;padding:12px 24px;background:#0078D4;color:#fff;text-decoration:none;border-radius:4px;">Resume Application</a></p>
+      <p style="color:#666;font-size:12px;">This link expires in ${env.RESUME_TOKEN_EXPIRY_MINUTES} minutes.</p>
+    `),
+  );
+  logSent("Draft resume link", to);
+}
