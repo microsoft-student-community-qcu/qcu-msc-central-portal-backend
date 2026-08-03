@@ -36,7 +36,11 @@ The applicant pipeline is managed exclusively by ADMIN_HR users. Applications ar
      - `POST /api/v1/applicants/draft/:draftId/submit` — Batch 3 (final): additional info → creates Applicant record, sends setup email
    - Each batch is validated immediately; errors are caught at the current step, not at the end.
    - Steps cannot be skipped — each endpoint checks the previous step was completed.
-   - The `draftId` is stored in localStorage by the frontend, allowing users to resume after a page refresh.
+   - The `draftId` is stored in localStorage by the frontend, allowing users to resume after a page refresh on the same device.
+8. **Draft gate (cross-device resume):** If a draft already exists for the scanned Student ID, the OCR endpoint returns `resumePending: true` and the form is blocked. A resume link email is sent to the draft's email instead:
+   - `POST /api/v1/ocr/verify` → `{ resumePending: true, ocrSessionId: null }` (no session is issued)
+   - `POST /api/v1/applicants/draft/resume` → validates the signed token from the link, returns the full draft; the frontend rehydrates the form and continues from `currentStep`.
+   - One email per draft per 30 minutes (cooldown); links expire after 30 minutes; drafts expire after 7 days (`DRAFT_TTL_HOURS`) — expired drafts are deleted lazily at the next scan.
 8. Backend validates the OCR session, saves uploaded files, and creates the applicant record.
    - If `manualRequired: true`, `manual_application` is set to `true`.
    - If OCR succeeded, `manual_application` remains `false`.
@@ -135,6 +139,7 @@ CANCELLED (applicant or admin, from any status other than APPROVED)
 | PATCH | `/api/v1/applicants/:id` | Update applicant fields | ADMIN_HR |
 | PATCH | `/api/v1/applicants/:id/status` | Update applicant status | ADMIN_HR |
 | POST | `/api/v1/applicants/draft` | Create application draft | Public |
+| POST | `/api/v1/applicants/draft/resume` | Resume a draft via emailed resume link | Public |
 | PATCH | `/api/v1/applicants/draft/:id/batch-1` | Save personal info (Batch 1) | Public |
 | PATCH | `/api/v1/applicants/draft/:id/batch-2` | Save academic info + files (Batch 2) | Public |
 | POST | `/api/v1/applicants/draft/:id/submit` | Finalize draft → create Applicant (Batch 3) | Public |

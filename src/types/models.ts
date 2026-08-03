@@ -221,6 +221,8 @@ export interface ApplicationDraft {
   githubOrProjectLinks: string | null;
   previousWorksAchievements: string | null;
   manual_application: boolean | null;
+  /** Timestamp of the last successful draft resume-link email (cooldown). */
+  lastResumeEmailSentAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
