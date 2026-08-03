@@ -197,6 +197,8 @@ curl -X GET http://localhost:5000/api/v1/users/me \
 **Description:**  
 Links the authenticated user's account to their existing applicant record. Called by the frontend after successful Better Auth sign-up during the membership application flow.
 
+> **Safety net:** If this endpoint is never called (network timeout, page refresh, frontend bug), the **auto-link on sign-in** fallback reconnects the records automatically. Both `POST /api/v1/auth/student/sign-in` and `POST /api/v1/auth/admin/sign-in` run an idempotent `updateMany({ where: { email, userId: null }, data: { userId } })` when auth succeeds. No frontend change needed — the user just signs in again.
+
 **Method:** `POST`  
 **Path:** `/api/v1/users/link-applicant`
 
