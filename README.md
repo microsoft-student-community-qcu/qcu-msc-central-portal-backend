@@ -68,7 +68,7 @@ All environment variables are validated via Zod in `src/config/env.ts` at startu
 | `AZURE_TENANT_ID` | Azure Service Principal tenant ID | *(required)* |
 | `EMAIL_PROVIDER` | Email delivery backend | `RESEND` or `SMTP` |
 | `RESEND_API_KEY` | Resend API key (when `EMAIL_PROVIDER=RESEND`) | *(required for RESEND)* |
-| `RESEND_FROM_EMAIL` | Resend sender email | `no-reply@anonimi.cloud` |
+| `RESEND_FROM_EMAIL` | Resend sender email | `no-reply@msc-qcu.tech` |
 | `SMTP_HOST` | SMTP server host (when `EMAIL_PROVIDER=SMTP`) | *(required for SMTP)* |
 | `SMTP_PORT` | SMTP server port | *(required for SMTP)* |
 | `SMTP_SECURE` | SMTP TLS flag | `true` / `false` |
@@ -89,6 +89,7 @@ All environment variables are validated via Zod in `src/config/env.ts` at startu
 qcu-msc-central-portal-backend/
 ├── docs/           # API docs, guides, specs
 ├── prisma/         # Schema + migrations
+├── security-issues/ # Versioned security assessment reports & vuln docs
 ├── src/            # Application source
 ├── .env.example
 ├── AGENTS.md
@@ -103,6 +104,7 @@ qcu-msc-central-portal-backend/
 | Resource | Description |
 | :--- | :--- |
 | [docs/](docs/) | API documentation, data models, workflow guides, flow diagrams, PRD |
+| [security-issues/](security-issues/) | Versioned security assessment reports and vulnerability documentation |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution workflow, branch strategy, PR process |
 | [AGENTS.md](AGENTS.md) | Engineering standards: code style, architecture, API rules, database, testing |
 

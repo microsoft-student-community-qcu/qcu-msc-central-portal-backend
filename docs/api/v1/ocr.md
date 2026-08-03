@@ -58,6 +58,34 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
 }
 ```
 
+**Already Submitted Response (application exists for this Student ID):**
+```json
+{
+  "success": true,
+  "data": {
+    "alreadySubmitted": true,
+    "setupToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  },
+  "message": "You have already submitted an application. Redirecting to account setup..."
+}
+```
+
+`setupToken` is the signed JWT from the password-setup email (`sendSetupLinkEmail`). The frontend must attach it to `/api/auth/sign-up/email` when creating the applicant account — the sign-up endpoint rejects requests without a valid setup token. The token is also verifiable via `POST /api/v1/users/validate-setup-token` (see [setup-token.md](setup-token.md)).
+
+**Resume Pending Response (in-progress application found for this Student ID):**
+```json
+{
+  "success": true,
+  "data": {
+    "resumePending": true,
+    "ocrSessionId": null
+  },
+  "message": "An in-progress application already exists for this Student ID. Check your email for the resume link."
+}
+```
+
+When `resumePending` is `true`, the backend **blocks the normal flow** — no `ocrSessionId` is issued and the application form must not be shown. The resume link email is the only way forward. See [Draft Resume Flow](#draft-resume-flow) below.
+
 **Error Response (OCR Failed — Retries Available):**
 ```json
 {
@@ -95,10 +123,12 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
 ```
 
 **Status Codes:**
-- `200`: OCR succeeded — data extracted
+- `200`: OCR succeeded — data extracted, or `resumePending: true` when a draft blocks the flow
 - `400`: Bad request (invalid file, wrong format, exceeds size)
 - `422`: OCR failed — malformed or unreadable ID image
 - `429`: Rate limit exceeded
+- `500`: Internal server error
+- `502`: Resume link email could not be sent (the user must rescan to retry)
 
 ---
 
@@ -113,10 +143,11 @@ Accepts a Student ID image, runs Zonal OCR on predefined card zones, and returns
    - Session stored with `manualRequired: false` and all extracted fields.
    - **Frontend behavior:** Pre-fill the form with `lastName`, `firstName`, and `middleInitial`. Keep these fields **editable** so the user can correct any OCR mistakes. Set the `studentId` field as **read-only** — it is authoritative from the server.
    - Proceed to step 6.
-5. **On failure:**
+5.  **On failure:**
    - **Retries remaining (422, `attemptsRemaining > 0`):** No session is created. `ocrSessionId` is `null`. Show the error message and a retry prompt. Allow the user to retake the photo. Do **not** show the submit form yet — the user must succeed OCR or exhaust retries first.
    - **Exhausted (422, `attemptsRemaining = 0`):** Session stored with `manualRequired: true` and all fields `null`. Show the manual entry form with **all fields editable**, including `studentId`. The user fills everything by hand.
-6. **Submit:** Frontend sends `POST /api/v1/applicants` with the `ocrSessionId` and the form fields. The backend resolves `manual_application` from the session.
+6.  **Draft gate (`resumePending: true`):** A previous scan already created a draft for this Student ID. Hide the form, show a "resume in progress" notice, and instruct the user to check their email for the resume link.
+7.  **Submit:** Frontend sends `POST /api/v1/applicants` with the `ocrSessionId` and the form fields. The backend resolves `manual_application` from the session.
 
 ### For Event Registrations
 
@@ -187,6 +218,27 @@ The architecture is designed so that swapping the in-memory `Map` for a Redis cl
 - The `ocrSessionId` links the OCR result to the subsequent submission for server-side verification.
 
 > **Note:** In-memory tracking is sufficient for development. A production deployment should use Redis or a database-backed store for persistence across restarts and instances.
+
+---
+
+## Draft Resume Flow
+
+When an applicant scans a Student ID that already has an **in-progress application draft** (from the multi-step flow, see [applicants.md](applicants.md)), the OCR endpoint becomes a gate:
+
+1. `POST /api/v1/ocr/verify` returns `{ "resumePending": true, "ocrSessionId": null }` — **no session is created** and the normal flow is blocked.
+2. The backend emails a signed **resume link** (JWT, 30 min expiry) to the draft's email, pointing to `${FRONTEND_URL}/apply/resume?token=...`.
+3. The user opens the link on any device; the frontend calls `POST /api/v1/applicants/draft/resume` with the token and receives the full draft, rehydrating the multi-step form where they left off.
+
+### Rules
+
+| Rule | Behavior |
+|------|----------|
+| **Detection** | By `studentId`, most recently updated draft wins. Runs only on a successful OCR extraction (never after a failed scan). |
+| **Blocking** | While a non-expired draft exists, the flow is blocked — the resume email is the only way forward. `POST /api/v1/applicants/draft` also returns `409` as a belt-and-braces guard. |
+| **Email awaited** | The resume email is sent and awaited before responding. On send failure the endpoint responds `502` and the user must rescan to retry (the cooldown is only recorded on success). |
+| **Cooldown** | One resume email per draft per 30 minutes (`RESUME_EMAIL_COOLDOWN_MINUTES`). During cooldown the scan still returns `resumePending: true`, just without a new email. |
+| **TTL** | Drafts expire after 7 days (`DRAFT_TTL_HOURS`). Expired drafts are deleted lazily at the next scan (or draft creation) and a fresh application may proceed. |
+| **Security** | The token payload is `{ draftId, email, purpose: "resume-draft" }`, signed with `BETTER_AUTH_SECRET`. `draftId` is never exposed in API responses; the resume endpoint re-validates that the token email matches the draft. |
 
 ---
 

@@ -18,7 +18,10 @@ import {
   sendSetupLinkEmail,
   sendManualIdApprovedEmail,
   sendManualIdRejectedEmail,
+  sendApplicantStatusEmail,
+  sendApplicationReceivedEmail,
 } from "../services/email.service";
+import { validateFileMimeType } from "../utils/fileValidation";
 
 /**
  * POST /api/v1/applicants
@@ -83,10 +86,9 @@ export async function createApplicant(
       dateOfBirth,
       placeOfBirth,
       gender,
-      membershipRole,
+      office,
       houseAddress,
       cellphoneNumber,
-      qcuMscEmail,
       facebookLink,
       interestsSkillsHobbies,
       organizationHistory,
@@ -98,6 +100,26 @@ export async function createApplicant(
 
     // ── 3. Handle file uploads ────────────────────────────────────────────
     const uploadedFiles = files as NonNullable<typeof files>;
+
+    // Validate magic bytes — prevents disguised HTML/script uploads (VUL-010)
+    const corValidation = await validateFileMimeType(
+      uploadedFiles.certificateOfRegistration[0].buffer,
+      "Certificate of Registration"
+    );
+    if (!corValidation.valid) {
+      res.status(400).json({ success: false, message: corValidation.message });
+      return;
+    }
+
+    const cvValidation = await validateFileMimeType(
+      uploadedFiles.curriculumVitae[0].buffer,
+      "Curriculum Vitae"
+    );
+    if (!cvValidation.valid) {
+      res.status(400).json({ success: false, message: cvValidation.message });
+      return;
+    }
+
     const certificateOfRegistrationPath = await saveDocument(
       uploadedFiles.certificateOfRegistration[0].buffer,
       `cor_${Date.now()}_${uploadedFiles.certificateOfRegistration[0].originalname}`,
@@ -154,12 +176,11 @@ export async function createApplicant(
         dateOfBirth: new Date(dateOfBirth),
         placeOfBirth,
         gender,
-        membershipRole,
+        office,
         certificateOfRegistration: certificateOfRegistrationPath,
         curriculumVitae: curriculumVitaePath,
         houseAddress,
         cellphoneNumber,
-        qcuMscEmail: qcuMscEmail ?? email,
         facebookLink,
         interestsSkillsHobbies,
         organizationHistory,
@@ -174,7 +195,14 @@ export async function createApplicant(
     // ── 5. Clean up OCR session ───────────────────────────────────────────
     ocrStore.deleteSession(ocrSessionId);
 
-    // ── 6. Send setup link email ──────────────────────────────────────────
+    // ── 6. Send emails ─────────────────────────────────────────────────────
+    // First the application-received notice (submitted + under review), then
+    // the password setup link. Both swallow send failures internally.
+    await sendApplicationReceivedEmail(
+      applicant.email,
+      `${applicant.firstName} ${applicant.lastName}`.trim()
+    );
+
     const setupToken = await signSetupToken(applicant.id, applicant.email);
     await sendSetupLinkEmail(applicant.email, setupToken);
 
@@ -196,10 +224,9 @@ export async function createApplicant(
         dateOfBirth: applicant.dateOfBirth,
         placeOfBirth: applicant.placeOfBirth,
         gender: applicant.gender,
-        membershipRole: applicant.membershipRole,
+        office: applicant.office,
         houseAddress: applicant.houseAddress,
         cellphoneNumber: applicant.cellphoneNumber,
-        qcuMscEmail: applicant.qcuMscEmail,
         facebookLink: applicant.facebookLink,
         interestsSkillsHobbies: applicant.interestsSkillsHobbies,
         organizationHistory: applicant.organizationHistory,
@@ -223,15 +250,6 @@ export async function createApplicant(
       "code" in error &&
       (error as any).code === "P2002"
     ) {
-      const target = (error as any).meta?.target as string[] | undefined;
-      if (target?.includes("qcuMscEmail")) {
-        res.status(409).json({
-          success: false,
-          message:
-            "An application with this QCU MSC email already exists. Please use a different email or contact support.",
-        });
-        return;
-      }
       res.status(409).json({
         success: false,
         message:
@@ -265,10 +283,9 @@ function formatApplicantResponse(applicant: Applicant) {
     dateOfBirth: applicant.dateOfBirth,
     placeOfBirth: applicant.placeOfBirth,
     gender: applicant.gender,
-    membershipRole: applicant.membershipRole,
+    office: applicant.office,
     houseAddress: applicant.houseAddress,
     cellphoneNumber: applicant.cellphoneNumber,
-    qcuMscEmail: applicant.qcuMscEmail,
     facebookLink: applicant.facebookLink,
     interestsSkillsHobbies: applicant.interestsSkillsHobbies,
     organizationHistory: applicant.organizationHistory,
@@ -475,6 +492,23 @@ export async function updateApplicantStatus(
         where: { id: applicant.userId },
         data: { role: newUserRole },
       });
+    }
+
+    // Notify the applicant of the status change. Fire-and-forget: the email
+    // service swallows send failures so this never breaks the PATCH response.
+    // Only email when the status actually changed (no spam on no-op re-saves).
+    if (existing.status !== status) {
+      await sendApplicantStatusEmail(
+        {
+          email: applicant.email,
+          status: applicant.status,
+          adminMessage: applicant.adminMessage,
+          resubmitFields: applicant.resubmitFields
+            ? applicant.resubmitFields.split(",")
+            : [],
+        },
+        `${applicant.firstName} ${applicant.lastName}`.trim()
+      );
     }
 
     res.status(200).json({
@@ -758,6 +792,18 @@ export async function cancelApplication(
       data: { status: "CANCELLED" },
     });
 
+    // Notify the applicant their application was cancelled. Fire-and-forget:
+    // the email service swallows send failures so this never breaks the response.
+    await sendApplicantStatusEmail(
+      {
+        email: updated.email,
+        status: updated.status,
+        adminMessage: updated.adminMessage,
+        resubmitFields: null,
+      },
+      `${updated.firstName} ${updated.lastName}`.trim()
+    );
+
     res.status(200).json({
       success: true,
       data: formatApplicantResponse(updated),
@@ -872,6 +918,16 @@ export async function resubmitApplication(
     }
 
     if (files?.certificateOfRegistration?.length && unlocked.includes("certificateOfRegistration")) {
+      // Validate magic bytes (VUL-010)
+      const corValidation = await validateFileMimeType(
+        files.certificateOfRegistration[0].buffer,
+        "Certificate of Registration"
+      );
+      if (!corValidation.valid) {
+        res.status(400).json({ success: false, message: corValidation.message });
+        return;
+      }
+
       const path = await saveDocument(
         files.certificateOfRegistration[0].buffer,
         `cor_${Date.now()}_${files.certificateOfRegistration[0].originalname}`,
@@ -881,6 +937,16 @@ export async function resubmitApplication(
     }
 
     if (files?.curriculumVitae?.length && unlocked.includes("curriculumVitae")) {
+      // Validate magic bytes (VUL-010)
+      const cvValidation = await validateFileMimeType(
+        files.curriculumVitae[0].buffer,
+        "Curriculum Vitae"
+      );
+      if (!cvValidation.valid) {
+        res.status(400).json({ success: false, message: cvValidation.message });
+        return;
+      }
+
       const path = await saveDocument(
         files.curriculumVitae[0].buffer,
         `cv_${Date.now()}_${files.curriculumVitae[0].originalname}`,
@@ -965,16 +1031,16 @@ export async function serveDocument(req: Request, res: Response): Promise<void> 
       res.status(404).json({ success: false, message: "Document not found" });
       return;
     }
-    
+
     let finalContentType = contentType || "application/octet-stream";
     if (finalContentType === "application/octet-stream") {
       finalContentType = getContentTypeFromFilename(filename);
     }
-    
+
     res.setHeader("Content-Type", finalContentType);
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(filename)}"`);
     if (contentLength) res.setHeader("Content-Length", contentLength);
-    
+
     stream.pipe(res);
   } catch (error: any) {
     console.error("Failed to serve document:", error);
@@ -991,16 +1057,16 @@ export async function serveImage(req: Request, res: Response): Promise<void> {
       res.status(404).json({ success: false, message: "Image not found" });
       return;
     }
-    
+
     let finalContentType = contentType || "application/octet-stream";
     if (finalContentType === "application/octet-stream") {
       finalContentType = getContentTypeFromFilename(filename);
     }
-    
+
     res.setHeader("Content-Type", finalContentType);
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(filename)}"`);
     if (contentLength) res.setHeader("Content-Length", contentLength);
-    
+
     stream.pipe(res);
   } catch (error: any) {
     console.error("Failed to serve image:", error);

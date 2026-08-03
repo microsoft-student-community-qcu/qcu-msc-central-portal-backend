@@ -6,8 +6,10 @@ import { saveImage } from "../utils/imageStorage";
 import { env } from "../config/env";
 import { prisma } from "../config/database";
 import { signSetupToken } from "../utils/token";
-
-const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png"];
+import { validateFileMimeType } from "../utils/fileValidation";
+import { findResumableDraft, isDraftStale } from "../utils/draftResume";
+import { signDraftResumeToken } from "../utils/token";
+import { sendDraftResumeLinkEmail } from "../services/email.service";
 
 export async function verifyOcr(req: Request, res: Response): Promise<void> {
   try {
@@ -21,14 +23,14 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    const imageValidation = await validateFileMimeType(file.buffer, "Student ID image");
+    if (!imageValidation.valid) {
       res.status(400).json({
         success: false,
-        message: "Image must be JPEG or PNG",
+        message: imageValidation.message,
       });
       return;
     }
-
     const result = await extractFields(file.buffer, file.originalname);
 
     if (result.extracted && result.studentId) {
@@ -51,6 +53,53 @@ export async function verifyOcr(req: Request, res: Response): Promise<void> {
               setupToken,
             },
             message: "You have already submitted an application. Redirecting to account setup..."
+          });
+          return;
+        }
+      }
+
+      // Draft resume gate: an in-progress application blocks the normal
+      // flow — the resume email is the only way forward. A stale draft
+      // (past TTL) is deleted lazily so a fresh application may start.
+      const draft = await findResumableDraft(result.studentId);
+      if (draft) {
+        if (isDraftStale(draft.updatedAt)) {
+          await prisma.applicationDraft.delete({ where: { id: draft.id } });
+        } else {
+          // 30-minute cooldown per draft: rescanning does not spam the
+          // inbox, and a rescan after cooldown yields a fresh valid link.
+          const cooldownMs = env.RESUME_EMAIL_COOLDOWN_MINUTES * 60 * 1000;
+          const canSend =
+            !draft.lastResumeEmailSentAt ||
+            Date.now() - draft.lastResumeEmailSentAt.getTime() > cooldownMs;
+
+          if (canSend && draft.email) {
+            const resumeToken = await signDraftResumeToken(draft.id, draft.email);
+            try {
+              await sendDraftResumeLinkEmail(draft.email, resumeToken);
+              await prisma.applicationDraft.update({
+                where: { id: draft.id },
+                data: { lastResumeEmailSentAt: new Date() },
+              });
+            } catch (emailError) {
+              console.error("Failed to send draft resume link email:", emailError);
+              res.status(502).json({
+                success: false,
+                message:
+                  "Failed to send the resume link email. Please scan your Student ID again to retry.",
+              });
+              return;
+            }
+          }
+
+          res.status(200).json({
+            success: true,
+            data: {
+              resumePending: true,
+              ocrSessionId: null,
+            },
+            message:
+              "An in-progress application already exists for this Student ID. Check your email for the resume link.",
           });
           return;
         }

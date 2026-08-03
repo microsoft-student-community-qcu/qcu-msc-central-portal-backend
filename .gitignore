@@ -9,3 +9,5 @@ dist/
 /uploads/ocr
 /uploads/documents
 eng.traineddata
+
+opencode.json

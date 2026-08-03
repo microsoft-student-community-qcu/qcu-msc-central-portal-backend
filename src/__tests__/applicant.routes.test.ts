@@ -7,6 +7,7 @@ import {
   mockApplicantRecord,
   authAdminHR,
   authUnauthenticated,
+  pdfFixture,
 } from "./helpers";
 
 // ── Auth Mock Setup ──────────────────────────────────────────────────────
@@ -61,11 +62,11 @@ function buildApplicantForm(overrides: Record<string, string> = {}) {
     r = r.field(key, value);
   }
   r = r
-    .attach("certificateOfRegistration", Buffer.from("fake pdf"), {
+    .attach("certificateOfRegistration", pdfFixture, {
       filename: "cor.pdf",
       contentType: "application/pdf",
     })
-    .attach("curriculumVitae", Buffer.from("fake pdf"), {
+    .attach("curriculumVitae", pdfFixture, {
       filename: "cv.pdf",
       contentType: "application/pdf",
     });
@@ -288,7 +289,7 @@ describe("POST /api/v1/applicants/resend-setup-link (public)", () => {
       .post("/api/v1/applicants/resend-setup-link")
       .send({});
     expect(res.status).toBe(400);
-    expect(res.body.errors).toContain("Email is required");
+    expect(res.body.errors.email).toContain("Email is required");
   });
 
   it("returns 200 (always succeeds for privacy)", async () => {
