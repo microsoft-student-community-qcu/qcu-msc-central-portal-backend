@@ -99,10 +99,13 @@ vi.mock("../config/auth", () => ({
 
 vi.mock("../services/email.service", () => ({
   sendSetupLinkEmail: vi.fn(() => Promise.resolve()),
+  sendApplicationReceivedEmail: vi.fn(() => Promise.resolve()),
   sendRegistrationConfirmedEmail: vi.fn(() => Promise.resolve()),
   sendRegistrationPendingReviewEmail: vi.fn(() => Promise.resolve()),
   sendRegistrationApprovedEmail: vi.fn(() => Promise.resolve()),
   sendRegistrationRejectedEmail: vi.fn(() => Promise.resolve()),
   sendManualIdApprovedEmail: vi.fn(() => Promise.resolve()),
   sendManualIdRejectedEmail: vi.fn(() => Promise.resolve()),
+  sendApplicantStatusEmail: vi.fn(() => Promise.resolve()),
+  sendDraftResumeLinkEmail: vi.fn(() => Promise.resolve()),
 }));

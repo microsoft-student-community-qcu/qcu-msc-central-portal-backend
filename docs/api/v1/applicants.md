@@ -12,7 +12,7 @@ The submission endpoint accepts **multipart/form-data** to support file uploads 
 ### 1. Create Applicant (Submit Application)
 
 **Description:**  
-Submits a new applicant to the MSC recruitment system. **Must** be preceded by a `POST /api/v1/ocr/verify` call to obtain an `ocrSessionId` — this enforces the two-step verification flow (see [applicant-tracking.md](../../guides/workflows/applicant-tracking.md)). The backend validates the OCR session and sets `manual_application` accordingly.
+Submits a new applicant to the MSC recruitment system. **Must** be preceded by a `POST /api/v1/ocr/verify` call to obtain an `ocrSessionId` — this enforces the two-step verification flow (see [applicant-tracking.md](../../guides/workflows/applicant-tracking.md)). The backend validates the OCR session and sets `manual_application` accordingly. On success the applicant receives two emails: an application-received confirmation (under review), then the password setup link.
 
 **Method:** `POST`  
 **Path:** `/api/v1/applicants`  
@@ -389,6 +389,8 @@ curl -X GET "http://localhost:5000/api/v1/applicants?status=PENDING_REVIEW&campu
 
 **Description:**  
 Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
+
+> **Note:** Whenever the status actually changes, the applicant is emailed a status-appropriate notification (approved / in review / interview / rejected / cancelled / resubmit). The optional `message` is included in the email when present. A failed email send never affects the API response.
 
 **Method:** `PATCH`  
 **Path:** `/api/v1/applicants/:applicantId/status`
@@ -786,7 +788,7 @@ curl -X PATCH http://localhost:5000/api/v1/applicants/draft/770e8400-.../batch-2
 ### 6.4 Submit Draft (Batch 3 — Final)
 
 **Description:**  
-Final step. Saves additional information, creates the real `Applicant` record from all accumulated draft data, sends the setup link email, and deletes the draft. The draft must be at step 2.
+Final step. Saves additional information, creates the real `Applicant` record from all accumulated draft data, and deletes the draft. On success the applicant receives two emails: an application-received confirmation (under review), then the password setup link. The draft must be at step 2.
 
 **Method:** `POST`  
 **Path:** `/api/v1/applicants/draft/:draftId/submit`  

@@ -33,7 +33,7 @@ The applicant pipeline is managed exclusively by ADMIN_HR users. Applications ar
      - `POST /api/v1/applicants/draft` — Batch 0: name, email, ocrSessionId → returns `draftId`
      - `PATCH /api/v1/applicants/draft/:draftId/batch-1` — Batch 1: personal info (DOB, gender, address, etc.)
      - `PATCH /api/v1/applicants/draft/:draftId/batch-2` — Batch 2: academic info + file uploads
-     - `POST /api/v1/applicants/draft/:draftId/submit` — Batch 3 (final): additional info → creates Applicant record, sends setup email
+     - `POST /api/v1/applicants/draft/:draftId/submit` — Batch 3 (final): additional info → creates Applicant record, sends confirmation + setup emails
    - Each batch is validated immediately; errors are caught at the current step, not at the end.
    - Steps cannot be skipped — each endpoint checks the previous step was completed.
    - The `draftId` is stored in localStorage by the frontend, allowing users to resume after a page refresh on the same device.
@@ -44,7 +44,8 @@ The applicant pipeline is managed exclusively by ADMIN_HR users. Applications ar
 8. Backend validates the OCR session, saves uploaded files, and creates the applicant record.
    - If `manualRequired: true`, `manual_application` is set to `true`.
    - If OCR succeeded, `manual_application` remains `false`.
-9. System sends an email containing:
+9. System sends two emails (in order):
+   - Application received — under review confirmation.
    - Password setup link (this link will also act as email verification link).
 
 ### Account Activation
@@ -148,4 +149,4 @@ CANCELLED (applicant or admin, from any status other than APPROVED)
 - Only ADMIN_HR can update status
 - Setting status to `APPROVED` **automatically** updates the linked `User.role` to `MEMBER` (server-side)
 - Applicant must first be linked to a User account via `POST /api/v1/users/link-applicant` before approval — if that call was skipped, every sign-in auto-links as a fallback (see `auth-workflow.md`)
-- Email notifications sent at each status transition
+- Email notifications sent at each status transition (via `sendApplicantStatusEmail`) and on user-initiated cancellation

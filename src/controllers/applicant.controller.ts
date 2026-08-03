@@ -18,6 +18,8 @@ import {
   sendSetupLinkEmail,
   sendManualIdApprovedEmail,
   sendManualIdRejectedEmail,
+  sendApplicantStatusEmail,
+  sendApplicationReceivedEmail,
 } from "../services/email.service";
 import { validateFileMimeType } from "../utils/fileValidation";
 
@@ -193,7 +195,14 @@ export async function createApplicant(
     // ── 5. Clean up OCR session ───────────────────────────────────────────
     ocrStore.deleteSession(ocrSessionId);
 
-    // ── 6. Send setup link email ──────────────────────────────────────────
+    // ── 6. Send emails ─────────────────────────────────────────────────────
+    // First the application-received notice (submitted + under review), then
+    // the password setup link. Both swallow send failures internally.
+    await sendApplicationReceivedEmail(
+      applicant.email,
+      `${applicant.firstName} ${applicant.lastName}`.trim()
+    );
+
     const setupToken = await signSetupToken(applicant.id, applicant.email);
     await sendSetupLinkEmail(applicant.email, setupToken);
 
@@ -485,6 +494,23 @@ export async function updateApplicantStatus(
       });
     }
 
+    // Notify the applicant of the status change. Fire-and-forget: the email
+    // service swallows send failures so this never breaks the PATCH response.
+    // Only email when the status actually changed (no spam on no-op re-saves).
+    if (existing.status !== status) {
+      await sendApplicantStatusEmail(
+        {
+          email: applicant.email,
+          status: applicant.status,
+          adminMessage: applicant.adminMessage,
+          resubmitFields: applicant.resubmitFields
+            ? applicant.resubmitFields.split(",")
+            : [],
+        },
+        `${applicant.firstName} ${applicant.lastName}`.trim()
+      );
+    }
+
     res.status(200).json({
       success: true,
       data: formatApplicantResponse(applicant),
@@ -765,6 +791,18 @@ export async function cancelApplication(
       where: { id: applicantId },
       data: { status: "CANCELLED" },
     });
+
+    // Notify the applicant their application was cancelled. Fire-and-forget:
+    // the email service swallows send failures so this never breaks the response.
+    await sendApplicantStatusEmail(
+      {
+        email: updated.email,
+        status: updated.status,
+        adminMessage: updated.adminMessage,
+        resubmitFields: null,
+      },
+      `${updated.firstName} ${updated.lastName}`.trim()
+    );
 
     res.status(200).json({
       success: true,
