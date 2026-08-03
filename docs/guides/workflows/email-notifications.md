@@ -39,6 +39,7 @@ All emails are sent from `src/services/email.service.ts`. Each function is a nam
 | Applicant account created | `sendSetupLinkEmail` | Welcome to QCU MSC — Set Up Your Password | Applicant email |
 | Manual ID approved | `sendManualIdApprovedEmail` | Student ID Approved — Application In Review | Applicant email |
 | Manual ID rejected | `sendManualIdRejectedEmail` | Student ID Rejected | Applicant email |
+| Applicant status changed (admin) | `sendApplicantStatusEmail` | Status-specific subject (Approved / Under Review / Interview / Rejected / Cancelled / Action Required) | Applicant email |
 | Draft resume link (existing in-progress application detected at OCR scan) | `sendDraftResumeLinkEmail` | Resume Your QCU MSC Application | Draft email |
 | Guest event registration (auto-approved) | `sendRegistrationConfirmedEmail` | Registration Confirmed — {event title} | Guest email |
 | Guest event registration (manual review) | `sendRegistrationPendingReviewEmail` | Registration Pending Review — {event title} | Guest email |
@@ -56,3 +57,4 @@ All registration-related emails include the event title in the subject line; con
 |------|--------|
 | 2026-07-13 | Added dual-provider architecture (Resend + SMTP), environment configuration table, and expanded triggered emails table |
 | 2026-08-02 | Added `sendDraftResumeLinkEmail` (resume-link email for existing drafts) with its error-propagation exception; added `RESUME_EMAIL_COOLDOWN_MINUTES` / `RESUME_TOKEN_EXPIRY_MINUTES` env vars |
+| 2026-08-03 | Added `sendApplicantStatusEmail` — status-appropriate notification sent to the applicant on every status change (admin PATCH and user-initiated cancel); included admin message / resubmit fields where relevant |

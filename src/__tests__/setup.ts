@@ -105,4 +105,6 @@ vi.mock("../services/email.service", () => ({
   sendRegistrationRejectedEmail: vi.fn(() => Promise.resolve()),
   sendManualIdApprovedEmail: vi.fn(() => Promise.resolve()),
   sendManualIdRejectedEmail: vi.fn(() => Promise.resolve()),
+  sendApplicantStatusEmail: vi.fn(() => Promise.resolve()),
+  sendDraftResumeLinkEmail: vi.fn(() => Promise.resolve()),
 }));

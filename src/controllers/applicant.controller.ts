@@ -18,6 +18,7 @@ import {
   sendSetupLinkEmail,
   sendManualIdApprovedEmail,
   sendManualIdRejectedEmail,
+  sendApplicantStatusEmail,
 } from "../services/email.service";
 import { validateFileMimeType } from "../utils/fileValidation";
 
@@ -485,6 +486,23 @@ export async function updateApplicantStatus(
       });
     }
 
+    // Notify the applicant of the status change. Fire-and-forget: the email
+    // service swallows send failures so this never breaks the PATCH response.
+    // Only email when the status actually changed (no spam on no-op re-saves).
+    if (existing.status !== status) {
+      await sendApplicantStatusEmail(
+        {
+          email: applicant.email,
+          status: applicant.status,
+          adminMessage: applicant.adminMessage,
+          resubmitFields: applicant.resubmitFields
+            ? applicant.resubmitFields.split(",")
+            : [],
+        },
+        `${applicant.firstName} ${applicant.lastName}`.trim()
+      );
+    }
+
     res.status(200).json({
       success: true,
       data: formatApplicantResponse(applicant),
@@ -765,6 +783,18 @@ export async function cancelApplication(
       where: { id: applicantId },
       data: { status: "CANCELLED" },
     });
+
+    // Notify the applicant their application was cancelled. Fire-and-forget:
+    // the email service swallows send failures so this never breaks the response.
+    await sendApplicantStatusEmail(
+      {
+        email: updated.email,
+        status: updated.status,
+        adminMessage: updated.adminMessage,
+        resubmitFields: null,
+      },
+      `${updated.firstName} ${updated.lastName}`.trim()
+    );
 
     res.status(200).json({
       success: true,

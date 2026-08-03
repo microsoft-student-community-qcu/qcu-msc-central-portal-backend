@@ -204,6 +204,140 @@ export async function sendManualIdRejectedEmail(to: string): Promise<void> {
   }
 }
 
+// ── Applicant status change (admin) ────────────────────────────────────────
+
+const APPLICANT_STATUS_LABELS: Record<string, string> = {
+  APPROVED: "Approved",
+  PENDING_REVIEW: "In Review",
+  FOR_INTERVIEW: "Interview",
+  REJECTED: "Rejected",
+  CANCELLED: "Cancelled",
+  RESUBMIT: "Updates Required",
+};
+
+/**
+ * Build the subject + body for an applicant status-change email. Returns null
+ * for unknown statuses so the caller can silently skip.
+ */
+function buildApplicantStatusMail(
+  applicantName: string,
+  status: string,
+  adminMessage?: string | null,
+  resubmitFields?: string[] | null
+): { subject: string; html: string } | null {
+  const heading = `Dear ${applicantName},`;
+  const reasonBlock = adminMessage
+    ? `<p style="background:#f0f0f0;padding:12px;border-left:4px solid #0078D4;"><strong>Note from the admin:</strong> ${adminMessage}</p>`
+    : "";
+  const supportLine = `<p style="color:#666;font-size:12px;">If you believe this is a mistake, please contact the Microsoft Student Community administrators.</p>`;
+
+  switch (status) {
+    case "APPROVED":
+      return {
+        subject: "Your QCU MSC Application is Approved — Welcome!",
+        html: `
+          <h2>Congratulations!</h2>
+          ${heading}
+          <p>Your application has been <strong>approved</strong> and you are now an official member of the Microsoft Student Community at QCU.</p>
+          <p>Check your member dashboard to unlock member-only events and activities.</p>
+        `,
+      };
+    case "PENDING_REVIEW":
+      return {
+        subject: "Your QCU MSC Application is Under Review",
+        html: `
+          <h2>Application in progress</h2>
+          ${heading}
+          <p>Your application is now <strong>in review</strong>. Our admin team is going through it and you will hear from us once a decision is made.</p>
+          ${reasonBlock}
+        `,
+      };
+    case "FOR_INTERVIEW":
+      return {
+        subject: "You're Invited for an Interview",
+        html: `
+          <h2>Interview invitation</h2>
+          ${heading}
+          <p>Your application has moved to the <strong>interview</strong> stage. Please wait for a separate invitation with the schedule and details.</p>
+          ${reasonBlock}
+        `,
+      };
+    case "REJECTED":
+      return {
+        subject: "Update on Your QCU MSC Application",
+        html: `
+          <h2>Application status update</h2>
+          ${heading}
+          <p>Unfortunately, your application has been <strong>rejected</strong>.</p>
+          ${reasonBlock}
+          ${supportLine}
+        `,
+      };
+    case "CANCELLED":
+      return {
+        subject: "Your QCU MSC Application Has Been Cancelled",
+        html: `
+          <h2>Application cancelled</h2>
+          ${heading}
+          <p>Your application has been <strong>cancelled</strong>. You can submit a new application at any time if you still wish to join.</p>
+          ${reasonBlock}
+          ${supportLine}
+        `,
+      };
+    case "RESUBMIT": {
+      const fieldsBlock =
+        resubmitFields && resubmitFields.length > 0
+          ? `<p>Please review and update the following section(s):</p><ul>${resubmitFields
+              .map((field) => `<li>${field}</li>`)
+              .join("")}</ul>`
+          : "";
+      return {
+        subject: "Action Required — Updates Needed on Your Application",
+        html: `
+          <h2>Updates needed</h2>
+          ${heading}
+          ${reasonBlock}
+          ${fieldsBlock}
+          <p style="color:#666;font-size:12px;">Please log in to the portal to make the changes, then resubmit.</p>
+        `,
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Notify an applicant that their status changed.
+ *
+ * Swallows errors like the other applicant emails — a failed send must never
+ * break the admin's PATCH response.
+ */
+export async function sendApplicantStatusEmail(
+  applicant: {
+    email: string;
+    status: string;
+    adminMessage?: string | null;
+    resubmitFields?: string[] | null;
+  },
+  applicantName: string
+): Promise<void> {
+  const mail = buildApplicantStatusMail(
+    applicantName,
+    applicant.status,
+    applicant.adminMessage,
+    applicant.resubmitFields
+  );
+  if (!mail) return;
+
+  try {
+    await provider.sendEmail(applicant.email, mail.subject, htmlBody(mail.html));
+    logSent(`Applicant status (${APPLICANT_STATUS_LABELS[applicant.status] ?? applicant.status})`, applicant.email);
+  } catch (err) {
+    logFailed(`applicant status (${applicant.status})`, applicant.email, err);
+  }
+}
+
 /**
  * Send the draft resume-link email.
  *

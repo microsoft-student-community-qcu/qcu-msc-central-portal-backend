@@ -390,6 +390,8 @@ curl -X GET "http://localhost:5000/api/v1/applicants?status=PENDING_REVIEW&campu
 **Description:**  
 Updates an applicant's pipeline status. Only ADMIN_HR users can update status.
 
+> **Note:** Whenever the status actually changes, the applicant is emailed a status-appropriate notification (approved / in review / interview / rejected / cancelled / resubmit). The optional `message` is included in the email when present. A failed email send never affects the API response.
+
 **Method:** `PATCH`  
 **Path:** `/api/v1/applicants/:applicantId/status`
 

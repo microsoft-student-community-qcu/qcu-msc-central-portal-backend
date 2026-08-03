@@ -148,4 +148,4 @@ CANCELLED (applicant or admin, from any status other than APPROVED)
 - Only ADMIN_HR can update status
 - Setting status to `APPROVED` **automatically** updates the linked `User.role` to `MEMBER` (server-side)
 - Applicant must first be linked to a User account via `POST /api/v1/users/link-applicant` before approval — if that call was skipped, every sign-in auto-links as a fallback (see `auth-workflow.md`)
-- Email notifications sent at each status transition
+- Email notifications sent at each status transition (via `sendApplicantStatusEmail`) and on user-initiated cancellation
