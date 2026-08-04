@@ -5,11 +5,16 @@ import { env } from "./env";
  * Initialize Sentry SDK for error tracking and performance monitoring.
  */
 export function initSentry(): void {
-  if (env.SENTRY_DSN) {
+  const dsn = env.SENTRY_DSN || process.env.SENTRY_DSN;
+  if (dsn) {
     Sentry.init({
-      dsn: env.SENTRY_DSN,
+      dsn,
       environment: env.NODE_ENV,
       tracesSampleRate: env.NODE_ENV === "production" ? 0.2 : 1.0,
+      integrations: [
+        Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }),
+      ],
+      enableLogs: true,
     });
     console.log("[Sentry] Backend monitoring initialized.");
   }

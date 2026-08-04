@@ -1,4 +1,5 @@
-import { fromBuffer } from "file-type";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const FileType = require("file-type");
 
 const ALLOWED_MIME_TYPES = [
   "application/pdf",
@@ -19,7 +20,7 @@ export async function validateFileMimeType(
   buffer: Buffer,
   fieldName: string
 ): Promise<{ valid: boolean; message?: string }> {
-  const detected = await fromBuffer(buffer);
+  const detected = await FileType.fromBuffer(buffer);
 
   if (!detected) {
     return {
