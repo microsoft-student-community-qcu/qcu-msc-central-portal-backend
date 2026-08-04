@@ -11,6 +11,6 @@
 /local.settings.json @microsoft-student-community-qcu/cloud-team
 
 # 3. Backend application, Database & Environment Templates
-/prisma/ @microsoft-student-community-qcu/qa-team @mark-ianz
-/src/ @microsoft-student-community-qcu/qa-team @mark-ianz
-/.env.example @microsoft-student-community-qcu/qa-team @mark-ianz
+/prisma/ @microsoft-student-community-qcu/qa-team @markian @mark-ianz
+/src/ @microsoft-student-community-qcu/qa-team @markian @mark-ianz
+/.env.example @microsoft-student-community-qcu/qa-team @markian @mark-ianz
