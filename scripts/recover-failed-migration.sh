@@ -55,7 +55,7 @@ DB_USER=$(echo "$DATABASE_URL" | sed -e 's|^mysql://||' -e 's|:.*||')
 DB_PASS=$(echo "$DATABASE_URL" | sed -e 's|^mysql://[^:]*:||' -e 's|@.*||')
 DB_NAME=$(echo "$DATABASE_URL" | sed -e 's|.*/||' -e 's|?.*||')
 
-COLUMN=$(mysql --ssl-mode=REQUIRED -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" -N -B -e \
+COLUMN=$(mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" -N -B -e \
   "SELECT COLUMN_NAME FROM information_schema.COLUMNS
    WHERE TABLE_SCHEMA = '$DB_NAME' AND TABLE_NAME = 'Applicant'
      AND COLUMN_NAME IN ('membershipRole', 'office')")
