@@ -1,0 +1,104 @@
+1. When creating a POST request on /api/v1/applicants/draft with a used ocrId. It returns 500 Internal Server Error with error message of Failed to create application draft. Please try again later. It also logs this error on the server: {
+  code: 'P2002',
+  clientVersion: '5.22.0',
+  meta: {
+    modelName: 'ApplicationDraft',
+    target: 'ApplicationDraft_ocrSessionId_key'
+  }
+}
+
+2. Batch 0, 1 and 2 are all success and I checked too on the applicationdraft table on the database and all fields are filled. But when I POST request on the endpoint of /api/v1/applicants/draft/:draftId/submit it gives me this error: 
+C:\Users\busti\Desktop\Node\qcu-msc-central-portal\backend\src\controllers\application-draft.controller.ts:289:46
+
+  286   previousWorksAchievements,
+  287 } = parsed.data;
+  288 
+→ 289 const applicant = await prisma.applicant.create({
+        data: {
+          lastName: "Dela Cruz",
+          firstName: "Juan",
+          middleInitial: "M",
+          email: "juan.dc@example.com",
+          qcuMscEmail: "juan.dc@example.com",
+          college: "College of Computer Studies",
+          program: "BS Computer Science",
+          section: "BSCS-3A",
+          campus: "SAN_BARTOLOME_MAIN",
+          studentId: "23-2583",
+          dateOfBirth: new Date("2001-08-22T00:00:00.000Z"),
+          placeOfBirth: "Quezon City",
+          gender: "MALE",
+          membershipRole: "SECRETARIAT_OFFICE",
+          certificateOfRegistration: "https://stsamscqcubackenddev.blob.core.windows.net/documents/cor_draft_1785300375434_GitHub%20Foundations%20Cert.pdf",
+          curriculumVitae: "https://stsamscqcubackenddev.blob.core.windows.net/documents/cv_draft_1785300375763_CodeColony-MD-Office-Information.pdf",
+          houseAddress: "123 Mabini St., Brgy. San Jose, Quezon City",
+          cellphoneNumber: "09171234567",
+          facebookLink: "https://facebook.com/juan.delacruz",
+          interestsSkillsHobbies: "Programming, photography, badminton",
+          organizationHistory: "Former VP of CCS Student Government",
+          portfolio: "https://juan.dev",
+          githubOrProjectLinks: "https://github.com/juan",
+          previousWorksAchievements: "Dean's Lister AY 2024-2025",
+          idImagePath: "https://stsamscqcubackenddev.blob.core.windows.net/ocr/ocr_1785300189891_ocr_1783893121742_School%20ID%20Test%20-2.png",
+          manual_application: false,
+      +   office: Office
+        }
+      })
+
+Argument `office` is missing.
+    at wn (C:\Users\busti\Desktop\Node\qcu-msc-central-portal\backend\node_modules\@prisma\client\runtime\library.js:29:1363)
+    at $n.handleRequestError (C:\Users\busti\Desktop\Node\qcu-msc-central-portal\backend\node_modules\@prisma\client\runtime\library.js:121:6958)
+    at $n.handleAndLogRequestError (C:\Users\busti\Desktop\Node\qcu-msc-central-portal\backend\node_modules\@prisma\client\runtime\library.js:121:6623)
+    at $n.request (C:\Users\busti\Desktop\Node\qcu-msc-central-portal\backend\node_modules\@prisma\client\runtime\library.js:121:6307)
+    at l (C:\Users\busti\Desktop\Node\qcu-msc-central-portal\backend\node_modules\@prisma\client\runtime\library.js:130:9633)
+    at submitDraft (C:\Users\busti\Desktop\Node\qcu-msc-central-portal\backend\src\controllers\application-draft.controller.ts:289:23) {
+  clientVersion: '5.22.0'
+}
+
+it says office is missing but when I looked at the database it clearly has the `SECRETARIAT_OFFICE` value.
+
+__
+
+3. When doing POST request on the /api/v1/applicants/draft and I input an email on the body that is already registered to an applicant, the request still success. The duplication email only gets caught at the /api/v1/applicants/draft/:draftId/submit 
+
+4. I can already sign in even though my application and my account is not linked it. I receive {
+  "redirect": false,
+  "token": "bm3JcAiQkPJer45ByE0fXqzOpL9kb5Rw",
+  "user": {
+    "name": "Juan Dela Cruz",
+    "email": "bustillo.markian.buenavista@gmail.com",
+    "emailVerified": false,
+    "image": null,
+    "createdAt": "2026-07-29T06:38:18.682Z",
+    "updatedAt": "2026-07-29T06:38:18.682Z",
+    "role": "APPLICANT",
+    "studentId": "23-2583",
+    "firstName": "Juan",
+    "lastName": "Dela Cruz",
+    "id": "4CvQv4TvQoddHQpCJB9ob5dOBoJNVuod"
+  }
+}
+_
+5. app.ts:119-210, what is the purpose of this if app.ts:104 already blocks the endpoint.
+6. on database account table there is a field for accountId and userId, the accountId has the same value as the userId but it's a plain text unlike userId where it's a foreign key. Also the name is not right because it's accountId but has the value of userId.
+7. what is emailVerified field for? I don't see any use of that both from backend response and in the database user.emailVerified
+8. When I logged in on /api/v1/auth/student/sign-in/ and checked on the database the account.accessToken, account.refreshToken, account.idToken, account.accessTokenExpiresAt, account.refreshTokenExpiresAt all of those fields is still NULL after logging in on the endpoint.
+
+_
+9. 
+- sa ocr naeextract yung student id ko right.
+- sa POST /api/v1/applications/draft, di ko na need mag input ng student id kasi nasa loob na yon ng orcSessionId.
+- on POST /api/v1/users/validate-setup-token, I received these data:
+ {
+  "success": true,
+  "data": {
+    "applicantId": "69d8b97e-3c6b-439f-9829-20f7a4f5585b",
+    "email": "x@gmail.com",
+    "firstName": "x",
+    "lastName": "x",
+    "middleInitial": "X",
+    "studentId": "xx-xxxx"
+  }
+} which is the of my information
+- pero sa POST /api/auth/sign-up/email, pwede pa rin mag lagay ng student id. Which can make data inconsistency. Same for the fields like email, firstName, lastName. If possible ang laman lang ng body is password and setupToken.
+- v1 should strip the studentId here completely. The rest could be done on v2
