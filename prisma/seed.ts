@@ -1,4 +1,4 @@
-import { v5 as uuidv5 } from "uuid";
+import { v4 as uuidv4, v5 as uuidv5 } from "uuid";
 import { PrismaClient, UserRole, ApplicantStatus, Gender, Office, Campus } from "@prisma/client";
 import { auth } from "../src/config/auth";
 
@@ -421,11 +421,19 @@ async function main() {
   let createdTotal = 0;
   let skippedTotal = 0;
 
-  // ── 1. Admin accounts (created first — they're the most important) ────────
+  // Pre-hash default passwords ONCE via Better Auth context so bulk creation completes in seconds
+  const authContext = await (auth as any).$context;
+  const hashedAdminPassword = await authContext.password.hash(ADMIN_PASSWORD);
+  const hashedUserPassword = await authContext.password.hash(USER_PASSWORD);
+
+  // ── 1. Admin accounts ───────────────────────────────────────────────────
   const admins: AdminAccount[] = ADMIN_ROLES.map((role, i) => ({
     ...buildPerson(generatedEmails, generatedStudentIds, { fixedStudentId: `00-01${String(i + 1).padStart(2, "0")}` }),
     role,
   }));
+
+  const adminUsers: any[] = [];
+  const adminAccounts: any[] = [];
 
   for (const admin of admins) {
     if (usedEmails.has(admin.email) || usedStudentIds.has(admin.studentId)) {
@@ -433,36 +441,44 @@ async function main() {
       continue;
     }
 
-    await auth.api.signUpEmail({
-      body: {
-        email: admin.email,
-        password: ADMIN_PASSWORD,
-        name: `${admin.firstName} ${admin.lastName}`,
-        firstName: admin.firstName,
-        lastName: admin.lastName,
-        studentId: admin.studentId,
-      },
+    const userId = uuidv4();
+    adminUsers.push({
+      id: userId,
+      email: admin.email,
+      name: `${admin.firstName} ${admin.lastName}`,
+      firstName: admin.firstName,
+      lastName: admin.lastName,
+      middleInitial: admin.middleInitial,
+      studentId: admin.studentId,
+      role: admin.role,
+      emailVerified: false,
     });
 
-    // Better Auth defaults to APPLICANT; promote to the requested admin role.
-    await prisma.user.update({
-      where: { email: admin.email },
-      data: { role: admin.role },
+    adminAccounts.push({
+      id: uuidv4(),
+      userId,
+      accountId: userId,
+      providerId: "credential",
+      password: hashedAdminPassword,
     });
 
     createdTotal++;
   }
 
-  // ── 2. Bulk person pool — built ONCE and reused by the user and applicant
-  // loops so both sides always reference the exact same people. ─────────────
+  if (adminUsers.length > 0) {
+    await prisma.user.createMany({ data: adminUsers, skipDuplicates: true });
+    await prisma.account.createMany({ data: adminAccounts, skipDuplicates: true });
+  }
+
+  // ── 2. Bulk person pool — built ONCE and reused by user and applicant loops ───
   const pool: Person[] = Array.from({ length: USER_COUNT }, (_, i) =>
     buildPerson(generatedEmails, generatedStudentIds, { irregular: i < IRREGULAR_COUNT })
   );
 
-  // ── 3. Bulk users + accounts (via Better Auth so passwords are hashed) ───
-  // userIdByIndex keeps applicant links aligned even when some users are
-  // skipped on partial re-runs.
+  // ── 3. Bulk users + accounts (bulk createMany with pre-hashed password) ───
   const userIdByIndex = new Map<number, string>();
+  const bulkUsers: any[] = [];
+  const bulkAccounts: any[] = [];
 
   for (let i = 0; i < USER_COUNT; i++) {
     const isMember = i < MEMBER_USER_COUNT;
@@ -473,25 +489,35 @@ async function main() {
       continue;
     }
 
-    const result = await auth.api.signUpEmail({
-      body: {
-        email: person.email,
-        password: USER_PASSWORD,
-        name: `${person.firstName} ${person.lastName}`,
-        firstName: person.firstName,
-        lastName: person.lastName,
-        studentId: person.studentId,
-      },
+    const userId = uuidv4();
+    userIdByIndex.set(i, userId);
+
+    bulkUsers.push({
+      id: userId,
+      email: person.email,
+      name: `${person.firstName} ${person.lastName}`,
+      firstName: person.firstName,
+      lastName: person.lastName,
+      middleInitial: person.middleInitial,
+      studentId: person.studentId,
+      role: isMember ? UserRole.MEMBER : UserRole.APPLICANT,
+      emailVerified: false,
     });
 
-    // Bulk users default to APPLICANT; promote the member subset.
-    await prisma.user.update({
-      where: { id: result.user.id },
-      data: { role: isMember ? UserRole.MEMBER : UserRole.APPLICANT },
+    bulkAccounts.push({
+      id: uuidv4(),
+      userId,
+      accountId: userId,
+      providerId: "credential",
+      password: hashedUserPassword,
     });
 
-    userIdByIndex.set(i, result.user.id);
     createdTotal++;
+  }
+
+  if (bulkUsers.length > 0) {
+    await prisma.user.createMany({ data: bulkUsers, skipDuplicates: true });
+    await prisma.account.createMany({ data: bulkAccounts, skipDuplicates: true });
   }
 
   console.log(`Users created: ${createdTotal} (skipped ${skippedTotal} existing)`);

@@ -4,6 +4,11 @@ on:
   push:
     branches: [main, develop, release]
   workflow_dispatch:
+    inputs:
+      run-seed:
+        description: 'Run database seeding during deployment'
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -16,6 +21,7 @@ jobs:
       node-version: '20'
       build-command: 'npm run build'
       package-path: '.'
+      run-seed: ${{ inputs.run-seed || false }}
     secrets:
       azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
       azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
