@@ -19,7 +19,6 @@ export function initSentry(): void {
       ],
       enableLogs: true,
     });
-    console.log("[Sentry] Backend monitoring initialized.");
   }
 }
 
