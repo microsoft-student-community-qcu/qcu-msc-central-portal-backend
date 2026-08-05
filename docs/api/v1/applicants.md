@@ -331,7 +331,7 @@ curl -X GET http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-4466
 ### 3. List All Applicants (with filtering)
 
 **Description:**  
-Retrieves all applicants with optional filtering by status, campus, or gender.
+Retrieves all applicants with optional filtering by status, campus, gender, manual application flag, or free-text search.
 
 **Method:** `GET`  
 **Path:** `/api/v1/applicants`
@@ -343,6 +343,7 @@ Retrieves all applicants with optional filtering by status, campus, or gender.
 - `campus` (optional): Filter by campus — `SAN_BARTOLOME_MAIN`, `SAN_FRANCISCO`, `BATASAN`
 - `gender` (optional): Filter by gender — `MALE`, `FEMALE`, `LGBTQIA`, `PREFER_NOT_TO_SAY`
 - `manual_application` (optional): Filter by manual application flag — `true` or `false`
+- `search` (optional): Free-text search; matched with LIKE (case-insensitive) against `firstName`, `lastName`, `email`, or `studentId`. Combine with any other filter (search results must also satisfy the other filters).
 - `limit` (optional): Number of records to return (default: 50)
 - `offset` (optional): Pagination offset (default: 0)
 
@@ -379,7 +380,7 @@ Retrieves all applicants with optional filtering by status, campus, or gender.
 
 **Example Request:**
 ```bash
-curl -X GET "http://localhost:5000/api/v1/applicants?status=PENDING_REVIEW&campus=SAN_BARTOLOME_MAIN&limit=20" \
+curl -X GET "http://localhost:5000/api/v1/applicants?status=PENDING_REVIEW&campus=SAN_BARTOLOME_MAIN&search=juan&limit=20" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 

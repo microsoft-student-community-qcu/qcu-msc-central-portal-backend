@@ -137,6 +137,47 @@ describe("GET /api/v1/applicants (ADMIN_HR)", () => {
     expect(res.status).toBe(200);
   });
 
+  it("searches across firstName, lastName, email, and studentId", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get("/api/v1/applicants?search=juan");
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      OR: [
+        { firstName: { contains: "juan" } },
+        { lastName: { contains: "juan" } },
+        { email: { contains: "juan" } },
+        { studentId: { contains: "juan" } },
+      ],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it("combines search with other filters via AND", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get("/api/v1/applicants?status=APPROVED&search=delacruz");
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      AND: [{ status: "APPROVED" }],
+      OR: [
+        { firstName: { contains: "delacruz" } },
+        { lastName: { contains: "delacruz" } },
+        { email: { contains: "delacruz" } },
+        { studentId: { contains: "delacruz" } },
+      ],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
   it("returns 403 when not ADMIN_HR", async () => {
     setupUnauthenticated();
     const res = await request(app).get("/api/v1/applicants");
