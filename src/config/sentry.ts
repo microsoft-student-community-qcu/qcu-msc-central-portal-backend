@@ -9,9 +9,12 @@ export function initSentry(): void {
   if (dsn) {
     Sentry.init({
       dsn,
-      environment: env.NODE_ENV,
+      environment: process.env.SENTRY_ENV || env.NODE_ENV,
+      release: process.env.APP_VERSION || "unknown",
       tracesSampleRate: env.NODE_ENV === "production" ? 0.2 : 1.0,
       integrations: [
+        Sentry.httpIntegration(),
+        Sentry.expressIntegration(),
         Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }),
       ],
       enableLogs: true,
