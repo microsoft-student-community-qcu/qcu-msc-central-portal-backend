@@ -331,7 +331,7 @@ curl -X GET http://localhost:5000/api/v1/applicants/660e8400-e29b-41d4-a716-4466
 ### 3. List All Applicants (with filtering)
 
 **Description:**  
-Retrieves all applicants with optional filtering by status, campus, gender, office, manual application flag, or free-text search.
+Retrieves all applicants with optional filtering by status, campus, gender, office, college, program, manual application flag, or free-text search.
 
 **Method:** `GET`  
 **Path:** `/api/v1/applicants`
@@ -340,11 +340,13 @@ Retrieves all applicants with optional filtering by status, campus, gender, offi
 
 **Query Parameters:**
 - `status` (optional): Filter by status — `APPROVED`, `PENDING_REVIEW`, `FOR_INTERVIEW`, `REJECTED`, `CANCELLED`, `RESUBMIT`
-- `campus` (optional): Filter by campus — `SAN_BARTOLOME_MAIN`, `SAN_FRANCISCO`, `BATASAN`
+- `campus` (optional): Filter by campus — a single value (`SAN_FRANCISCO`) or a comma-separated list (`SAN_BARTOLOME_MAIN,BATASAN`); matches applicants in any listed campus. Valid values: `SAN_BARTOLOME_MAIN`, `SAN_FRANCISCO`, `BATASAN`
 - `gender` (optional): Filter by gender — `MALE`, `FEMALE`, `LGBTQIA`, `PREFER_NOT_TO_SAY`
 - `office` (optional): Filter by office — a single value (`LOGISTICS_OFFICE`) or a comma-separated list (`SECRETARIAT_OFFICE,RELATIONS_OFFICE`); matches applicants belonging to any listed office. Valid values: `SECRETARIAT_OFFICE`, `RELATIONS_OFFICE`, `FINANCE_OFFICE`, `LOGISTICS_OFFICE`, `CREATIVES_OFFICE`, `MANAGEMENT_AND_DEVELOPMENT_OFFICE`, `STARTUP_DEVELOPERS_OFFICE`
+- `college` (optional): Filter by college name — a single value or a comma-separated list; partial, case-insensitive match against the stored college (matches applicants whose college contains any listed value)
+- `program` (optional): Filter by program name — a single value or a comma-separated list; partial, case-insensitive match against the stored program (matches applicants whose program contains any listed value)
 - `manual_application` (optional): Filter by manual application flag — `true` or `false`
-- `search` (optional): Free-text search; matched with LIKE (case-insensitive) against `firstName`, `lastName`, `email`, or `studentId`. Combine with any other filter (search results must also satisfy the other filters).
+- `search` (optional): Free-text search; matched with LIKE (case-insensitive) against `firstName`, `lastName`, `email`, `studentId`, `college`, `program`, and `campus` (campus matches when the term is contained in a campus name, e.g. `bartolome` → `SAN_BARTOLOME_MAIN`). Combine with any other filter (search results must also satisfy the other filters).
 - `limit` (optional): Number of records to return (default: 50)
 - `offset` (optional): Pagination offset (default: 0)
 
@@ -381,7 +383,7 @@ Retrieves all applicants with optional filtering by status, campus, gender, offi
 
 **Example Request:**
 ```bash
-curl -X GET "http://localhost:5000/api/v1/applicants?status=PENDING_REVIEW&office=SECRETARIAT_OFFICE,RELATIONS_OFFICE&search=juan&limit=20" \
+curl -X GET "http://localhost:5000/api/v1/applicants?status=PENDING_REVIEW&office=SECRETARIAT_OFFICE,RELATIONS_OFFICE&campus=SAN_BARTOLOME_MAIN&college=Computer&search=juan&limit=20" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
