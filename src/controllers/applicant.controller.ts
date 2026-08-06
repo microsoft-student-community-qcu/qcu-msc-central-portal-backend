@@ -4,6 +4,7 @@ import {
   applicantStatusEnum,
   genderEnum,
   campusEnum,
+  officeEnum,
   createApplicantSchema,
   updateApplicantSchema,
   updateApplicantStatusSchema,
@@ -355,6 +356,7 @@ export async function getApplicant(
  *   - status (optional): APPLIED | INTERVIEWING | ACCEPTED | REJECTED
  *   - campus (optional): SAN_BARTOLOME_MAIN | SAN_FRANCISCO | BATASAN
  *   - gender (optional): MALE | FEMALE | LGBTQIA | PREFER_NOT_TO_SAY
+ *   - office (optional): single office or comma-separated list of offices
  *   - manual_application (optional): true | false
  *   - search (optional): LIKE match against firstName, lastName, email, studentId
  *   - limit (optional, default 50)
@@ -369,6 +371,7 @@ export async function listApplicants(
       status,
       campus,
       gender,
+      office,
       manual_application,
       search,
       limit = "50",
@@ -405,6 +408,21 @@ export async function listApplicants(
         return;
       }
       andFilters.push({ gender: parsed.data });
+    }
+    if (office) {
+      // Support a single office or a comma-separated list of offices
+      // (e.g. "LOGISTICS_OFFICE" or "SECRETARIAT_OFFICE,RELATIONS_OFFICE").
+      const officeValues = office.split(",").map((o) => o.trim()).filter(Boolean);
+      if (officeValues.length === 0) {
+        res.status(400).json({ success: false, message: `Invalid office filter: "${office}"` });
+        return;
+      }
+      const parsedOffices = officeValues.map((o) => officeEnum.safeParse(o));
+      if (parsedOffices.some((r) => !r.success)) {
+        res.status(400).json({ success: false, message: `Invalid office filter: "${office}"` });
+        return;
+      }
+      andFilters.push({ office: { in: parsedOffices.map((r) => r.data) } });
     }
     if (manual_application !== undefined) {
       andFilters.push({ manual_application: manual_application === "true" });

@@ -178,6 +178,67 @@ describe("GET /api/v1/applicants (ADMIN_HR)", () => {
     );
   });
 
+  it("filters by a single office query param", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get("/api/v1/applicants?office=LOGISTICS_OFFICE");
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      AND: [{ office: { in: ["LOGISTICS_OFFICE"] } }],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it("filters by multiple comma-separated offices", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get(
+      "/api/v1/applicants?office=SECRETARIAT_OFFICE,RELATIONS_OFFICE"
+    );
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      AND: [{ office: { in: ["SECRETARIAT_OFFICE", "RELATIONS_OFFICE"] } }],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it("combines office filter with search", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get(
+      "/api/v1/applicants?office=LOGISTICS_OFFICE&search=reyes"
+    );
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      AND: [{ office: { in: ["LOGISTICS_OFFICE"] } }],
+      OR: [
+        { firstName: { contains: "reyes" } },
+        { lastName: { contains: "reyes" } },
+        { email: { contains: "reyes" } },
+        { studentId: { contains: "reyes" } },
+      ],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it("returns 400 for an invalid office filter", async () => {
+    const res = await request(app).get("/api/v1/applicants?office=NOT_AN_OFFICE");
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain("Invalid office filter");
+  });
+
   it("returns 403 when not ADMIN_HR", async () => {
     setupUnauthenticated();
     const res = await request(app).get("/api/v1/applicants");
