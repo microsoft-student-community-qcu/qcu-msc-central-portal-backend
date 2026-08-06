@@ -356,6 +356,7 @@ export async function getApplicant(
  *   - campus (optional): SAN_BARTOLOME_MAIN | SAN_FRANCISCO | BATASAN
  *   - gender (optional): MALE | FEMALE | LGBTQIA | PREFER_NOT_TO_SAY
  *   - manual_application (optional): true | false
+ *   - search (optional): LIKE match against firstName, lastName, email, studentId
  *   - limit (optional, default 50)
  *   - offset (optional, default 0)
  */
@@ -369,11 +370,17 @@ export async function listApplicants(
       campus,
       gender,
       manual_application,
+      search,
       limit = "50",
       offset = "0",
     } = req.query as Record<string, string>;
 
     const where: any = {};
+
+    // Exact-match filters are nested under AND so they can combine safely
+    // with the OR search clause below (Prisma disallows mixing top-level
+    // scalar filters with a top-level OR).
+    const andFilters: any[] = [];
 
     if (status) {
       const parsed = applicantStatusEnum.safeParse(status);
@@ -381,7 +388,7 @@ export async function listApplicants(
         res.status(400).json({ success: false, message: `Invalid status filter: "${status}"` });
         return;
       }
-      where.status = parsed.data;
+      andFilters.push({ status: parsed.data });
     }
     if (campus) {
       const parsed = campusEnum.safeParse(campus);
@@ -389,7 +396,7 @@ export async function listApplicants(
         res.status(400).json({ success: false, message: `Invalid campus filter: "${campus}"` });
         return;
       }
-      where.campus = parsed.data;
+      andFilters.push({ campus: parsed.data });
     }
     if (gender) {
       const parsed = genderEnum.safeParse(gender);
@@ -397,10 +404,26 @@ export async function listApplicants(
         res.status(400).json({ success: false, message: `Invalid gender filter: "${gender}"` });
         return;
       }
-      where.gender = parsed.data;
+      andFilters.push({ gender: parsed.data });
     }
     if (manual_application !== undefined) {
-      where.manual_application = manual_application === "true";
+      andFilters.push({ manual_application: manual_application === "true" });
+    }
+
+    // Search matches any of the free-text fields via LIKE (case-insensitive
+    // by MySQL's default collation, so no mode: "insensitive" is needed).
+    const searchTerm = search?.trim();
+    if (searchTerm) {
+      where.OR = [
+        { firstName: { contains: searchTerm } },
+        { lastName: { contains: searchTerm } },
+        { email: { contains: searchTerm } },
+        { studentId: { contains: searchTerm } },
+      ];
+    }
+
+    if (andFilters.length > 0) {
+      where.AND = andFilters;
     }
 
     const [total, applicants] = await Promise.all([
