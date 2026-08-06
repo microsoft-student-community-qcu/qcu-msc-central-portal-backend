@@ -137,7 +137,7 @@ describe("GET /api/v1/applicants (ADMIN_HR)", () => {
     expect(res.status).toBe(200);
   });
 
-  it("searches across firstName, lastName, email, and studentId", async () => {
+  it("searches across name, email, studentId, college, and program fields", async () => {
     (prisma.applicant.count as any).mockResolvedValueOnce(0);
     (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
     const res = await request(app).get("/api/v1/applicants?search=juan");
@@ -149,6 +149,31 @@ describe("GET /api/v1/applicants (ADMIN_HR)", () => {
         { lastName: { contains: "juan" } },
         { email: { contains: "juan" } },
         { studentId: { contains: "juan" } },
+        { college: { contains: "juan" } },
+        { program: { contains: "juan" } },
+      ],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it("maps a search term to campus enum values when it matches", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get("/api/v1/applicants?search=bartolome");
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      OR: [
+        { firstName: { contains: "bartolome" } },
+        { lastName: { contains: "bartolome" } },
+        { email: { contains: "bartolome" } },
+        { studentId: { contains: "bartolome" } },
+        { campus: { in: ["SAN_BARTOLOME_MAIN"] } },
+        { college: { contains: "bartolome" } },
+        { program: { contains: "bartolome" } },
       ],
     };
     expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
@@ -170,12 +195,186 @@ describe("GET /api/v1/applicants (ADMIN_HR)", () => {
         { lastName: { contains: "delacruz" } },
         { email: { contains: "delacruz" } },
         { studentId: { contains: "delacruz" } },
+        { college: { contains: "delacruz" } },
+        { program: { contains: "delacruz" } },
       ],
     };
     expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
     expect(prisma.applicant.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expectedWhere })
     );
+  });
+
+  it("filters by a single office query param", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get("/api/v1/applicants?office=LOGISTICS_OFFICE");
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      AND: [{ office: { in: ["LOGISTICS_OFFICE"] } }],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it("filters by multiple comma-separated offices", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get(
+      "/api/v1/applicants?office=SECRETARIAT_OFFICE,RELATIONS_OFFICE"
+    );
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      AND: [{ office: { in: ["SECRETARIAT_OFFICE", "RELATIONS_OFFICE"] } }],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it("combines office filter with search", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get(
+      "/api/v1/applicants?office=LOGISTICS_OFFICE&search=reyes"
+    );
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      AND: [{ office: { in: ["LOGISTICS_OFFICE"] } }],
+      OR: [
+        { firstName: { contains: "reyes" } },
+        { lastName: { contains: "reyes" } },
+        { email: { contains: "reyes" } },
+        { studentId: { contains: "reyes" } },
+        { college: { contains: "reyes" } },
+        { program: { contains: "reyes" } },
+      ],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it("returns 400 for an invalid office filter", async () => {
+    const res = await request(app).get("/api/v1/applicants?office=NOT_AN_OFFICE");
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain("Invalid office filter");
+  });
+
+  it("filters by multiple comma-separated campuses", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get(
+      "/api/v1/applicants?campus=SAN_BARTOLOME_MAIN,BATASAN"
+    );
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      AND: [{ campus: { in: ["SAN_BARTOLOME_MAIN", "BATASAN"] } }],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it("filters by college with partial match", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get("/api/v1/applicants?college=Computer");
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      AND: [{ OR: [{ college: { contains: "Computer" } }] }],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it("filters by multiple comma-separated colleges", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get("/api/v1/applicants?college=Computer,Business");
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      AND: [
+        {
+          OR: [
+            { college: { contains: "Computer" } },
+            { college: { contains: "Business" } },
+          ],
+        },
+      ],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it("filters by program with partial match", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get("/api/v1/applicants?program=Bachelor");
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      AND: [{ OR: [{ program: { contains: "Bachelor" } }] }],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it("combines college filter with search and office", async () => {
+    (prisma.applicant.count as any).mockResolvedValueOnce(0);
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    const res = await request(app).get(
+      "/api/v1/applicants?office=LOGISTICS_OFFICE&college=Computer&search=reyes"
+    );
+    expect(res.status).toBe(200);
+
+    const expectedWhere = {
+      AND: [
+        { office: { in: ["LOGISTICS_OFFICE"] } },
+        { OR: [{ college: { contains: "Computer" } }] },
+      ],
+      OR: [
+        { firstName: { contains: "reyes" } },
+        { lastName: { contains: "reyes" } },
+        { email: { contains: "reyes" } },
+        { studentId: { contains: "reyes" } },
+        { college: { contains: "reyes" } },
+        { program: { contains: "reyes" } },
+      ],
+    };
+    expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.applicant.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expectedWhere })
+    );
+  });
+
+  it("returns 400 for an invalid campus filter", async () => {
+    const res = await request(app).get("/api/v1/applicants?campus=NOT_A_CAMPUS");
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain("Invalid campus filter");
+  });
+
+  it("returns 400 for a college filter with no usable values", async () => {
+    const res = await request(app).get("/api/v1/applicants?college=,,,");
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain("Invalid college filter");
   });
 
   it("returns 403 when not ADMIN_HR", async () => {
