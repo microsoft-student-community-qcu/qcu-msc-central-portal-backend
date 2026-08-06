@@ -10,6 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
+    "db:reset": "ts-node prisma/reset.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
