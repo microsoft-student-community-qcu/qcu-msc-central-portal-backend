@@ -6,6 +6,8 @@ import {
   createApplicant,
   getApplicant,
   listApplicants,
+  getApplicantCounts,
+  getApplicantDashboardStats,
   updateApplicantStatus,
   updateApplicant,
   approveManualId,
@@ -94,6 +96,22 @@ router.get("/me", requireAuth, getApplicantMe);
  * Lists all applicants with optional filtering. ADMIN_HR only.
  */
 router.get("/", requireAdminHR, listApplicants);
+
+/**
+ * GET /api/v1/applicants/counts
+ *
+ * Retrieves applicant pipeline counts aggregated by status. ADMIN_HR only.
+ * Must be defined BEFORE /:applicantId to prevent shadowing.
+ */
+router.get("/counts", requireAdminHR, getApplicantCounts);
+
+/**
+ * GET /api/v1/applicants/dashboard-stats
+ *
+ * Retrieves pre-aggregated metrics for the admin dashboard charts. ADMIN_HR only.
+ * Must be defined BEFORE /:applicantId to prevent shadowing.
+ */
+router.get("/dashboard-stats", requireAdminHR, getApplicantDashboardStats);
 
 /**
  * GET /api/v1/applicants/:applicantId
