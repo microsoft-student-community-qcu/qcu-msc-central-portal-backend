@@ -528,6 +528,160 @@ export async function listApplicants(
   }
 }
 
+// ── Admin: Dashboard Aggregations ────────────────────────────────────────
+
+/**
+ * GET /api/v1/applicants/counts
+ *
+ * Retrieves applicant pipeline counts aggregated by status. ADMIN_HR only.
+ *
+ * Uses a single groupBy query instead of 7 parallel list queries (the old
+ * frontend behavior), so the dashboard loads counts with one DB call.
+ */
+export async function getApplicantCounts(_req: Request, res: Response): Promise<void> {
+  try {
+    const statusGroups = await prisma.applicant.groupBy({
+      by: ["status"],
+      _count: { _all: true },
+    });
+
+    // Zero-initialize every pipeline status so the response always exposes
+    // all keys, even when a status has no applicants yet.
+    const counts: Record<string, number> = {
+      ALL: 0,
+      APPROVED: 0,
+      PENDING_REVIEW: 0,
+      FOR_INTERVIEW: 0,
+      REJECTED: 0,
+      CANCELLED: 0,
+      RESUBMIT: 0,
+    };
+
+    for (const group of statusGroups) {
+      if (group.status in counts) {
+        counts[group.status] = group._count._all;
+        counts.ALL += group._count._all;
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: counts,
+      message: "Applicant counts retrieved successfully",
+    });
+  } catch (error) {
+    console.error("Failed to retrieve applicant counts:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+/**
+ * GET /api/v1/applicants/dashboard-stats
+ *
+ * Retrieves pre-aggregated metrics for the admin dashboard charts. ADMIN_HR only.
+ *
+ * Aggregation happens on the backend (single request) instead of the frontend
+ * fetching the full applicant list and computing client-side:
+ *   - applicationGrowth:           applicant counts per month for the last 6
+ *                                  months (zero-filled, oldest first)
+ *   - departmentDistribution:      APPROVED applicants grouped by office
+ *   - campusDistribution:          APPROVED applicants grouped by campus
+ *   - verificationMethodDistribution: automated OCR vs manual upload split
+ */
+export async function getApplicantDashboardStats(_req: Request, res: Response): Promise<void> {
+  try {
+    // Start of the month 5 months back — an inclusive 6-month window that
+    // includes the current month. Bucketing uses UTC to match how createdAt
+    // is stored/read.
+    const start = new Date();
+    start.setUTCMonth(start.getUTCMonth() - 5);
+    start.setUTCDate(1);
+    start.setUTCHours(0, 0, 0, 0);
+
+    const [createdAtRows, departmentStats, campusStats, verificationStats] = await Promise.all([
+      // Only the creation dates are needed for the growth chart — no personal
+      // details are transferred over the wire.
+      prisma.applicant.findMany({
+        where: { createdAt: { gte: start } },
+        select: { createdAt: true },
+      }),
+      prisma.applicant.groupBy({
+        by: ["office"],
+        where: { status: "APPROVED" },
+        _count: { _all: true },
+      }),
+      prisma.applicant.groupBy({
+        by: ["campus"],
+        where: { status: "APPROVED" },
+        _count: { _all: true },
+      }),
+      prisma.applicant.groupBy({
+        by: ["manual_application"],
+        _count: { _all: true },
+      }),
+    ]);
+
+    // Build a zero-filled bucket per month (oldest first), then count rows.
+    const monthBuckets: { month: string; count: number }[] = [];
+    const cursor = new Date(start);
+    for (let i = 0; i < 6; i++) {
+      const key = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
+      monthBuckets.push({ month: key, count: 0 });
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    }
+
+    const monthIndex = new Map(monthBuckets.map((bucket, i) => [bucket.month, i]));
+    for (const row of createdAtRows) {
+      const key = `${row.createdAt.getUTCFullYear()}-${String(row.createdAt.getUTCMonth() + 1).padStart(2, "0")}`;
+      const index = monthIndex.get(key);
+      if (index !== undefined) {
+        monthBuckets[index].count += 1;
+      }
+    }
+
+    // Sort distributions alphabetically for stable output across requests.
+    const departmentDistribution = departmentStats
+      .map((stat) => ({ department: stat.office, count: stat._count._all }))
+      .sort((a, b) => a.department.localeCompare(b.department));
+
+    const campusDistribution = campusStats
+      .map((stat) => ({ campus: stat.campus, count: stat._count._all }))
+      .sort((a, b) => a.campus.localeCompare(b.campus));
+
+    const verificationMethodDistribution = {
+      automatedOcr: 0,
+      manualUpload: 0,
+    };
+    for (const stat of verificationStats) {
+      if (stat.manual_application) {
+        verificationMethodDistribution.manualUpload = stat._count._all;
+      } else {
+        verificationMethodDistribution.automatedOcr = stat._count._all;
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        applicationGrowth: monthBuckets,
+        departmentDistribution,
+        campusDistribution,
+        verificationMethodDistribution,
+      },
+      message: "Dashboard stats retrieved successfully",
+    });
+  } catch (error) {
+    console.error("Failed to retrieve dashboard stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
 // ── Admin: Update Applicant Status ───────────────────────────────────────
 
 /**
