@@ -35,6 +35,7 @@ Selection happens once at module init in `src/services/email.service.ts`. Both p
 | `SMTP_FROM_EMAIL` | No | Falls back to `SMTP_USER` | Sender email address |
 | `RESUME_EMAIL_COOLDOWN_MINUTES` | No | `30` | Min minutes between resume-link emails for the same draft (anti-spam) |
 | `RESUME_TOKEN_EXPIRY_MINUTES` | No | `30` | Resume-link JWT expiry — the link in the email points to `${FRONTEND_URL}/apply/resume?token=...` |
+| `PASSWORD_RESET_TOKEN_EXPIRY_MINUTES` | No | `30` | Password-reset-link TTL — the link points to `${FRONTEND_URL|ADMIN_FRONTEND_URL}/auth/reset-password?token=...` |
 
 ## Triggered Emails
 
@@ -48,6 +49,7 @@ All emails are sent from `src/services/email.service.ts`. Each function is a nam
 | Manual ID rejected | `sendManualIdRejectedEmail` | Student ID Rejected | Applicant email |
 | Applicant status changed (admin) | `sendApplicantStatusEmail` | Status-specific subject (Approved / Under Review / Interview / Rejected / Cancelled / Action Required) | Applicant email |
 | Draft resume link (existing in-progress application detected at OCR scan) | `sendDraftResumeLinkEmail` | Resume Your QCU MSC Application | Draft email |
+| Forgot-password reset link requested | `sendPasswordResetEmail` | Reset Your QCU MSC Password | Account email |
 | Guest event registration (auto-approved) | `sendRegistrationConfirmedEmail` | Registration Confirmed — {event title} | Guest email |
 | Guest event registration (manual review) | `sendRegistrationPendingReviewEmail` | Registration Pending Review — {event title} | Guest email |
 | Registration approved (by admin) | `sendRegistrationApprovedEmail` | Registration Approved — {event title} | Registrant email |
@@ -68,3 +70,4 @@ All registration-related emails include the event title in the subject line; con
 | 2026-08-03 | Added `sendApplicationReceivedEmail` — confirmation sent ahead of the setup-link email on both submission flows (draft submit + legacy single submission); states the application is under review |
 | 2026-08-03 | Introduced shared branded layout `renderBrandedEmail` (`src/utils/emailTemplate.ts`) and rewired all senders to use it; added the org banner (600x150) and standard footer to every email |
 | 2026-08-03 | Restyled template to a SaaS-like layout: preheader, centered bordered card, and footer with branded monogram chips (solid-color circles, no image files) for FB/IG/LinkedIn/TikTok, `mailto:` contact (`msc-qcu@outlook.com`), and opt-out disclosure |
+| 2026-08-07 | Added `sendPasswordResetEmail` (forgot-password reset link, portal-specific target URL) and `PASSWORD_RESET_TOKEN_EXPIRY_MINUTES` env var |

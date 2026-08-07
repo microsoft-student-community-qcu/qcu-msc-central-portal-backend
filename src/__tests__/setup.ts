@@ -12,6 +12,7 @@ process.env.BETTER_AUTH_URL = "http://localhost:5000";
 process.env.FRONTEND_URL = "http://localhost:5173";
 process.env.OCR_MAX_FAILURES = "3";
 process.env.RESEND_API_KEY = "re_test-key-for-testing";
+process.env.AZURE_STORAGE_ACCOUNT_NAME = "test-storage-account";
 
 const testUploadDir = path.join(os.tmpdir(), `qcu-test-uploads-${Date.now()}`);
 process.env.IMAGE_STORAGE_PATH = path.join(testUploadDir, "ocr");
@@ -37,6 +38,18 @@ vi.mock("../config/database", () => ({
       create: vi.fn(),
       update: vi.fn(),
       count: vi.fn(),
+    },
+    account: {
+      findFirst: vi.fn(),
+      update: vi.fn(),
+    },
+    session: {
+      deleteMany: vi.fn(),
+    },
+    verification: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      deleteMany: vi.fn(),
     },
     applicant: {
       findUnique: vi.fn(),
@@ -87,6 +100,8 @@ vi.mock("../services/ocr.service", () => ({
 vi.mock("../utils/token", () => ({
   signSetupToken: vi.fn(() => Promise.resolve("mock-setup-token")),
   verifySetupToken: vi.fn(),
+  signPasswordResetToken: vi.fn(() => Promise.resolve("mock-reset-token")),
+  verifyPasswordResetToken: vi.fn(),
 }));
 
 vi.mock("../config/auth", () => ({
@@ -109,4 +124,5 @@ vi.mock("../services/email.service", () => ({
   sendManualIdRejectedEmail: vi.fn(() => Promise.resolve()),
   sendApplicantStatusEmail: vi.fn(() => Promise.resolve()),
   sendDraftResumeLinkEmail: vi.fn(() => Promise.resolve()),
+  sendPasswordResetEmail: vi.fn(() => Promise.resolve()),
 }));

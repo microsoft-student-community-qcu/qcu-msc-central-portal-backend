@@ -16,6 +16,12 @@ interface DraftResumeTokenPayload {
   purpose: "resume-draft";
 }
 
+interface PasswordResetTokenPayload {
+  userId: string;
+  email: string;
+  purpose: "password-reset";
+}
+
 export async function signSetupToken(
   applicantId: string,
   email: string
@@ -75,5 +81,40 @@ export async function verifyDraftResumeToken(
     draftId: payload.draftId as string,
     email: payload.email as string,
     purpose: "resume-draft",
+  };
+}
+
+/**
+ * Sign a short-lived password-reset token embedded in the forgot-password email.
+ * The expiry comes from the PASSWORD_RESET_TOKEN_EXPIRY_MINUTES env variable.
+ * Single-use is enforced server-side by recording the token (hashed) in the
+ * Verification table and consuming it on a successful reset.
+ */
+export async function signPasswordResetToken(
+  userId: string,
+  email: string
+): Promise<string> {
+  return new SignJWT({ userId, email, purpose: "password-reset" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${env.PASSWORD_RESET_TOKEN_EXPIRY_MINUTES}m`)
+    .sign(SECRET);
+}
+
+export async function verifyPasswordResetToken(
+  token: string
+): Promise<PasswordResetTokenPayload> {
+  const { payload } = await jwtVerify(token, SECRET, {
+    algorithms: ["HS256"],
+  });
+
+  if (payload.purpose !== "password-reset") {
+    throw new Error("Invalid token purpose");
+  }
+
+  return {
+    userId: payload.userId as string,
+    email: payload.email as string,
+    purpose: "password-reset",
   };
 }
