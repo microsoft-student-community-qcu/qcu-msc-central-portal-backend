@@ -389,6 +389,116 @@ curl -X GET "http://localhost:5000/api/v1/applicants?status=PENDING_REVIEW&offic
 
 ---
 
+### 4. Get Applicant Counts (Admin Dashboard)
+
+**Description:**  
+Retrieves applicant pipeline counts aggregated by status using a single database `groupBy` query — the backend replacement for the frontend's 7 parallel list queries with `limit=0`.
+
+**Method:** `GET`  
+**Path:** `/api/v1/applicants/counts`
+
+**Authentication:** Required (Bearer token, ADMIN_HR only)
+
+**Query Parameters:** None
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "data": {
+    "ALL": 302,
+    "APPROVED": 151,
+    "PENDING_REVIEW": 71,
+    "FOR_INTERVIEW": 40,
+    "REJECTED": 20,
+    "CANCELLED": 10,
+    "RESUBMIT": 10
+  },
+  "message": "Applicant counts retrieved successfully"
+}
+```
+Every status key is always present (zero when there are no applicants); `ALL` is the sum of all statuses.
+
+**Example Request:**
+```bash
+curl -X GET http://localhost:5000/api/v1/applicants/counts \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Status Codes:**
+- `200`: Counts retrieved
+- `401` / `403`: Unauthenticated / not ADMIN_HR
+- `500`: Internal server error
+
+---
+
+### 5. Get Applicant Dashboard Stats (Admin Dashboard)
+
+**Description:**  
+Retrieves pre-aggregated metrics for the admin dashboard charts. All aggregation happens on the backend — the frontend no longer fetches the full applicant list to compute statistics client-side (which truncated charts at the 50-row default limit).
+
+**Method:** `GET`  
+**Path:** `/api/v1/applicants/dashboard-stats`
+
+**Authentication:** Required (Bearer token, ADMIN_HR only)
+
+**Query Parameters:** None
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "data": {
+    "applicationGrowth": [
+      { "month": "2026-03", "count": 15 },
+      { "month": "2026-04", "count": 22 },
+      { "month": "2026-05", "count": 48 },
+      { "month": "2026-06", "count": 80 },
+      { "month": "2026-07", "count": 62 },
+      { "month": "2026-08", "count": 75 }
+    ],
+    "departmentDistribution": [
+      { "department": "CREATIVES_OFFICE", "count": 18 },
+      { "department": "FINANCE_OFFICE", "count": 7 },
+      { "department": "LOGISTICS_OFFICE", "count": 9 },
+      { "department": "MANAGEMENT_AND_DEVELOPMENT_OFFICE", "count": 6 },
+      { "department": "RELATIONS_OFFICE", "count": 11 },
+      { "department": "SECRETARIAT_OFFICE", "count": 15 },
+      { "department": "STARTUP_DEVELOPERS_OFFICE", "count": 12 }
+    ],
+    "campusDistribution": [
+      { "campus": "BATASAN", "count": 10 },
+      { "campus": "SAN_BARTOLOME_MAIN", "count": 80 },
+      { "campus": "SAN_FRANCISCO", "count": 15 }
+    ],
+    "verificationMethodDistribution": {
+      "automatedOcr": 220,
+      "manualUpload": 82
+    }
+  },
+  "message": "Dashboard stats retrieved successfully"
+}
+```
+
+**Data notes:**
+- `applicationGrowth`: counts per calendar month (UTC, `YYYY-MM`) for the last 6 months including the current one; months with no applications are included with `count: 0`.
+- `departmentDistribution` and `campusDistribution`: reflect **only** applicants with `status = APPROVED` (Active Members); sorted alphabetically by label. `department` maps to the applicant's `office` field.
+- `verificationMethodDistribution`: `automatedOcr` = applicants whose ID was verified by Zonal OCR (`manual_application: false`), `manualUpload` = applicants who entered manually after OCR failure (`manual_application: true`).
+- The **Recent Applications** and **Pending Review** dashboard lists are served by the existing list endpoint (`GET /api/v1/applicants?limit=10` and `GET /api/v1/applicants?status=PENDING_REVIEW&limit=5`) — no custom endpoints needed.
+
+**Example Request:**
+```bash
+curl -X GET http://localhost:5000/api/v1/applicants/dashboard-stats \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Status Codes:**
+- `200`: Stats retrieved
+- `401` / `403`: Unauthenticated / not ADMIN_HR
+- `500`: Internal server error
+
+---
+
 ### 5. Update Applicant Status
 
 **Description:**  

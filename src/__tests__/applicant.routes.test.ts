@@ -384,6 +384,151 @@ describe("GET /api/v1/applicants (ADMIN_HR)", () => {
   });
 });
 
+describe("GET /api/v1/applicants/counts (ADMIN_HR)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupAdminHR();
+  });
+
+  it("returns aggregated counts by status with ALL as the sum", async () => {
+    (prisma.applicant.groupBy as any).mockResolvedValueOnce([
+      { status: "PENDING_REVIEW", _count: { _all: 5 } },
+      { status: "APPROVED", _count: { _all: 3 } },
+      { status: "FOR_INTERVIEW", _count: { _all: 2 } },
+    ]);
+
+    const res = await request(app).get("/api/v1/applicants/counts");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      success: true,
+      data: {
+        ALL: 10,
+        PENDING_REVIEW: 5,
+        APPROVED: 3,
+        FOR_INTERVIEW: 2,
+        REJECTED: 0,
+        CANCELLED: 0,
+        RESUBMIT: 0,
+      },
+      message: "Applicant counts retrieved successfully",
+    });
+  });
+
+  it("returns zeroed counts when there are no applicants", async () => {
+    (prisma.applicant.groupBy as any).mockResolvedValueOnce([]);
+
+    const res = await request(app).get("/api/v1/applicants/counts");
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.ALL).toBe(0);
+    expect(res.body.data.PENDING_REVIEW).toBe(0);
+  });
+
+  it("returns 500 when the database query fails", async () => {
+    (prisma.applicant.groupBy as any).mockRejectedValueOnce(new Error("db down"));
+
+    const res = await request(app).get("/api/v1/applicants/counts");
+
+    expect(res.status).toBe(500);
+    expect(res.body.message).toBe("Internal server error");
+  });
+
+  it("returns 403 when not ADMIN_HR", async () => {
+    setupUnauthenticated();
+
+    const res = await request(app).get("/api/v1/applicants/counts");
+
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("GET /api/v1/applicants/dashboard-stats (ADMIN_HR)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setupAdminHR();
+  });
+
+  it("returns pre-aggregated metrics for the dashboard charts", async () => {
+    const now = new Date();
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([
+      { createdAt: now },
+      { createdAt: now },
+    ]);
+    (prisma.applicant.groupBy as any)
+      .mockResolvedValueOnce([
+        { office: "SECRETARIAT_OFFICE", _count: { _all: 4 } },
+        { office: "FINANCE_OFFICE", _count: { _all: 2 } },
+      ])
+      .mockResolvedValueOnce([{ campus: "SAN_BARTOLOME_MAIN", _count: { _all: 5 } }])
+      .mockResolvedValueOnce([
+        { manual_application: false, _count: { _all: 8 } },
+        { manual_application: true, _count: { _all: 3 } },
+      ]);
+
+    const res = await request(app).get("/api/v1/applicants/dashboard-stats");
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    // Growth: exactly 6 zero-filled months, with the current month counting
+    // both createdAt rows.
+    expect(res.body.data.applicationGrowth).toHaveLength(6);
+    const current = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+    const currentBucket = res.body.data.applicationGrowth.find(
+      (bucket: { month: string }) => bucket.month === current
+    );
+    expect(currentBucket.count).toBe(2);
+
+    // Distributions: APPROVED-only groups, sorted alphabetically.
+    expect(res.body.data.departmentDistribution).toEqual([
+      { department: "FINANCE_OFFICE", count: 2 },
+      { department: "SECRETARIAT_OFFICE", count: 4 },
+    ]);
+    expect(res.body.data.campusDistribution).toEqual([
+      { campus: "SAN_BARTOLOME_MAIN", count: 5 },
+    ]);
+    expect(res.body.data.verificationMethodDistribution).toEqual({
+      automatedOcr: 8,
+      manualUpload: 3,
+    });
+    expect(res.body.message).toBe("Dashboard stats retrieved successfully");
+  });
+
+  it("zero-fills all six growth months when there are no applications", async () => {
+    (prisma.applicant.findMany as any).mockResolvedValueOnce([]);
+    (prisma.applicant.groupBy as any)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const res = await request(app).get("/api/v1/applicants/dashboard-stats");
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.applicationGrowth).toHaveLength(6);
+    expect(res.body.data.applicationGrowth.every((bucket: { count: number }) => bucket.count === 0)).toBe(
+      true
+    );
+  });
+
+  it("returns 500 when a database query fails", async () => {
+    (prisma.applicant.findMany as any).mockRejectedValueOnce(new Error("db down"));
+
+    const res = await request(app).get("/api/v1/applicants/dashboard-stats");
+
+    expect(res.status).toBe(500);
+    expect(res.body.message).toBe("Internal server error");
+  });
+
+  it("returns 403 when not ADMIN_HR", async () => {
+    setupUnauthenticated();
+
+    const res = await request(app).get("/api/v1/applicants/dashboard-stats");
+
+    expect(res.status).toBe(403);
+  });
+});
+
 describe("GET /api/v1/applicants/:applicantId (ADMIN_HR)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
