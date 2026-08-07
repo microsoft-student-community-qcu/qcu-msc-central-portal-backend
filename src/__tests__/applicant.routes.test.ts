@@ -151,6 +151,7 @@ describe("GET /api/v1/applicants (ADMIN_HR)", () => {
         { studentId: { contains: "juan" } },
         { college: { contains: "juan" } },
         { program: { contains: "juan" } },
+        { section: { contains: "juan" } },
       ],
     };
     expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
@@ -174,6 +175,7 @@ describe("GET /api/v1/applicants (ADMIN_HR)", () => {
         { campus: { in: ["SAN_BARTOLOME_MAIN"] } },
         { college: { contains: "bartolome" } },
         { program: { contains: "bartolome" } },
+        { section: { contains: "bartolome" } },
       ],
     };
     expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
@@ -197,6 +199,7 @@ describe("GET /api/v1/applicants (ADMIN_HR)", () => {
         { studentId: { contains: "delacruz" } },
         { college: { contains: "delacruz" } },
         { program: { contains: "delacruz" } },
+        { section: { contains: "delacruz" } },
       ],
     };
     expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
@@ -254,6 +257,7 @@ describe("GET /api/v1/applicants (ADMIN_HR)", () => {
         { studentId: { contains: "reyes" } },
         { college: { contains: "reyes" } },
         { program: { contains: "reyes" } },
+        { section: { contains: "reyes" } },
       ],
     };
     expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });
@@ -357,6 +361,7 @@ describe("GET /api/v1/applicants (ADMIN_HR)", () => {
         { studentId: { contains: "reyes" } },
         { college: { contains: "reyes" } },
         { program: { contains: "reyes" } },
+        { section: { contains: "reyes" } },
       ],
     };
     expect(prisma.applicant.count).toHaveBeenCalledWith({ where: expectedWhere });

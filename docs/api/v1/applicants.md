@@ -346,7 +346,7 @@ Retrieves all applicants with optional filtering by status, campus, gender, offi
 - `college` (optional): Filter by college name — a single value or a comma-separated list; partial, case-insensitive match against the stored college (matches applicants whose college contains any listed value)
 - `program` (optional): Filter by program name — a single value or a comma-separated list; partial, case-insensitive match against the stored program (matches applicants whose program contains any listed value)
 - `manual_application` (optional): Filter by manual application flag — `true` or `false`
-- `search` (optional): Free-text search; matched with LIKE (case-insensitive) against `firstName`, `lastName`, `email`, `studentId`, `college`, `program`, and `campus` (campus matches when the term is contained in a campus name, e.g. `bartolome` → `SAN_BARTOLOME_MAIN`). Combine with any other filter (search results must also satisfy the other filters).
+- `search` (optional): Free-text search; matched with LIKE (case-insensitive) against `firstName`, `lastName`, `email`, `studentId`, `college`, `program`, `section`, and `campus` (campus matches when the term is contained in a campus name, e.g. `bartolome` → `SAN_BARTOLOME_MAIN`). Combine with any other filter (search results must also satisfy the other filters).
 - `limit` (optional): Number of records to return (default: 50)
 - `offset` (optional): Pagination offset (default: 0)
 

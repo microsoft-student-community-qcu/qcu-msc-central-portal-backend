@@ -387,7 +387,7 @@ function parseTextListFilter(raw: string): string[] | null {
  *   - program (optional): single program name or comma-separated list (partial LIKE match)
  *   - manual_application (optional): true | false
  *   - search (optional): LIKE match against firstName, lastName, email,
- *     studentId, campus, college, program
+ *     studentId, campus, college, program, section
  *   - limit (optional, default 50)
  *   - offset (optional, default 0)
  */
@@ -493,6 +493,7 @@ export async function listApplicants(
         ...(campusMatches.length > 0 ? [{ campus: { in: campusMatches } }] : []),
         { college: { contains: searchTerm } },
         { program: { contains: searchTerm } },
+        { section: { contains: searchTerm } },
       ];
     }
 
