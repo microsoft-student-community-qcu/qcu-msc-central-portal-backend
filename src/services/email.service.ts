@@ -399,3 +399,39 @@ export async function sendDraftResumeLinkEmail(to: string, resumeToken: string):
   );
   logSent("Draft resume link", to);
 }
+
+/**
+ * Send the forgot-password reset-link email.
+ *
+ * The link targets the portal that made the request: the Student Portal for
+ * student accounts, the Admin Portal for admin accounts. Swallows errors like
+ * most other emails — the forgot-password endpoint must keep returning the
+ * generic anti-enumeration message regardless.
+ */
+export async function sendPasswordResetEmail(
+  to: string,
+  resetToken: string,
+  portal: "student" | "admin"
+): Promise<void> {
+  const baseUrl = portal === "admin" ? env.ADMIN_FRONTEND_URL : env.FRONTEND_URL;
+  const link = `${baseUrl}/auth/reset-password?token=${resetToken}`;
+  try {
+    await provider.sendEmail(
+      to,
+      "Reset Your QCU MSC Password",
+      renderBrandedEmail({
+        headline: "Password reset requested",
+        paragraphs: [
+          "We received a request to reset the password for your QCU MSC account.",
+          "If this was you, click the button below to set a new password.",
+          "If you did not request this, you can safely ignore this email.",
+        ],
+        button: { href: link, label: "Reset Password" },
+        expiryNote: `This link expires in ${env.PASSWORD_RESET_TOKEN_EXPIRY_MINUTES} minutes.`,
+      }),
+    );
+    logSent("Password reset link", to);
+  } catch (err) {
+    logFailed("password reset link", to, err);
+  }
+}
