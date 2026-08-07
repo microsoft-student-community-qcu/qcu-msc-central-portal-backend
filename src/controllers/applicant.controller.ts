@@ -4,6 +4,7 @@ import {
   applicantStatusEnum,
   genderEnum,
   campusEnum,
+  officeEnum,
   createApplicantSchema,
   updateApplicantSchema,
   updateApplicantStatusSchema,
@@ -347,16 +348,46 @@ export async function getApplicant(
 // ── Admin: List Applicants ───────────────────────────────────────────────
 
 /**
+ * Parses a comma-separated enum filter value (e.g. "A" or "A,B"), trims each
+ * entry, and validates every entry against the provided Zod schema.
+ * Returns the validated values, or null when no usable values are present
+ * (empty input or any entry failing validation).
+ */
+function parseEnumListFilter(raw: string, schema: z.ZodTypeAny): string[] | null {
+  const values = raw.split(",").map((v) => v.trim()).filter(Boolean);
+  if (values.length === 0) return null;
+  const parsed = values.map((v) => schema.safeParse(v));
+  if (parsed.some((r) => !r.success)) return null;
+  return parsed.map((r) => (r as { success: true; data: string }).data);
+}
+
+/**
+ * Parses a comma-separated free-text filter value (e.g. "A" or "A,B"),
+ * trimming each entry. Returns the values, or null when no usable values are
+ * present or any entry exceeds the model's 200-character field limit.
+ */
+function parseTextListFilter(raw: string): string[] | null {
+  const values = raw.split(",").map((v) => v.trim()).filter(Boolean);
+  if (values.length === 0) return null;
+  if (values.some((v) => v.length > 200)) return null;
+  return values;
+}
+
+/**
  * GET /api/v1/applicants
  *
  * Lists applicants with optional filtering and pagination. ADMIN_HR only.
  *
  * Query params:
  *   - status (optional): APPLIED | INTERVIEWING | ACCEPTED | REJECTED
- *   - campus (optional): SAN_BARTOLOME_MAIN | SAN_FRANCISCO | BATASAN
+ *   - campus (optional): single campus or comma-separated list of campuses
  *   - gender (optional): MALE | FEMALE | LGBTQIA | PREFER_NOT_TO_SAY
+ *   - office (optional): single office or comma-separated list of offices
+ *   - college (optional): single college name or comma-separated list (partial LIKE match)
+ *   - program (optional): single program name or comma-separated list (partial LIKE match)
  *   - manual_application (optional): true | false
- *   - search (optional): LIKE match against firstName, lastName, email, studentId
+ *   - search (optional): LIKE match against firstName, lastName, email,
+ *     studentId, campus, college, program, section
  *   - limit (optional, default 50)
  *   - offset (optional, default 0)
  */
@@ -369,6 +400,9 @@ export async function listApplicants(
       status,
       campus,
       gender,
+      office,
+      college,
+      program,
       manual_application,
       search,
       limit = "50",
@@ -391,12 +425,13 @@ export async function listApplicants(
       andFilters.push({ status: parsed.data });
     }
     if (campus) {
-      const parsed = campusEnum.safeParse(campus);
-      if (!parsed.success) {
+      // Support a single campus or a comma-separated list of campuses.
+      const campusValues = parseEnumListFilter(campus, campusEnum);
+      if (!campusValues) {
         res.status(400).json({ success: false, message: `Invalid campus filter: "${campus}"` });
         return;
       }
-      andFilters.push({ campus: parsed.data });
+      andFilters.push({ campus: { in: campusValues } });
     }
     if (gender) {
       const parsed = genderEnum.safeParse(gender);
@@ -406,6 +441,35 @@ export async function listApplicants(
       }
       andFilters.push({ gender: parsed.data });
     }
+    if (office) {
+      // Support a single office or a comma-separated list of offices
+      // (e.g. "LOGISTICS_OFFICE" or "SECRETARIAT_OFFICE,RELATIONS_OFFICE").
+      const officeValues = parseEnumListFilter(office, officeEnum);
+      if (!officeValues) {
+        res.status(400).json({ success: false, message: `Invalid office filter: "${office}"` });
+        return;
+      }
+      andFilters.push({ office: { in: officeValues } });
+    }
+    if (college) {
+      // Partial LIKE match against any of the listed college names
+      // (e.g. "Computer" or "Computer,Business").
+      const collegeValues = parseTextListFilter(college);
+      if (!collegeValues) {
+        res.status(400).json({ success: false, message: `Invalid college filter: "${college}"` });
+        return;
+      }
+      andFilters.push({ OR: collegeValues.map((c) => ({ college: { contains: c } })) });
+    }
+    if (program) {
+      // Partial LIKE match against any of the listed program names.
+      const programValues = parseTextListFilter(program);
+      if (!programValues) {
+        res.status(400).json({ success: false, message: `Invalid program filter: "${program}"` });
+        return;
+      }
+      andFilters.push({ OR: programValues.map((p) => ({ program: { contains: p } })) });
+    }
     if (manual_application !== undefined) {
       andFilters.push({ manual_application: manual_application === "true" });
     }
@@ -414,11 +478,22 @@ export async function listApplicants(
     // by MySQL's default collation, so no mode: "insensitive" is needed).
     const searchTerm = search?.trim();
     if (searchTerm) {
+      // Campus is a MySQL ENUM column, which Prisma can only match via
+      // equality/in — so the term is mapped to the enum values it contains
+      // (e.g. "bartolome" matches SAN_BARTOLOME_MAIN). No campus filter is
+      // added when the term matches none of the enum values.
+      const campusMatches = campusEnum.options.filter((c) =>
+        c.toLowerCase().includes(searchTerm.toLowerCase())
+      );
       where.OR = [
         { firstName: { contains: searchTerm } },
         { lastName: { contains: searchTerm } },
         { email: { contains: searchTerm } },
         { studentId: { contains: searchTerm } },
+        ...(campusMatches.length > 0 ? [{ campus: { in: campusMatches } }] : []),
+        { college: { contains: searchTerm } },
+        { program: { contains: searchTerm } },
+        { section: { contains: searchTerm } },
       ];
     }
 
@@ -446,6 +521,160 @@ export async function listApplicants(
     });
   } catch (error) {
     console.error("Failed to list applicants:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+// ── Admin: Dashboard Aggregations ────────────────────────────────────────
+
+/**
+ * GET /api/v1/applicants/counts
+ *
+ * Retrieves applicant pipeline counts aggregated by status. ADMIN_HR only.
+ *
+ * Uses a single groupBy query instead of 7 parallel list queries (the old
+ * frontend behavior), so the dashboard loads counts with one DB call.
+ */
+export async function getApplicantCounts(_req: Request, res: Response): Promise<void> {
+  try {
+    const statusGroups = await prisma.applicant.groupBy({
+      by: ["status"],
+      _count: { _all: true },
+    });
+
+    // Zero-initialize every pipeline status so the response always exposes
+    // all keys, even when a status has no applicants yet.
+    const counts: Record<string, number> = {
+      ALL: 0,
+      APPROVED: 0,
+      PENDING_REVIEW: 0,
+      FOR_INTERVIEW: 0,
+      REJECTED: 0,
+      CANCELLED: 0,
+      RESUBMIT: 0,
+    };
+
+    for (const group of statusGroups) {
+      if (group.status in counts) {
+        counts[group.status] = group._count._all;
+        counts.ALL += group._count._all;
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: counts,
+      message: "Applicant counts retrieved successfully",
+    });
+  } catch (error) {
+    console.error("Failed to retrieve applicant counts:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
+/**
+ * GET /api/v1/applicants/dashboard-stats
+ *
+ * Retrieves pre-aggregated metrics for the admin dashboard charts. ADMIN_HR only.
+ *
+ * Aggregation happens on the backend (single request) instead of the frontend
+ * fetching the full applicant list and computing client-side:
+ *   - applicationGrowth:           applicant counts per month for the last 6
+ *                                  months (zero-filled, oldest first)
+ *   - departmentDistribution:      APPROVED applicants grouped by office
+ *   - campusDistribution:          APPROVED applicants grouped by campus
+ *   - verificationMethodDistribution: automated OCR vs manual upload split
+ */
+export async function getApplicantDashboardStats(_req: Request, res: Response): Promise<void> {
+  try {
+    // Start of the month 5 months back — an inclusive 6-month window that
+    // includes the current month. Bucketing uses UTC to match how createdAt
+    // is stored/read.
+    const start = new Date();
+    start.setUTCMonth(start.getUTCMonth() - 5);
+    start.setUTCDate(1);
+    start.setUTCHours(0, 0, 0, 0);
+
+    const [createdAtRows, departmentStats, campusStats, verificationStats] = await Promise.all([
+      // Only the creation dates are needed for the growth chart — no personal
+      // details are transferred over the wire.
+      prisma.applicant.findMany({
+        where: { createdAt: { gte: start } },
+        select: { createdAt: true },
+      }),
+      prisma.applicant.groupBy({
+        by: ["office"],
+        where: { status: "APPROVED" },
+        _count: { _all: true },
+      }),
+      prisma.applicant.groupBy({
+        by: ["campus"],
+        where: { status: "APPROVED" },
+        _count: { _all: true },
+      }),
+      prisma.applicant.groupBy({
+        by: ["manual_application"],
+        _count: { _all: true },
+      }),
+    ]);
+
+    // Build a zero-filled bucket per month (oldest first), then count rows.
+    const monthBuckets: { month: string; count: number }[] = [];
+    const cursor = new Date(start);
+    for (let i = 0; i < 6; i++) {
+      const key = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
+      monthBuckets.push({ month: key, count: 0 });
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    }
+
+    const monthIndex = new Map(monthBuckets.map((bucket, i) => [bucket.month, i]));
+    for (const row of createdAtRows) {
+      const key = `${row.createdAt.getUTCFullYear()}-${String(row.createdAt.getUTCMonth() + 1).padStart(2, "0")}`;
+      const index = monthIndex.get(key);
+      if (index !== undefined) {
+        monthBuckets[index].count += 1;
+      }
+    }
+
+    // Sort distributions alphabetically for stable output across requests.
+    const departmentDistribution = departmentStats
+      .map((stat) => ({ department: stat.office, count: stat._count._all }))
+      .sort((a, b) => a.department.localeCompare(b.department));
+
+    const campusDistribution = campusStats
+      .map((stat) => ({ campus: stat.campus, count: stat._count._all }))
+      .sort((a, b) => a.campus.localeCompare(b.campus));
+
+    const verificationMethodDistribution = {
+      automatedOcr: 0,
+      manualUpload: 0,
+    };
+    for (const stat of verificationStats) {
+      if (stat.manual_application) {
+        verificationMethodDistribution.manualUpload = stat._count._all;
+      } else {
+        verificationMethodDistribution.automatedOcr = stat._count._all;
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        applicationGrowth: monthBuckets,
+        departmentDistribution,
+        campusDistribution,
+        verificationMethodDistribution,
+      },
+      message: "Dashboard stats retrieved successfully",
+    });
+  } catch (error) {
+    console.error("Failed to retrieve dashboard stats:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error",
