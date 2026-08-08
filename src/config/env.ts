@@ -19,6 +19,9 @@ const envSchema = z.object({
   RESUME_EMAIL_COOLDOWN_MINUTES: z.coerce.number().int().positive().default(30),
   RESUME_TOKEN_EXPIRY_MINUTES: z.coerce.number().int().positive().default(30),
 
+  // Password reset
+  PASSWORD_RESET_TOKEN_EXPIRY_MINUTES: z.coerce.number().int().positive().default(30),
+
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GITHUB_CLIENT_ID: z.string().optional(),

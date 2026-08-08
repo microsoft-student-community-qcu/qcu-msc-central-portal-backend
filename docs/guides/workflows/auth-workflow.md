@@ -415,6 +415,89 @@ User is APPLICANT, MEMBER, or does not exist?
 
 ---
 
+## Password Reset Flow
+
+Accounts have no recovery path other than this flow. There are two entry points:
+
+1. **Forgot password** (from the sign-in page) → reset link emailed to the account.
+2. **Change password** (while signed in) → user verifies their current password.
+
+### Forgot Password Flow
+
+````
+User clicks "Forgot Password" on the Student or Admin Portal sign-in page
+	↓
+Frontend calls POST /api/v1/auth/student/forgot-password
+                    (or /api/v1/auth/admin/forgot-password for the Admin Portal)
+  Body: { "email": "juan@gmail.com" }
+	↓
+Backend looks up the user by email and checks the portal's role boundary
+  (student portal: APPLICANT / MEMBER; admin portal: ADMIN_HR / ADMIN_LOGISTICS)
+	↓
+Found + role OK?
+	├── No → Respond generically (no email is sent)
+	└── Yes →
+	     Generate a signed JWT reset token (expires in 30 min by default)
+	     Store its SHA-256 in the Verification table (one-time use)
+	     Email a reset link → {FRONTEND_URL|ADMIN_FRONTEND_URL}/auth/reset-password?token=...
+	↓
+Always respond the SAME message (anti-enumeration):
+	{ "success": true, "message": "If an account exists, a password reset link has been sent." }
+```
+
+### Reset Link Flow
+
+```
+User clicks the emailed link → /auth/reset-password?token=<jwt>
+	↓
+Call #1 — Validate Token:
+  POST /api/v1/auth/validate-reset-token  Body: { "token": "<jwt>" }
+	→ Success: { "success": true, "data": { "email": "juan@gmail.com" } }
+	→ Error:   "Invalid or expired reset link. Please request a new one."
+	↓
+Frontend shows the reset form (email pre-filled from the response)
+	↓
+User enters a new password and submits
+	↓
+Call #2 — Reset Password
+  POST /api/v1/auth/reset-password
+  Body: { "token": "<jwt>", "newPassword": "SecurePass123!" }
+	↓
+Backend verifies the token + Verification record, hashes the new password
+(with Better Auth's scrypt), deletes the Verification record (single-use),
+and deletes ALL sessions for the account (re-login required)
+	↓
+{ "success": true, "message": "Password has been reset. Please sign in with your new password." }
+```
+
+### Change Password (authenticated)
+
+```
+User is signed in and opens their profile → "Change Password"
+	↓
+Frontend calls POST /api/v1/auth/change-password
+  Authorization: Bearer <session-token>
+  Body: { "currentPassword": "OldPass123", "newPassword": "NewPass456!" }
+	↓
+Backend verifies currentPassword against the stored credential hash
+	├── Wrong → 400 "Current password is incorrect."
+	└── OK → update the hash, delete every session EXCEPT the current one
+	↓
+{ "success": true, "message": "Password changed successfully." }
+```
+
+> **OAuth-only accounts:** users created via Google/GitHub have no credential password; forgot-password refuses to email a reset link for accounts without a password-set credential, and change-password returns `400 "No password is set for this account."`.
+
+### Web Handshake Summary
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/v1/auth/student/forgot-password` | Public (5 req/min) | Send reset link (Student Portal roles) |
+| POST | `/api/v1/auth/admin/forgot-password` | Public (5 req/min) | Send reset link (Admin Portal roles) |
+| POST | `/api/v1/auth/validate-reset-token` | Public | Validate before showing reset form |
+
+---
+
 ## OAuth — Google / GitHub
 
 ```
@@ -480,5 +563,10 @@ Route uses require* guard to block unauthorized requests
 | GET | `/api/v1/users/me` | Required | Get user profile |
 | POST | `/api/v1/users/link-applicant` | Optional¹ | Link applicant record to user account |
 | PATCH | `/api/v1/users/:userId/role` | ADMIN_HR | Update user role |
+| POST | `/api/v1/auth/student/forgot-password` | Public (5 req/min) | Send password-reset link (Student Portal roles) |
+| POST | `/api/v1/auth/admin/forgot-password` | Public (5 req/min) | Send password-reset link (Admin Portal roles) |
+| POST | `/api/v1/auth/validate-reset-token` | Public | Validate the emailed reset token |
+| POST | `/api/v1/auth/reset-password` | Public (10 req/min) | Set a new password via the emailed token |
+| POST | `/api/v1/auth/change-password` | Required | Change own password (current password required) |
 
 > ¹ Best-effort: if skipped, the auto-link safety net on sign-in reconnects the records.
