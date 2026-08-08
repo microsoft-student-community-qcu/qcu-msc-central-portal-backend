@@ -6,7 +6,7 @@ import { auth } from "../src/config/auth";
 // Central seed — run locally with `npx prisma db seed` and automatically by
 // CI/CD on `develop` and `release` deploys (CICD skips seeding on `main`).
 //
-// Creates:
+// Creates (dataset sizes configurable via SEED_* env vars — defaults shown):
 //   - 300 users + accounts (75 MEMBER + 225 APPLICANT) via Better Auth, so the
 //     mocked users can actually log in with the documented password.
 //   - 10 admins (5 ADMIN_HR + 5 ADMIN_LOGISTICS) with distinct credentials.
@@ -26,12 +26,49 @@ import { auth } from "../src/config/auth";
 
 const prisma = new PrismaClient();
 
-// ── Tunable seed sizes ────────────────────────────────────────────────────
-const USER_COUNT = 300; // total bulk users (each gets one Account)
-const MEMBER_USER_COUNT = 75; // subset promoted to MEMBER role (approved applicants)
-const APPLICANT_COUNT = 300; // bulk applicant records (one per user)
-const DRAFT_COUNT = 150; // application drafts
-const IRREGULAR_COUNT = 5; // students enrolled earlier than the standard cohort
+// ── Tunable seed sizes (env-driven with sensible defaults) ─────────────────
+// Reads a positive-integer seed size from the environment, falling back to the
+// provided default when unset. Throws a clear, actionable error on bad input
+// so a typo'd env value never silently corrupts a local dataset.
+function readSeedInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") {
+    return fallback;
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(
+      `Invalid ${name}=${JSON.stringify(raw)} — expected a positive integer (default ${fallback}).`
+    );
+  }
+  return value;
+}
+
+const USER_COUNT = readSeedInt("SEED_USER_COUNT", 300); // total bulk users (each gets one Account)
+const MEMBER_USER_COUNT = readSeedInt("SEED_MEMBER_USER_COUNT", 75); // subset promoted to MEMBER role (approved applicants)
+const APPLICANT_COUNT = readSeedInt("SEED_APPLICANT_COUNT", 300); // bulk applicant records (one per user)
+const DRAFT_COUNT = readSeedInt("SEED_DRAFT_COUNT", 150); // application drafts
+const IRREGULAR_COUNT = readSeedInt("SEED_IRREGULAR_COUNT", 5); // students enrolled earlier than the standard cohort
+const ADMIN_HR_COUNT = readSeedInt("SEED_ADMIN_HR_COUNT", 5); // ADMIN_HR admins
+const ADMIN_LOGISTICS_COUNT = readSeedInt("SEED_ADMIN_LOGISTICS_COUNT", 5); // ADMIN_LOGISTICS admins
+
+// Guard against misconfigured sizes that would crash or silently mislink data:
+// the person pool is USER_COUNT rows, so every subset must fit inside it.
+if (MEMBER_USER_COUNT > USER_COUNT) {
+  throw new Error(
+    `SEED_MEMBER_USER_COUNT (${MEMBER_USER_COUNT}) must be <= SEED_USER_COUNT (${USER_COUNT}).`
+  );
+}
+if (APPLICANT_COUNT > USER_COUNT) {
+  throw new Error(
+    `SEED_APPLICANT_COUNT (${APPLICANT_COUNT}) must be <= SEED_USER_COUNT (${USER_COUNT}) since each applicant links to one user.`
+  );
+}
+if (IRREGULAR_COUNT > USER_COUNT) {
+  throw new Error(
+    `SEED_IRREGULAR_COUNT (${IRREGULAR_COUNT}) must be <= SEED_USER_COUNT (${USER_COUNT}).`
+  );
+}
 
 const USER_PASSWORD = process.env.SEED_USER_PASSWORD || "SeedPass123!";
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "AdminPass123!";
@@ -373,10 +410,10 @@ function makeDraft(
   return draft;
 }
 
-// ── Admin roster (5 HR + 5 Logistics) ──────────────────────────────────────
+// ── Admin roster (ADMIN_HR_COUNT HR + ADMIN_LOGISTICS_COUNT Logistics) ─────
 const ADMIN_ROLES: UserRole[] = [
-  ...Array.from({ length: 5 }, () => UserRole.ADMIN_HR),
-  ...Array.from({ length: 5 }, () => UserRole.ADMIN_LOGISTICS),
+  ...Array.from({ length: ADMIN_HR_COUNT }, () => UserRole.ADMIN_HR),
+  ...Array.from({ length: ADMIN_LOGISTICS_COUNT }, () => UserRole.ADMIN_LOGISTICS),
 ];
 
 interface AdminAccount extends Person {
