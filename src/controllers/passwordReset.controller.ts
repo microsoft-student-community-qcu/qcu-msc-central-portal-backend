@@ -49,6 +49,7 @@ function findCredentialAccount(userId: string) {
 }
 
 const GENERIC_LINK_ERROR = "Invalid or expired reset link. Please request a new one.";
+const SAME_PASSWORD_ERROR = "New password cannot be the same as your current password.";
 
 // ── Forgot password ────────────────────────────────────────────────────────
 // Always answers with the same generic message so a caller cannot tell whether
@@ -171,6 +172,20 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
       return;
     }
 
+    // Reject a reset that would leave the password unchanged. Only enforced
+    // when a credential password already exists — OAuth-only accounts may
+    // still set a first password through the reset link.
+    if (account.password) {
+      const sameAsCurrent = await verifyPassword({
+        hash: account.password,
+        password: parsed.data.newPassword,
+      });
+      if (sameAsCurrent) {
+        res.status(400).json({ success: false, message: SAME_PASSWORD_ERROR });
+        return;
+      }
+    }
+
     // Hash with Better Auth's own scrypt so sign-in verification keeps working.
     const newHash = await hashPassword(parsed.data.newPassword);
     await prisma.account.update({
@@ -233,6 +248,13 @@ export async function changePassword(req: Request, res: Response): Promise<void>
         success: false,
         message: "Current password is incorrect.",
       });
+      return;
+    }
+
+    // Both fields come from the same request, so a plain equality check is
+    // enough — the stored hash was already verified against currentPassword.
+    if (parsed.data.newPassword === parsed.data.currentPassword) {
+      res.status(400).json({ success: false, message: SAME_PASSWORD_ERROR });
       return;
     }
 
