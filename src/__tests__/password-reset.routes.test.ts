@@ -233,6 +233,7 @@ describe("POST /api/v1/auth/reset-password (public)", () => {
       providerId: "credential",
       password: "old-hash",
     } as any);
+    mockVerifyPassword.mockResolvedValue(false);
     mockHashPassword.mockResolvedValue("fresh-scrypt-hash");
 
     const res = await request(app)
@@ -277,6 +278,33 @@ describe("POST /api/v1/auth/reset-password (public)", () => {
     expect(res.status).toBe(400);
     expect(res.body.errors).toHaveProperty("newPassword");
   });
+
+  it("rejects a new password identical to the current account password", async () => {
+    vi.mocked(verifyPasswordResetToken).mockResolvedValue({
+      userId: "user-1",
+      email: "juan@example.com",
+      purpose: "password-reset",
+    });
+    vi.mocked(prisma.verification.findFirst).mockResolvedValue({
+      value: hashToken("good-token"),
+      expiresAt: new Date(Date.now() + 60_000),
+    } as any);
+    vi.mocked(prisma.account.findFirst).mockResolvedValue({
+      id: "acct-1",
+      userId: "user-1",
+      providerId: "credential",
+      password: "stored-hash",
+    } as any);
+    mockVerifyPassword.mockResolvedValue(true);
+
+    const res = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: "good-token", newPassword: "OldPass123" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe("New password cannot be the same as your current password.");
+    expect(prisma.account.update).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/v1/auth/change-password (authenticated)", () => {
@@ -300,6 +328,24 @@ describe("POST /api/v1/auth/change-password (authenticated)", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.message).toBe("Current password is incorrect.");
+    expect(prisma.account.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a new password identical to the current password", async () => {
+    vi.mocked(prisma.account.findFirst).mockResolvedValue({
+      id: "acct-1",
+      userId: "user-1",
+      providerId: "credential",
+      password: "stored-hash",
+    } as any);
+    mockVerifyPassword.mockResolvedValue(true);
+
+    const res = await request(app)
+      .post("/api/v1/auth/change-password")
+      .send({ currentPassword: "SamePass123", newPassword: "SamePass123" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe("New password cannot be the same as your current password.");
     expect(prisma.account.update).not.toHaveBeenCalled();
   });
 
