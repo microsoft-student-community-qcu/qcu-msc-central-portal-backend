@@ -98,6 +98,8 @@ Two endpoints mirror the per-portal sign-in design. Each only processes accounts
 
 **Description:** Consumes the reset token and sets a new password. The password is hashed with Better Auth's scrypt (same format sign-in verifies). On success, the token record is deleted (**single-use**) and **all sessions are invalidated** — the user must sign in again.
 
+> The new password cannot be identical to the account's current password — such a reset is rejected with `400 "New password cannot be the same as your current password."`. OAuth-only accounts (no credential password yet) may still set a first password.
+
 **Method:** `POST`  
 **Path:** `/api/v1/auth/reset-password`
 
@@ -124,6 +126,14 @@ Two endpoints mirror the per-portal sign-in design. Each only processes accounts
 {
   "success": false,
   "message": "Invalid or expired reset link. Please request a new one."
+}
+```
+
+**Response (new password same as current, 400):**
+```json
+{
+  "success": false,
+  "message": "New password cannot be the same as your current password."
 }
 ```
 
@@ -169,6 +179,14 @@ Two endpoints mirror the per-portal sign-in design. Each only processes accounts
 {
   "success": false,
   "message": "Current password is incorrect."
+}
+```
+
+**Response (new password same as current, 400):**
+```json
+{
+  "success": false,
+  "message": "New password cannot be the same as your current password."
 }
 ```
 
