@@ -5,11 +5,11 @@ import { prisma } from "../config/database";
 import { ocrStore } from "../config/ocrStore";
 import { createEventSchema, reviewRegistrationSchema } from "../schemas/event.schema";
 import {
-  sendRegistrationConfirmedEmail,
   sendRegistrationPendingReviewEmail,
   sendRegistrationApprovedEmail,
   sendRegistrationRejectedEmail,
 } from "../services/email.service";
+
 
 /**
  * POST /api/v1/events/:eventId/register
@@ -188,8 +188,9 @@ export async function registerForEvent(
     }
 
     // ── 6. Create registration ───────────────────────────────────────────
-    const qrPayload = randomUUID();
-
+    // Every registration enters the pipeline as PENDING_REVIEW regardless of
+    // path — there is no auto-approve. The QR payload stays null until an
+    // ADMIN_LOGISTICS officer approves (see reviewRegistration).
     const registration = await prisma.registration.create({
       data: {
         eventId,
@@ -199,9 +200,8 @@ export async function registerForEvent(
         firstName: firstName ?? "",
         middleInitial,
         email,
-        qrPayload,
         manual_registration: manualRegistration,
-        status: manualRegistration ? "PENDING_REVIEW" : "APPROVED",
+        status: "PENDING_REVIEW",
       },
     });
 
@@ -210,32 +210,17 @@ export async function registerForEvent(
       ocrStore.deleteSession(ocrSessionId);
     }
 
-    // ── 8. Send confirmation email ────────────────────────────────────────
-    if (registration.status === "APPROVED") {
-      await sendRegistrationConfirmedEmail(registration.email, event.title, qrPayload);
-    } else {
-      await sendRegistrationPendingReviewEmail(registration.email, event.title);
-    }
+    // ── 8. Acknowledge receipt — no ticket is issued at this stage ────────
+    await sendRegistrationPendingReviewEmail(registration.email, event.title);
 
     // ── 9. Respond ────────────────────────────────────────────────────────
-    if (registration.status === "PENDING_REVIEW") {
-      res.status(202).json({
-        success: true,
-        data: { registrationId: registration.id, status: "pending_review" },
-        message:
-          "Registration submitted for manual review. Your ticket will be emailed once an Admin verifies your ID.",
-      });
-    } else {
-      res.status(201).json({
-        success: true,
-        data: {
-          registrationId: registration.id,
-          status: "approved",
-          qrPayload,
-        },
-        message: "Registration successful. Check your email for your QR Pass.",
-      });
-    }
+    res.status(202).json({
+      success: true,
+      data: { registrationId: registration.id, status: "pending_review" },
+      message:
+        "Registration received and pending review. Your QR ticket will be emailed once a Logistics officer approves it.",
+    });
+
   } catch (error) {
     if (
       typeof error === "object" &&
@@ -376,10 +361,13 @@ export async function getEventRegistrations(
 /**
  * PATCH /api/v1/events/:eventId/registrations/:registrationId/approve
  *
- * Allows ADMIN_LOGISTICS to approve or reject registrations that were
- * flagged for manual review after OCR failure. Approvals emit a stubbed
- * email log with a QR ticket URL derived from the registration's qrPayload.
+ * Allows ADMIN_LOGISTICS to approve or reject a PENDING_REVIEW registration.
+ * This is the only place a QR ticket is minted: on approval the registration
+ * receives a fresh UUID payload (unless one already exists) and the attendee
+ * is emailed their pass. Rejections send a generic notice with no reason,
+ * since balancing decisions are internal to Logistics.
  */
+
 export async function reviewRegistration(
   req: Request,
   res: Response
@@ -423,17 +411,31 @@ export async function reviewRegistration(
       return;
     }
 
-    const nextStatus = parsed.data.action === "approve" ? "APPROVED" : "REJECTED";
+    const isApproval = parsed.data.action === "approve";
+
+    // Mint the QR payload only on approval, and only if one isn't already
+    // present (defensive — an approved registration keeps its original pass
+    // so a re-issued ticket never invalidates one already in an inbox).
     const updated = await prisma.registration.update({
       where: { id: registrationId },
-      data: { status: nextStatus },
+      data: isApproval
+        ? {
+            status: "APPROVED",
+            qrPayload: registration.qrPayload ?? randomUUID(),
+          }
+        : { status: "REJECTED" },
     });
 
-    if (parsed.data.action === "approve") {
-      await sendRegistrationApprovedEmail(updated.email, event.title, updated.qrPayload);
+    if (isApproval) {
+      await sendRegistrationApprovedEmail(
+        updated.email,
+        event.title,
+        updated.qrPayload!
+      );
     } else {
       await sendRegistrationRejectedEmail(updated.email, event.title);
     }
+
 
     res.status(200).json({
       success: true,
@@ -500,6 +502,16 @@ export async function checkInByQr(
       return;
     }
 
+    // Status is evaluated before attendance: an unapproved registration must
+    // report "not approved", never "already checked in".
+    if (registration.status !== "APPROVED") {
+      res.status(400).json({
+        success: false,
+        message: "Registration is not approved for check-in",
+      });
+      return;
+    }
+
     if (registration.hasAttended) {
       res.status(400).json({
         success: false,
@@ -508,13 +520,6 @@ export async function checkInByQr(
       return;
     }
 
-    if (registration.status !== "APPROVED") {
-      res.status(400).json({
-        success: false,
-        message: "Registration is not approved for check-in",
-      });
-      return;
-    }
 
     const updated = await prisma.registration.update({
       where: { qrPayload },
@@ -567,6 +572,15 @@ export async function manualCheckIn(
       return;
     }
 
+    // Same guard order as the QR path — status first, then attendance.
+    if (registration.status !== "APPROVED") {
+      res.status(400).json({
+        success: false,
+        message: "Registration is not approved for check-in",
+      });
+      return;
+    }
+
     if (registration.hasAttended) {
       res.status(400).json({
         success: false,
@@ -575,13 +589,6 @@ export async function manualCheckIn(
       return;
     }
 
-    if (registration.status !== "APPROVED") {
-      res.status(400).json({
-        success: false,
-        message: "Registration is not approved for check-in",
-      });
-      return;
-    }
 
     const updated = await prisma.registration.update({
       where: { id: registrationId },

@@ -1,6 +1,20 @@
 # Backend Modification Changelog
 
+## 4. Event Registration Pipeline Fix (2026-08-18)
+
+### **Registrations no longer auto-approve; QR tickets are minted on approval only**
+- **Root Cause:** `registerForEvent` generated a `qrPayload` and set `status: "APPROVED"` for every non-manual registration, so any guest passing OCR (and every member) received a valid door ticket instantly. The documented first-come-first-serve review, capacity control, and office-cap balancing were unreachable, and `PATCH .../approve` only ever saw OCR-failure rows.
+- **Fix:**
+  - `src/controllers/eventController.ts` — registration now always creates a `PENDING_REVIEW` row with no `qrPayload`, sends an acknowledgement email, and responds `202` with `status: "pending_review"`.
+  - `reviewRegistration` is now the only place a `qrPayload` is generated (UUID minted on approval, existing payload preserved if present); rejections leave it null.
+  - `checkInByQr` and `manualCheckIn` now evaluate `status !== "APPROVED"` before `hasAttended`, so an unapproved ticket reports "not approved" instead of "already checked in".
+- **Schema:** `Registration.status` default changed `APPROVED` -> `PENDING_REVIEW`; `qrPayload` is now nullable. Migration `20260818052800_registration_pending_by_default_qr_on_approval` also backfills `qrPayload = NULL` for all non-`APPROVED` rows.
+- **Docs:** updated `docs/api/v1/events.md` (endpoints 4 and 5) and `docs/specs/data-models/registration.md`.
+
+---
+
 ## 3. Security Fixes
+
 
 ### **VUL-016 — Mass Assignment Privilege Escalation on User Sign-Up** (2026-07-30)
 - **Root Cause:** The sign-up handler at `src/app.ts` forwarded raw `req.body` to Better Auth, allowing a malicious client to inject `role: "ADMIN_HR"` and escalate privileges at account creation.

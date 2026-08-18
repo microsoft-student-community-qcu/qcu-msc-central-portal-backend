@@ -205,9 +205,14 @@ model Registration {
   lastName           String           @default("")
   firstName          String           @default("")
   middleInitial      String?
-  status             RegistrationStatus @default(APPROVED)
+  // Every registration enters the review pipeline as PENDING_REVIEW.
+  // Only an ADMIN_LOGISTICS approval promotes it to APPROVED.
+  status             RegistrationStatus @default(PENDING_REVIEW)
   manual_registration Boolean           @default(false) // Flagged true when OCR fails → manual upload
-  qrPayload          String             @unique // Unique UUID for QR code verification
+  // Null until the registration is approved — the QR ticket is minted on
+  // approval, never at submission time.
+  qrPayload          String?            @unique // Unique UUID for QR code verification
+
   hasAttended        Boolean            @default(false)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt

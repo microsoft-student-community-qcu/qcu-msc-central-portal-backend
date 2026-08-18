@@ -5,10 +5,12 @@ import { ocrStore } from "../config/ocrStore";
 import {
   mockEventRecord,
   mockRegistrationRecord,
+  mockPendingRegistrationRecord,
   authUnauthenticated,
   authAdminLogistics,
   authMember,
 } from "./helpers";
+
 
 // ── Auth Mock Setup ──────────────────────────────────────────────────────
 const {
@@ -111,7 +113,8 @@ describe("POST /api/v1/events/:eventId/register (public + member)", () => {
     setupPublic();
   });
 
-  it("registers a guest with valid OCR session", async () => {
+  it("registers a guest with valid OCR session as PENDING_REVIEW without a QR payload", async () => {
+
     const session = ocrStore.createSession({
       studentId: "20-0001",
       lastName: "Doe",
@@ -125,7 +128,9 @@ describe("POST /api/v1/events/:eventId/register (public + member)", () => {
     (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
     (prisma.registration.count as any).mockResolvedValueOnce(50);
     (prisma.registration.findUnique as any).mockResolvedValueOnce(null);
-    (prisma.registration.create as any).mockResolvedValueOnce(mockRegistrationRecord);
+    (prisma.registration.create as any).mockResolvedValueOnce(
+      mockPendingRegistrationRecord
+    );
     const res = await request(app)
       .post("/api/v1/events/event-1/register")
       .send({
@@ -134,9 +139,18 @@ describe("POST /api/v1/events/:eventId/register (public + member)", () => {
         email: "john.doe@example.com",
         ocrSessionId: session.ocrSessionId,
       });
-    expect(res.status).toBe(201);
-    expect(res.body.data.status).toBe("approved");
+    expect(res.status).toBe(202);
+    expect(res.body.data.status).toBe("pending_review");
+    // No ticket is handed out at submission time.
+    expect(res.body.data.qrPayload).toBeUndefined();
+    expect((prisma.registration.create as any).mock.calls[0][0].data).toMatchObject({
+      status: "PENDING_REVIEW",
+    });
+    expect(
+      (prisma.registration.create as any).mock.calls[0][0].data
+    ).not.toHaveProperty("qrPayload");
   });
+
 
   it("returns 403 for MEMBERS_ONLY event when guest", async () => {
     setupPublic();
@@ -155,7 +169,8 @@ describe("POST /api/v1/events/:eventId/register (public + member)", () => {
     expect(res.status).toBe(403);
   });
 
-  it("registers a member without OCR", async () => {
+  it("registers a member without OCR, also as PENDING_REVIEW", async () => {
+
     setupMemberAuth();
     (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
     (prisma.registration.count as any).mockResolvedValueOnce(50);
@@ -168,14 +183,16 @@ describe("POST /api/v1/events/:eventId/register (public + member)", () => {
     });
     (prisma.registration.findUnique as any).mockResolvedValueOnce(null);
     (prisma.registration.create as any).mockResolvedValueOnce({
-      ...mockRegistrationRecord,
+      ...mockPendingRegistrationRecord,
       userId: "member-id",
     });
     const res = await request(app)
       .post("/api/v1/events/event-1/register")
       .send({});
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(202);
+    expect(res.body.data.status).toBe("pending_review");
   });
+
 
   it("returns 409 when event is at full capacity", async () => {
     setupPublic();
@@ -263,12 +280,11 @@ describe("PATCH /api/v1/events/:eventId/registrations/:registrationId/approve (A
     setupAdminLogistics();
   });
 
-  it("approves a pending registration", async () => {
+  it("approves a pending registration and mints its QR payload", async () => {
     (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
-    (prisma.registration.findUnique as any).mockResolvedValueOnce({
-      ...mockRegistrationRecord,
-      status: "PENDING_REVIEW",
-    });
+    (prisma.registration.findUnique as any).mockResolvedValueOnce(
+      mockPendingRegistrationRecord
+    );
     (prisma.registration.update as any).mockResolvedValueOnce({
       ...mockRegistrationRecord,
       status: "APPROVED",
@@ -278,7 +294,34 @@ describe("PATCH /api/v1/events/:eventId/registrations/:registrationId/approve (A
       .send({ action: "approve" });
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe("APPROVED");
+    // Approval is the only place a QR payload is generated.
+    // Read the latest call — mock call history persists across tests in this file.
+    const updateData = (prisma.registration.update as any).mock.calls.at(-1)[0].data;
+
+    expect(updateData.status).toBe("APPROVED");
+    expect(updateData.qrPayload).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    );
   });
+
+  it("rejects without minting a QR payload", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
+    (prisma.registration.findUnique as any).mockResolvedValueOnce(
+      mockPendingRegistrationRecord
+    );
+    (prisma.registration.update as any).mockResolvedValueOnce({
+      ...mockPendingRegistrationRecord,
+      status: "REJECTED",
+    });
+    const res = await request(app)
+      .patch("/api/v1/events/event-1/registrations/reg-1/approve")
+      .send({ action: "reject" });
+    expect(res.status).toBe(200);
+    const updateData = (prisma.registration.update as any).mock.calls.at(-1)[0].data;
+    expect(updateData).toEqual({ status: "REJECTED" });
+
+  });
+
 
   it("returns 400 if registration is not pending review", async () => {
     (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
@@ -323,7 +366,21 @@ describe("PATCH /api/v1/events/:eventId/registrations/checkin (ADMIN_LOGISTICS)"
       .send({ qrPayload: "invalid" });
     expect(res.status).toBe(400);
   });
+
+  it("reports 'not approved' rather than 'already checked in' for an unapproved ticket", async () => {
+    (prisma.registration.findUnique as any).mockResolvedValueOnce({
+      ...mockPendingRegistrationRecord,
+      qrPayload: "qr-uuid-123",
+      hasAttended: true,
+    });
+    const res = await request(app)
+      .patch("/api/v1/events/event-1/registrations/checkin")
+      .send({ qrPayload: "qr-uuid-123" });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe("Registration is not approved for check-in");
+  });
 });
+
 
 describe("PATCH /api/v1/events/:eventId/registrations/:registrationId/checkin (ADMIN_LOGISTICS)", () => {
   beforeEach(() => {
