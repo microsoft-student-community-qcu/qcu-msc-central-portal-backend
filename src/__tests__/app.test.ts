@@ -3,9 +3,9 @@ import request from "supertest";
 import { prisma } from "../config/database";
 import app from "../app";
 
-describe("GET /", () => {
+describe("GET /api", () => {
   it("returns API info", async () => {
-    const res = await request(app).get("/");
+    const res = await request(app).get("/api");
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("message", "QCU MSC Central Portal API is running.");
     expect(res.body).toHaveProperty("version");
@@ -13,21 +13,21 @@ describe("GET /", () => {
   });
 });
 
-describe("GET /health", () => {
+describe("GET /api/health", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("returns healthy when DB is connected", async () => {
     (prisma.$queryRaw as any).mockResolvedValueOnce([{ 1: 1 }]);
-    const res = await request(app).get("/health");
+    const res = await request(app).get("/api/health");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: "healthy", database: "connected" });
   });
 
   it("returns unhealthy when DB is disconnected", async () => {
     (prisma.$queryRaw as any).mockRejectedValueOnce(new Error("Connection refused"));
-    const res = await request(app).get("/health");
+    const res = await request(app).get("/api/health");
     expect(res.status).toBe(500);
     expect(res.body.status).toBe("unhealthy");
     expect(res.body.database).toBe("disconnected");
