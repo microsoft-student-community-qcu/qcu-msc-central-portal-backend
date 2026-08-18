@@ -63,9 +63,20 @@ export const mockEventRecord = {
   generalStartDate: new Date("2025-06-01"),
   type: "PUBLIC" as const,
   maxCapacity: 100,
+  isCancelled: false,
+  cancellationReason: null,
+  cancelledAt: null,
   createdAt: pastDate,
   updatedAt: pastDate,
   _count: { registrations: 5 },
+};
+
+// Soft-deleted variant — same row, cancellation flags set (V2 Flow 8).
+export const mockCancelledEventRecord = {
+  ...mockEventRecord,
+  isCancelled: true,
+  cancellationReason: "Venue became unavailable due to a scheduling conflict.",
+  cancelledAt: new Date("2026-02-01"),
 };
 
 export const mockRegistrationRecord = {

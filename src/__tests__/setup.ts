@@ -64,6 +64,7 @@ vi.mock("../config/database", () => ({
       findUnique: vi.fn(),
       findMany: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
     },
     registration: {
       findUnique: vi.fn(),
@@ -120,6 +121,8 @@ vi.mock("../services/email.service", () => ({
   sendRegistrationPendingReviewEmail: vi.fn(() => Promise.resolve()),
   sendRegistrationApprovedEmail: vi.fn(() => Promise.resolve()),
   sendRegistrationRejectedEmail: vi.fn(() => Promise.resolve()),
+  sendEventCancelledEmail: vi.fn(() => Promise.resolve()),
+  resendRegistrationTicketEmail: vi.fn(() => Promise.resolve()),
   sendManualIdApprovedEmail: vi.fn(() => Promise.resolve()),
   sendManualIdRejectedEmail: vi.fn(() => Promise.resolve()),
   sendApplicantStatusEmail: vi.fn(() => Promise.resolve()),

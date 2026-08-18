@@ -177,36 +177,110 @@ Display: "✓ {Name} checked in successfully"
 Attendance recorded ✓
 ```
 
+### Edge Case — Attendee Lost Their QR Email
+
+Covers V2 Flow 7: an attendee arrives (or writes in beforehand) without the
+confirmation email containing their QR pass.
+
+```
+Attendee cannot find their QR pass email
+	↓
+ADMIN_LOGISTICS opens the event's attendee roster
+	↓
+Locates the registration by name / email
+	↓
+Clicks "Re-send Ticket"
+	↓
+POST /api/v1/events/:eventId/registrations/:registrationId/resend-ticket
+	↓
+Check: registration status = APPROVED?
+	↓ No  → 400 "Only approved registrations have a QR pass"
+	↓ Yes
+Check: event cancelled?
+	↓ Yes → 409 "This event has been cancelled"
+	↓ No
+Re-send the EXISTING qrPayload by email (never regenerated)
+	↓
+Email delivery failed? → 502, admin can retry
+	↓
+"QR pass re-sent to {email}" ✓
+```
+
+**Key Decision Points:**
+- The QR payload is **reused, never regenerated** — any copy the attendee still
+  has remains valid, and check-in behaviour is unchanged.
+- Only `APPROVED` registrations are eligible; `PENDING_REVIEW` attendees have no
+  valid ticket yet, and `REJECTED` / `CANCELLED` ones must not receive one.
+- Unlike most emails in the system, a delivery failure here surfaces to the
+  admin as `502` rather than being silently logged — they triggered the action
+  for one specific attendee and need to know whether it landed.
+
 ---
 
 ## Event Cancellation
 
-### Admin-Driven (Whole Event)
+### Admin-Driven (Whole Event) — V2 Flow 8
+
+Cancelling an entire event is a **soft delete**. No `Event` or `Registration`
+row is ever destroyed, so the complete attendee roster stays queryable for audit
+and reporting after the fact.
 
 ```
 Event date approaching
 	↓
 Admin decides to cancel event (e.g., low registrations, unexpected issue)
 	↓
-Admin clicks "Delete Event"
+Admin clicks "Cancel Event" and enters a reason (required)
 	↓
-System confirms deletion warning
+PATCH /api/v1/events/:eventId/cancel  { "reason": "..." }
 	↓
-Delete Event record (cascade delete)
+Reason missing / under 10 chars? → 400 Validation error
 	↓
-Cascade: All Registrations for this event deleted
+Event not found? → 404
 	↓
-Send cancellation email to all registered attendees
+Event already cancelled? → 409 (no-op)
 	↓
-Event removed from listings ✓
+Soft delete — flag the Event row only:
+  - isCancelled        = true
+  - cancellationReason = <admin reason>
+  - cancelledAt        = now()
 	↓
-Cancellation data retained in audit logs
+Fetch every registration with status APPROVED or PENDING_REVIEW
+	↓
+Email each one the cancellation notice, including the reason verbatim
+  (sent with Promise.allSettled — one bad address cannot block the rest)
+	↓
+Event disappears from the public feed and detail endpoint ✓
+	↓
+All records preserved; roster still readable by admins ✓
 ```
 
 **Key Decision Points:**
-- Deletion is permanent (no soft delete for events currently)
-- All registrations for the event are removed
-- Registrants notified of cancellation
+- **Soft delete only** — nothing is destroyed. `Registration` rows survive, so
+  historical attendance and headcount reporting remain accurate.
+- A **reason is mandatory** (10-1000 chars); it is embedded verbatim in the
+  notification email, so an empty value is rejected with `400` rather than
+  silently mailing a blank note.
+- Only `APPROVED` and `PENDING_REVIEW` registrants are notified. `REJECTED` and
+  `CANCELLED` registrants were never (or are no longer) attending.
+- Distinct from `Registration.status = CANCELLED`, which is a single attendee
+  opting out (see below).
+
+**Downstream effects once `isCancelled = true`:**
+
+| Surface | Behaviour |
+|---------|-----------|
+| `GET /api/v1/events` (public feed) | Event excluded |
+| `GET /api/v1/events/:eventId` | `404` — `"This event has been cancelled."` |
+| `POST /api/v1/events/:eventId/register` | `409` — registration refused |
+| `PATCH .../registrations/checkin` | `409` — check-in disabled, all passes void |
+| `POST .../resend-ticket` | `409` — tickets can no longer be sent |
+| `GET /api/v1/events/:eventId/registrations` (admin) | Still readable; echoes `isCancelled`, `cancellationReason`, `cancelledAt` |
+
+> **TODO (auth/RBAC):** V2 Flow 8 restricts cancellation to
+> `ADMIN_LOGISTICS_HEAD` / `SUPERADMIN`. Neither role exists in the `UserRole`
+> enum yet and `authMiddleware.ts` has no matching guard, so the endpoint ships
+> behind `requireAdminLogistics` for now. Tracked as a separate auth/RBAC issue.
 
 ### User-Driven (Individual Registration)
 

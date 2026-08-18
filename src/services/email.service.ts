@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import nodemailer from "nodemailer";
 import { env } from "../config/env";
-import { renderBrandedEmail, type BrandedEmailOptions } from "../utils/emailTemplate";
+import { renderBrandedEmail, esc, type BrandedEmailOptions } from "../utils/emailTemplate";
 
 // ── Provider interface ─────────────────────────────────────────────────────
 
@@ -194,6 +194,66 @@ export async function sendRegistrationRejectedEmail(to: string, eventTitle: stri
   } catch (err) {
     logFailed("registration rejected", to, err);
   }
+}
+
+/**
+ * Notify a registrant that the whole event was cancelled by an admin.
+ *
+ * The admin-supplied reason is passed through `note`, which the branded
+ * template escapes — cancellation reasons are free text and must never be
+ * able to inject HTML into the email body.
+ */
+export async function sendEventCancelledEmail(
+  to: string,
+  eventTitle: string,
+  reason: string
+): Promise<void> {
+  try {
+    await provider.sendEmail(
+      to,
+      `Event Cancelled — ${eventTitle}`,
+      renderBrandedEmail({
+        headline: "This event has been cancelled",
+        paragraphs: [
+          `We're sorry to inform you that <strong>${esc(eventTitle)}</strong> has been cancelled.`,
+          "Your registration has been voided and any QR pass previously issued to you is no longer valid.",
+        ],
+        note: reason,
+        supportLine: true,
+      }),
+    );
+    logSent("Event cancelled", to);
+  } catch (err) {
+    logFailed("event cancelled", to, err);
+  }
+}
+
+/**
+ * Re-send an existing QR ticket to an approved registrant who lost the
+ * original email (V2 Flow 7 edge case).
+ *
+ * Deliberately does NOT swallow errors: the admin explicitly triggered this
+ * action for a single attendee and needs to know whether the email actually
+ * went out, so the controller can respond 502 on failure.
+ */
+export async function resendRegistrationTicketEmail(
+  to: string,
+  eventTitle: string,
+  qrPayload: string
+): Promise<void> {
+  await provider.sendEmail(
+    to,
+    `Your QR Pass — ${eventTitle}`,
+    renderBrandedEmail({
+      headline: "Here's your QR pass again",
+      paragraphs: [
+        `This is a re-send of your entry pass for <strong>${esc(eventTitle)}</strong>.`,
+        "Show this QR code at the event entrance:",
+      ],
+      qrPayload,
+    }),
+  );
+  logSent("Registration ticket re-send", to);
 }
 
 export async function sendManualIdApprovedEmail(to: string): Promise<void> {

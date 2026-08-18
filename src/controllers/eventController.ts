@@ -49,6 +49,17 @@ export async function registerForEvent(
       return;
     }
 
+    // ── 1b. Cancelled event block ────────────────────────────────────────
+    // Soft-deleted events stay in the table for audit, so registration has to
+    // reject them explicitly rather than relying on the row being gone.
+    if (event.isCancelled) {
+      res.status(409).json({
+        success: false,
+        message: "This event has been cancelled and is no longer accepting registrations.",
+      });
+      return;
+    }
+
     // ── 2. Members-Only block ────────────────────────────────────────────
     if (event.type === "MEMBERS_ONLY" && !isMemberPath) {
       res.status(403).json({
@@ -314,6 +325,10 @@ export async function createEvent(
  * Returns all registrations for a specific event including check-in status.
  * ADMIN_LOGISTICS only.
  *
+ * Cancelled events are intentionally still readable here — cancellation is a
+ * soft delete, so the roster remains available for audit and reporting. The
+ * event summary echoes the cancellation state so the admin UI can flag it.
+ *
  * Query params:
  *   - status (optional): APPROVED | PENDING_REVIEW | REJECTED | CANCELLED
  *   - hasAttended (optional): true | false
@@ -356,6 +371,9 @@ export async function getEventRegistrations(
           maxCapacity: event.maxCapacity,
           registeredCount: total,
           spotsRemaining: event.maxCapacity - total,
+          isCancelled: event.isCancelled,
+          cancellationReason: event.cancellationReason,
+          cancelledAt: event.cancelledAt,
         },
         total,
         registrations,
@@ -484,6 +502,16 @@ export async function checkInByQr(
       res.status(400).json({
         success: false,
         message: "qrPayload is required",
+      });
+      return;
+    }
+
+    // Reject check-ins for a cancelled event — every pass issued for it is void.
+    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    if (event?.isCancelled) {
+      res.status(409).json({
+        success: false,
+        message: "This event has been cancelled. Check-in is disabled.",
       });
       return;
     }

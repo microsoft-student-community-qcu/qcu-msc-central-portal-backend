@@ -2,18 +2,14 @@ import { Request, Response } from "express";
 import { prisma } from "../config/database";
 
 /**
- * GET /api/v1/events
+ * GET /api/v1/events/:eventId
  *
- * Returns the public events feed - only events whose date has not yet
- * passed, sorted soonest first. Used by the landing page's Active
- * Initiatives feed and the dedicated /events listing page.
+ * Returns details of a single public event.
  *
- * Does not require authentication. Returns the same list regardless of
- * caller's role - visibility filtering (e.g. hiding MEMBERS_ONLY events
- * from non-members) is left to the frontend / register endpoint, since
- * the PRD's landing page spec just shows upcoming events generally
- * ("top 3 upcoming active events") without role-based hiding at the
- * feed level.
+ * Cancelled events (soft-deleted via PATCH /:eventId/cancel) are treated as
+ * absent here — they respond 404 with an explicit "cancelled" message so the
+ * frontend can distinguish a called-off event from a bad ID. Admin-facing
+ * endpoints still read the row directly, since nothing is ever deleted.
  */
 export async function getEventById(
   req: Request,
@@ -35,6 +31,14 @@ export async function getEventById(
       res.status(404).json({
         success: false,
         message: "Event not found",
+      });
+      return;
+    }
+
+    if (event.isCancelled) {
+      res.status(404).json({
+        success: false,
+        message: "This event has been cancelled.",
       });
       return;
     }
@@ -66,6 +70,23 @@ export async function getEventById(
   }
 }
 
+/**
+ * GET /api/v1/events
+ *
+ * Returns the public events feed - only events whose date has not yet
+ * passed, sorted soonest first. Used by the landing page's Active
+ * Initiatives feed and the dedicated /events listing page.
+ *
+ * Cancelled events are excluded (soft delete — the rows still exist and remain
+ * visible to admin endpoints).
+ *
+ * Does not require authentication. Returns the same list regardless of
+ * caller's role - visibility filtering (e.g. hiding MEMBERS_ONLY events
+ * from non-members) is left to the frontend / register endpoint, since
+ * the PRD's landing page spec just shows upcoming events generally
+ * ("top 3 upcoming active events") without role-based hiding at the
+ * feed level.
+ */
 export async function getEvents(_req: Request, res: Response): Promise<void> {
   try {
     const now = new Date();
@@ -73,6 +94,7 @@ export async function getEvents(_req: Request, res: Response): Promise<void> {
     const events = await prisma.event.findMany({
       where: {
         date: { gte: now },
+        isCancelled: false,
       },
       orderBy: {
         date: "asc",
