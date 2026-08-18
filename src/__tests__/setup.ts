@@ -28,9 +28,15 @@ afterAll(() => {
 });
 
 // ── Global Prisma Mock ────────────────────────────────────────────────────
-vi.mock("../config/database", () => ({
-  prisma: {
+vi.mock("../config/database", () => {
+  const prisma: any = {
     $queryRaw: vi.fn(),
+    // Interactive transactions run the callback against the same mock client,
+    // so controllers using prisma.$transaction(tx => ...) work unchanged in tests.
+    $transaction: vi.fn((arg: any) =>
+      typeof arg === "function" ? arg(prisma) : Promise.all(arg)
+    ),
+
     user: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
@@ -72,8 +78,11 @@ vi.mock("../config/database", () => ({
       update: vi.fn(),
       count: vi.fn(),
     },
-  } as any,
-}));
+  };
+
+  return { prisma };
+});
+
 
 // ── Global External Service Mocks ─────────────────────────────────────────
 vi.mock("../utils/imageStorage", () => ({
