@@ -1,33 +1,28 @@
 import express from "express";
 import cors from "cors";
+import path from "node:path";
+import * as Sentry from "@sentry/node";
+
+import { env } from "./config/env";
+import { prisma } from "./config/database";
+import { initSentry, captureDatabaseError } from "./config/sentry";
 import { corsOptions } from "./config/cors";
 import {
   signUpLimiter,
   signInLimiter,
-  studentSignInLimiter,
-  adminSignInLimiter,
   resendSetupLinkLimiter,
 } from "./config/rateLimit";
-import { signUpSchema, signInSchema } from "./schemas/auth.schema";
-import { env } from "./config/env";
-import { auth } from "./config/auth";
-import { prisma } from "./config/database";
+import { betterAuthHandler } from "./controllers/auth.controller";
+import { resendSetupLink } from "./controllers/applicant.controller";
 import { authMiddleware } from "./routes/authMiddleware";
-import * as Sentry from "@sentry/node";
-import { initSentry, captureDatabaseError } from "./config/sentry";
 import ocrRoutes from "./routes/ocr.routes";
 import applicantRoutes from "./routes/applicant.routes";
 import applicationDraftRoutes from "./routes/application-draft.routes";
-import { resendSetupLink } from "./controllers/applicant.controller";
-import { verifySetupToken } from "./utils/token";
 import eventRoutes from "./routes/event.routes";
 import userRoutes from "./routes/user.routes";
 import authRoutes, { protectedAuthRouter } from "./routes/auth.routes";
 
-import path from "node:path";
-
 initSentry();
-
 
 const app = express();
 
@@ -43,412 +38,27 @@ if (env.NODE_ENV === "development") {
 app.use(cors(corsOptions));
 app.use(express.json());
 
+// Rate limiting for Better Auth public POST endpoints
 app.use("/api/auth/sign-up/email", signUpLimiter);
 app.use("/api/auth/sign-in/email", signInLimiter);
 
-// Better Auth handler — manages sign-up, sign-in, OAuth, sessions
-// auth.handler is a Web API (Request) => Response function.
-// We wrap it for Express since Express cannot use it directly.
-app.use("/api/auth", async (req, res, next) => {
-  try {
-    // Block direct sign-in — each portal must use its dedicated endpoint
-    if (req.method === "POST" && req.path === "/sign-in/email") {
-      res.status(400).json({
-        success: false,
-        message: "Direct sign-in is not available. Use /api/v1/auth/student/sign-in or /api/v1/auth/admin/sign-in instead.",
-      });
-      return;
-    }
+// Better Auth handler — manages sign-up, sign-in, OAuth, sessions.
+// Handles the Express ↔ Web API translation internally
+// (see src/controllers/auth.controller.ts + src/utils/betterAuthProxy.ts).
+app.use("/api/auth", betterAuthHandler);
 
-    if (req.method === "POST") {
-      // Pre-validate sign-up body — collect ALL errors at once
-      if (req.path === "/sign-up/email") {
-        const result = signUpSchema.safeParse(req.body);
-        if (!result.success) {
-          res.status(400).json({
-            success: false,
-            message: "Validation error",
-            errors: result.error.flatten().fieldErrors,
-          });
-          return;
-        }
-
-        // Check studentId uniqueness
-        const existing = await prisma.user.findUnique({
-          where: { studentId: result.data.studentId },
-          select: { id: true },
-        });
-        if (existing) {
-          res.status(400).json({
-            success: false,
-            message: "Student ID already taken",
-          });
-          return;
-        }
-
-        // Validate setup token — prevents account pre-hijacking (see VUL-004).
-        // Every account creation must be authorized by a valid one-time
-        // setup token obtained through the approved applicant flow.
-        const tokenPayload = await verifySetupToken(result.data.setupToken);
-        if (!tokenPayload) {
-          res.status(400).json({
-            success: false,
-            message: "Invalid or expired setup link. Please request a new one.",
-          });
-          return;
-        }
-
-        if (tokenPayload.email !== result.data.email) {
-          res.status(400).json({
-            success: false,
-            message: "Email does not match the setup link.",
-          });
-          return;
-        }
-
-        const applicant = await prisma.applicant.findUnique({
-          where: { id: tokenPayload.applicantId },
-          select: { userId: true, email: true },
-        });
-
-        if (!applicant) {
-          res.status(400).json({
-            success: false,
-            message: "Setup link is invalid. Please contact support.",
-          });
-          return;
-        }
-
-        if (applicant.userId !== null) {
-          res.status(400).json({
-            success: false,
-            message: "This setup link has already been used.",
-          });
-          return;
-        }
-
-        if (applicant.email !== result.data.email) {
-          res.status(400).json({
-            success: false,
-            message: "Email does not match the applicant record.",
-          });
-          return;
-        }
-
-        // Reconstruct clean request body with only safe fields.
-        // Never forward raw req.body — it may contain injected fields
-        // like `role` that bypass Zod validation (see VUL-016).
-        req.body = {
-          email: result.data.email,
-          password: result.data.password,
-          name: `${result.data.firstName} ${result.data.lastName}`.trim(),
-          studentId: result.data.studentId,
-          middleInitial: result.data.middleInitial,
-        };
-      }
-
-      // Pre-validate sign-in body
-      if (req.path === "/sign-in/email") {
-        const result = signInSchema.safeParse(req.body);
-        if (!result.success) {
-          res.status(400).json({
-            success: false,
-            message: "Validation error",
-            errors: result.error.flatten().fieldErrors,
-          });
-          return;
-        }
-      }
-    }
-
-    // ── Better Auth Forwarding ──────────────────────────────────────────────
-    // Better Auth exposes a single universal handler that accepts the Web API
-    // Request/Response standard. Express uses a different request/response
-    // model, so we must translate between the two.
-    //
-    // Steps:
-    //   1. Build a full URL  → Better Auth routes requests by URL path
-    //      (e.g. /api/auth/sign-up/email → account creation,
-    //       /api/auth/sign-in/email    → sign in,
-    //       /api/auth/get-session      → session lookup)
-    //   2. Wrap the Express request into a Web API Request object
-    //   3. Call auth.handler() — it returns a Web API Response
-    //   4. Copy the status, headers, and body back to Express res
-
-    // Extract the protocol and host from the incoming request so Better Auth
-    // sees the same origin the client sees. In production behind a reverse
-    // proxy (NGINX / Azure Web App), x-forwarded-proto and x-forwarded-host
-    // are set automatically. Falls back to http + localhost:5000 for dev.
-    const protocol = req.headers["x-forwarded-proto"] || "http";
-    const host = req.headers.host || "localhost:5000";
-
-    // req.originalUrl is the full path Express sees (e.g. /api/auth/sign-up/email).
-    // Better Auth internally parses this path to determine the auth operation,
-    // extract query params, and generate redirect URLs.
-    const url = `${protocol}://${host}${req.originalUrl}`;
-
-    // Convert Express request into a Web API Request. Better Auth only
-    // understands this interface. We pass through:
-    //   - method:  POST / GET (Better Auth reads this to determine action)
-    //   - headers: cookies, content-type, authorization (needed for session
-    //              validation, CSRF, and OAuth flows)
-    //   - body:    JSON payload; skipped for GET/HEAD (they have no body)
-    const webRequest = new Request(url, {
-      method: req.method,
-      headers: req.headers as Record<string, string>,
-      body: ["GET", "HEAD"].includes(req.method)
-        ? undefined
-        : JSON.stringify(req.body),
-    });
-
-    // Delegate to Better Auth. It handles password hashing, session creation,
-    // OAuth token exchange, etc. internally and returns a standard Response.
-    const webResponse = await auth.handler(webRequest);
-
-    // Read the response body as text. Must consume it before forwarding
-    // headers because Web API Response bodies are single-use streams.
-    const bodyText = await webResponse.text();
-
-    // ── Error Translation ───────────────────────────────────────────
-    // Better Auth returns a generic "Failed to create user" when account
-    // creation fails for various reasons (duplicate email, invalid data).
-    // We translate this to a clearer, user-friendly message in our standard
-    // JSON format so the frontend can display it consistently.
-    if (
-      webResponse.status === 422 &&
-      bodyText
-    ) {
-      let errorBody: { message?: string } | null = null;
-      try {
-        errorBody = JSON.parse(bodyText);
-      } catch {
-        // ignore parse errors
-      }
-
-      if (errorBody?.message === "Failed to create user") {
-        res.status(400).json({
-          success: false,
-          message: "Failed to create user. Please check your input.",
-        });
-        return;
-      }
-    }
-
-    res.status(webResponse.status);
-    webResponse.headers.forEach((value, key) => {
-      res.setHeader(key, value);
-    });
-
-    res.send(bodyText);
-  } catch (error) {
-    next(error);
-  }
-});
-
-
-// Public routes (no auth required)
+// ── Public routes (no auth required) ──────────────────────────────────────
 app.use("/api/v1/ocr", ocrRoutes);
-
 app.post("/api/v1/applicants/resend-setup-link", resendSetupLinkLimiter, resendSetupLink);
 
-// ── Portal-Specific Sign-In Endpoints ─────────────────────────────────────
-// Each portal has a dedicated sign-in endpoint that enforces role boundaries:
-//   Student Portal → APPLICANT / MEMBER only
-//   Admin Portal   → ADMIN_HR / ADMIN_LOGISTICS only
-// The generic /api/auth/sign-in/email is disabled to prevent ambiguous access.
-
-app.post("/api/v1/auth/student/sign-in", studentSignInLimiter, async (req, res) => {
-  const result = signInSchema.safeParse(req.body);
-  if (!result.success) {
-    res.status(400).json({
-      success: false,
-      message: "Validation error",
-      errors: result.error.flatten().fieldErrors,
-    });
-    return;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { email: result.data.email },
-    select: { role: true },
-  });
-
-  if (user && (user.role === "ADMIN_HR" || user.role === "ADMIN_LOGISTICS")) {
-    res.status(403).json({
-      success: false,
-      message: "Admin accounts cannot sign in through the Student Portal. Please use the Admin Portal.",
-    });
-    return;
-  }
-
-  // ── Better Auth Forwarding ──────────────────────────────────────────────
-  // Better Auth is a universal auth library that exposes a single Web API
-  // handler: auth.handler(request: Request) => Promise<Response>.
-  // It does NOT understand Express's req/res — only the Web API standard.
-  //
-  // To use it from Express, we must:
-  //   1. Reconstruct the full URL  (protocol + host + Better Auth's path)
-  //   2. Wrap the request into a Web API Request object
-  //   3. Call auth.handler() and send its Response back through Express
-  //
-  // The target URL path (/api/auth/sign-in/email) must match Better Auth's
-  // internal route so it knows to process this as an email/password sign-in.
-  // We only change the path — the method, headers, and body pass through.
-
-  // Extract the protocol from the proxy-forwarded header, or default to http.
-  // In production behind a reverse proxy (NGINX / Azure), this header is set
-  // automatically. Better Auth needs the full scheme to generate correct
-  // redirect URLs and validate the origin.
-  const protocol = req.headers["x-forwarded-proto"] || "http";
-
-  // Extract the hostname from the incoming request so Better Auth sees the
-  // same origin the client sees. Falls back to localhost:5000 for dev.
-  const host = req.headers.host || "localhost:5000";
-
-  // Assemble the full URL that Better Auth will internally route.
-  // Better Auth parses the URL path to determine which auth operation to
-  // run (sign-in, sign-up, get-session, etc.). By pointing at
-  // /api/auth/sign-in/email, we tell Better Auth: "this is an email/password
-  // sign-in request". The query string is omitted — email sign-in is a
-  // simple POST with a JSON body and needs no query parameters.
-  const url = `${protocol}://${host}/api/auth/sign-in/email`;
-
-  // Convert the Express request into a Web API Request object.
-  // Better Auth's handler only accepts this standard interface. We forward:
-  //   - method:  POST (unchanged)
-  //   - headers: cookies, content-type, authorization, etc. (Better Auth
-  //              needs these for session parsing and CSRF protection)
-  //   - body:    the JSON payload containing email + password
-  const webRequest = new Request(url, {
-    method: req.method,
-    headers: req.headers as Record<string, string>,
-    body: JSON.stringify(req.body),
-  });
-
-  // Delegate to Better Auth. It validates the password against the stored
-  // hash, creates a session, and returns a Web API Response containing
-  // the user + session data (or an error if credentials are wrong).
-  const webResponse = await auth.handler(webRequest);
-
-  // Read the response body as text so we can send it through Express.
-  // We must read it before setting Express headers because ReadableStream
-  // can only be consumed once.
-  const bodyText = await webResponse.text();
-
-  // Auto-link applicant to user on successful sign-in.
-  // If link-applicant was never called after sign-up (network timeout,
-  // page refresh, frontend bug), this reconnects the accounts automatically
-  // — the user just needs to log in. Idempotent: `userId: null` only matches
-  // unlinked applicants, and `email` is unique on Applicant (one match max).
-  if (webResponse.status === 200 && bodyText) {
-    try {
-      const body = JSON.parse(bodyText);
-      const email = body?.user?.email;
-      const userId = body?.user?.id;
-      if (email && userId) {
-        await prisma.applicant.updateMany({
-          where: { email, userId: null },
-          data: { userId },
-        });
-      }
-    } catch {
-      // Log but never break sign-in
-      console.error("Auto-link on sign-in: failed to parse response body");
-    }
-  }
-
-  // Copy the status code from Better Auth's response (e.g. 200 success,
-  // 401 invalid credentials) to Express.
-  res.status(webResponse.status);
-
-  // Forward all response headers from Better Auth (set-cookie for session,
-  // content-type, etc.) to the client through Express.
-  webResponse.headers.forEach((value, key) => {
-    res.setHeader(key, value);
-  });
-
-  // Send the response body (user/session JSON or error) back to the client.
-  res.send(bodyText);
-});
-
-app.post("/api/v1/auth/admin/sign-in", adminSignInLimiter, async (req, res) => {
-  const result = signInSchema.safeParse(req.body);
-  if (!result.success) {
-    res.status(400).json({
-      success: false,
-      message: "Validation error",
-      errors: result.error.flatten().fieldErrors,
-    });
-    return;
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { email: result.data.email },
-    select: { role: true },
-  });
-
-  if (!user || (user.role !== "ADMIN_HR" && user.role !== "ADMIN_LOGISTICS")) {
-    res.status(403).json({
-      success: false,
-      message: "Access denied. Only admin accounts can sign in through the Admin Portal.",
-    });
-    return;
-  }
-
-  // ── Better Auth Forwarding ──────────────────────────────────────────────
-  // Same bridging logic as the student sign-in endpoint above.
-  // Better Auth's handler expects a Web API Request, not an Express req.
-  // See the student endpoint for detailed commentary on each step.
-  const protocol = req.headers["x-forwarded-proto"] || "http";
-  const host = req.headers.host || "localhost:5000";
-  const url = `${protocol}://${host}/api/auth/sign-in/email`;
-
-  const webRequest = new Request(url, {
-    method: req.method,
-    headers: req.headers as Record<string, string>,
-    body: JSON.stringify(req.body),
-  });
-
-  const webResponse = await auth.handler(webRequest);
-  const bodyText = await webResponse.text();
-
-  // Auto-link applicant to user on successful sign-in.
-  // Same safety net as the student handler above, so an admin can also
-  // recover a disconnected Applicant just by signing in.
-  if (webResponse.status === 200 && bodyText) {
-    try {
-      const body = JSON.parse(bodyText);
-      const email = body?.user?.email;
-      const userId = body?.user?.id;
-      if (email && userId) {
-        await prisma.applicant.updateMany({
-          where: { email, userId: null },
-          data: { userId },
-        });
-      }
-    } catch {
-      // Log but never break sign-in
-      console.error("Auto-link on sign-in: failed to parse response body");
-    }
-  }
-
-  res.status(webResponse.status);
-  webResponse.headers.forEach((value, key) => {
-    res.setHeader(key, value);
-  });
-  res.send(bodyText);
-});
-
-// ── Password Reset (public) ────────────────────────────────────────────────
-// Forgot-password, token validation, and password reset are public POST routes
-// (rate-limited). Registered before authMiddleware like the OCR routes.
+// Password reset + portal-specific sign-in (public, rate-limited).
+// Registered before authMiddleware like the OCR routes.
 app.use("/api/v1/auth", authRoutes);
 
-/**
- * Authentication middleware — validates the session via Better Auth.
- * Sets req.userId / req.userRole to null for unauthenticated requests.
- * Routes registered after this point can be either public or protected.
- */
+// ── Authentication middleware ─────────────────────────────────────────────
+// Validates the session via Better Auth. Sets req.userId / req.userRole to
+// null for unauthenticated requests. Routes registered after this point can
+// be either public or protected.
 app.use(authMiddleware);
 
 // Protected auth routes — change-password for logged-in users.
@@ -462,8 +72,10 @@ app.use("/api/v1/applicants", applicantRoutes);
 app.use("/api/v1/applicants", applicationDraftRoutes);
 app.use("/api/v1/events", eventRoutes);
 
+// ── Base & health routes ──────────────────────────────────────────────────
+
 /**
- * Base route
+ * Base route — API summary for discoverability.
  */
 app.get("/api", (_req, res) => {
   res.json({
@@ -487,11 +99,8 @@ app.get("/api", (_req, res) => {
 });
 
 /**
- * API Routes
- * See /docs/api/ for detailed endpoint documentation
+ * Health check — verifies the database connection.
  */
-// All CRUD API routes have been removed per request.
-
 app.get("/api/health", async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -502,14 +111,15 @@ app.get("/api/health", async (_req, res) => {
   }
 });
 
+// ── Error handling ─────────────────────────────────────────────────────────
 
 /**
- * Sentry error handler — captures unhandled errors and sends reports
+ * Sentry error handler — captures unhandled errors and sends reports.
  */
 Sentry.setupExpressErrorHandler(app);
 
 /**
- * 404 handler for undefined routes
+ * 404 handler for undefined routes.
  */
 app.use((_req, res) => {
   res.status(404).json({
