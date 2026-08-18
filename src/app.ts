@@ -1,8 +1,14 @@
 import express from "express";
 import cors from "cors";
-import rateLimit from "express-rate-limit";
 import { corsOptions } from "./config/cors";
-import { z } from "zod";
+import {
+  signUpLimiter,
+  signInLimiter,
+  studentSignInLimiter,
+  adminSignInLimiter,
+  resendSetupLinkLimiter,
+} from "./config/rateLimit";
+import { signUpSchema, signInSchema } from "./schemas/auth.schema";
 import { env } from "./config/env";
 import { auth } from "./config/auth";
 import { prisma } from "./config/database";
@@ -37,45 +43,8 @@ if (env.NODE_ENV === "development") {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Rate limiters for public POST endpoints
-const signUpLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 5,
-  message: { success: false, message: "Too many sign-up attempts. Please try again later." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const signInLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
-  message: { success: false, message: "Too many sign-in attempts. Please try again later." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 app.use("/api/auth/sign-up/email", signUpLimiter);
 app.use("/api/auth/sign-in/email", signInLimiter);
-
-const signUpSchema = z.object({
-  email: z.string({ message: "Email is required" }).email({ message: "Invalid email format" }),
-  password: z
-    .string({ message: "Password is required" })
-    .min(8, { message: "Password must be at least 8 characters" }),
-  firstName: z.string({ message: "First name is required" }).min(1, "First name cannot be empty"),
-  lastName: z.string({ message: "Last name is required" }).min(1, "Last name cannot be empty"),
-  middleInitial: z
-    .string({ message: "Middle initial must be a single letter" })
-    .regex(/^[A-Za-z]\.?$/, "Middle initial must be a single letter, optionally followed by a dot")
-    .optional(),
-  studentId: z.string({ message: "Student ID is required" }),
-  setupToken: z.string({ message: "Setup token is required" }).min(1, "Setup token is required"),
-});
-
-const signInSchema = z.object({
-  email: z.string({ message: "Email is required" }).email({ message: "Invalid email format" }),
-  password: z.string({ message: "Password is required" }),
-});
 
 // Better Auth handler — manages sign-up, sign-in, OAuth, sessions
 // auth.handler is a Web API (Request) => Response function.
@@ -280,37 +249,13 @@ app.use("/api/auth", async (req, res, next) => {
 // Public routes (no auth required)
 app.use("/api/v1/ocr", ocrRoutes);
 
-const resendLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 3,
-  message: { success: false, message: "Too many requests. Please try again later." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-app.post("/api/v1/applicants/resend-setup-link", resendLimiter, resendSetupLink);
+app.post("/api/v1/applicants/resend-setup-link", resendSetupLinkLimiter, resendSetupLink);
 
 // ── Portal-Specific Sign-In Endpoints ─────────────────────────────────────
 // Each portal has a dedicated sign-in endpoint that enforces role boundaries:
 //   Student Portal → APPLICANT / MEMBER only
 //   Admin Portal   → ADMIN_HR / ADMIN_LOGISTICS only
 // The generic /api/auth/sign-in/email is disabled to prevent ambiguous access.
-
-const studentSignInLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
-  message: { success: false, message: "Too many sign-in attempts. Please try again later." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const adminSignInLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
-  message: { success: false, message: "Too many sign-in attempts. Please try again later." },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 app.post("/api/v1/auth/student/sign-in", studentSignInLimiter, async (req, res) => {
   const result = signInSchema.safeParse(req.body);
