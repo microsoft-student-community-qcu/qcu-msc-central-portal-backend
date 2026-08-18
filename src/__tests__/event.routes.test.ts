@@ -112,6 +112,8 @@ describe("POST /api/v1/events/:eventId/register (public + member)", () => {
   });
 
   it("registers a guest with valid OCR session", async () => {
+    // mockEventRecord is QCU_STUDENTS_ONLY, so OCR is required.
+
     const session = ocrStore.createSession({
       studentId: "20-0001",
       lastName: "Doe",
@@ -132,10 +134,13 @@ describe("POST /api/v1/events/:eventId/register (public + member)", () => {
         lastName: "Doe",
         firstName: "John",
         email: "john.doe@example.com",
+        course: "BSCS",
+        yearLevel: "3rd Year",
         ocrSessionId: session.ocrSessionId,
       });
     expect(res.status).toBe(201);
     expect(res.body.data.status).toBe("approved");
+
   });
 
   it("returns 403 for MEMBERS_ONLY event when guest", async () => {
@@ -177,7 +182,73 @@ describe("POST /api/v1/events/:eventId/register (public + member)", () => {
     expect(res.status).toBe(201);
   });
 
+  it("registers a guest on a PUBLIC event without any OCR session", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce({
+      ...mockEventRecord,
+      type: "PUBLIC",
+    });
+    (prisma.registration.count as any).mockResolvedValueOnce(50);
+    (prisma.registration.create as any).mockResolvedValueOnce(mockRegistrationRecord);
+    const res = await request(app)
+      .post("/api/v1/events/event-1/register")
+      .send({
+        lastName: "Doe",
+        firstName: "John",
+        email: "john.doe@example.com",
+      });
+    expect(res.status).toBe(201);
+  });
+
+  it("returns 400 on a QCU_STUDENTS_ONLY event when the guest omits ocrSessionId", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
+    (prisma.registration.count as any).mockResolvedValueOnce(50);
+    const res = await request(app)
+      .post("/api/v1/events/event-1/register")
+      .send({
+        lastName: "Doe",
+        firstName: "John",
+        email: "john.doe@example.com",
+        course: "BSCS",
+        yearLevel: "3rd Year",
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.errors.ocrSessionId).toBeDefined();
+  });
+
+  it("returns 403 when registration has been manually closed", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce({
+      ...mockEventRecord,
+      type: "PUBLIC",
+      isRegistrationOpen: false,
+    });
+    const res = await request(app)
+      .post("/api/v1/events/event-1/register")
+      .send({
+        lastName: "Doe",
+        firstName: "John",
+        email: "john.doe@example.com",
+      });
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 403 when the registration deadline has passed", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce({
+      ...mockEventRecord,
+      type: "PUBLIC",
+      registrationDeadline: new Date("2025-01-01"),
+    });
+    const res = await request(app)
+      .post("/api/v1/events/event-1/register")
+      .send({
+        lastName: "Doe",
+        firstName: "John",
+        email: "john.doe@example.com",
+      });
+    expect(res.status).toBe(403);
+  });
+
   it("returns 409 when event is at full capacity", async () => {
+
     setupPublic();
     (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
     (prisma.registration.count as any).mockResolvedValueOnce(100);
@@ -199,19 +270,36 @@ describe("POST /api/v1/events (ADMIN_LOGISTICS)", () => {
     setupAdminLogistics();
   });
 
-  it("creates an event", async () => {
+  it("creates an event with the V2 fields", async () => {
     (prisma.event.create as any).mockResolvedValueOnce(mockEventRecord);
     const res = await request(app)
       .post("/api/v1/events")
       .send({
         title: "Test Event",
         date: "2027-01-01T00:00:00.000Z",
-        priorityStartDate: "2026-01-01T00:00:00.000Z",
-        generalStartDate: "2026-06-01T00:00:00.000Z",
+        venue: "QCU San Bartolome Gymnasium",
+        registrationDeadline: "2026-12-25T00:00:00.000Z",
+        type: "QCU_STUDENTS_ONLY",
+        requiresQrTicket: "true",
         maxCapacity: 100,
       });
     expect(res.status).toBe(201);
   });
+
+  it("returns 400 when the deadline is after the event date", async () => {
+    const res = await request(app)
+      .post("/api/v1/events")
+      .send({
+        title: "Test Event",
+        date: "2027-01-01T00:00:00.000Z",
+        venue: "QCU San Bartolome Gymnasium",
+        registrationDeadline: "2027-02-01T00:00:00.000Z",
+        maxCapacity: 100,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.errors.registrationDeadline).toBeDefined();
+  });
+
 
   it("returns 400 for missing required fields", async () => {
     const res = await request(app)
@@ -235,7 +323,61 @@ describe("POST /api/v1/events (ADMIN_LOGISTICS)", () => {
   });
 });
 
+describe("PATCH /api/v1/events/:eventId/registration-toggle (ADMIN_LOGISTICS)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setupAdminLogistics();
+  });
+
+  it("closes registration", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
+    (prisma.event.update as any).mockResolvedValueOnce({
+      ...mockEventRecord,
+      isRegistrationOpen: false,
+    });
+    const res = await request(app)
+      .patch("/api/v1/events/event-1/registration-toggle")
+      .send({ isRegistrationOpen: false });
+    expect(res.status).toBe(200);
+    expect(res.body.data.isRegistrationOpen).toBe(false);
+  });
+
+  it("reopens registration", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
+    (prisma.event.update as any).mockResolvedValueOnce(mockEventRecord);
+    const res = await request(app)
+      .patch("/api/v1/events/event-1/registration-toggle")
+      .send({ isRegistrationOpen: true });
+    expect(res.status).toBe(200);
+    expect(res.body.data.isRegistrationOpen).toBe(true);
+  });
+
+  it("returns 400 when isRegistrationOpen is missing", async () => {
+    const res = await request(app)
+      .patch("/api/v1/events/event-1/registration-toggle")
+      .send({});
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 when event not found", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(null);
+    const res = await request(app)
+      .patch("/api/v1/events/nonexistent/registration-toggle")
+      .send({ isRegistrationOpen: false });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 403 when not ADMIN_LOGISTICS", async () => {
+    setupPublic();
+    const res = await request(app)
+      .patch("/api/v1/events/event-1/registration-toggle")
+      .send({ isRegistrationOpen: false });
+    expect(res.status).toBe(403);
+  });
+});
+
 describe("GET /api/v1/events/:eventId/registrations (ADMIN_LOGISTICS)", () => {
+
   beforeEach(() => {
     vi.restoreAllMocks();
     setupAdminLogistics();

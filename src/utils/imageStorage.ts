@@ -27,6 +27,8 @@ function getBlobServiceClient(): BlobServiceClient {
 
 const OCR_CONTAINER = "ocr";
 const DOCUMENTS_CONTAINER = "documents";
+const EVENT_BANNERS_CONTAINER = "event-banners";
+
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
 // ── Local disk fallback: DEVELOPMENT ONLY ────────────────────────────────
@@ -105,7 +107,39 @@ export function getImagePath(filename: string): string {
   return `https://${env.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${OCR_CONTAINER}/${filename}`;
 }
 
+// ── Event Banner Storage (V2 Flow 1) ─────────────────────────────────────
+
+/**
+ * Uploads an event banner/poster and returns its public Blob URL.
+ * Callers must validate the buffer with validateImageMimeType first.
+ */
+export async function saveEventBanner(
+  buffer: Buffer,
+  filename: string,
+  mimetype?: string
+): Promise<string> {
+  try {
+    const client = getBlobServiceClient();
+    const containerClient = client.getContainerClient(EVENT_BANNERS_CONTAINER);
+    await containerClient.createIfNotExists();
+    const blockBlobClient = containerClient.getBlockBlobClient(filename);
+    await blockBlobClient.upload(buffer, buffer.length, {
+      blobHTTPHeaders: mimetype ? { blobContentType: mimetype } : undefined,
+    });
+    return blockBlobClient.url;
+  } catch (azureErr) {
+    if (!isLocalFallbackAllowed()) {
+      handleStorageError(azureErr, "event banner upload");
+    }
+    console.warn(
+      `[STORAGE] Azure Blob upload failed (${(azureErr as Error).message}), falling back to local storage.`
+    );
+    return await saveLocal(EVENT_BANNERS_CONTAINER, filename, buffer);
+  }
+}
+
 // ── Document Storage (CoR, CV, etc.) ─────────────────────────────────────
+
 
 export async function saveDocument(buffer: Buffer, filename: string, mimetype?: string): Promise<string> {
   try {

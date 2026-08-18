@@ -25,7 +25,10 @@ model Registration {
   lastName            String             @default("")
   firstName           String             @default("")
   middleInitial       String?
+  course              String?            // Academic program, e.g. BSCS — V2 Flow 2
+  yearLevel           String?            // Year level, e.g. "3rd Year" — V2 Flow 2
   status              RegistrationStatus @default(APPROVED)
+
   manual_registration Boolean            @default(false) // Flagged true when OCR fails -> manual upload
   qrPayload           String             @unique          // Unique UUID for QR code verification
   hasAttended         Boolean            @default(false)
@@ -49,6 +52,8 @@ model Registration {
 | `lastName` | String | Yes | Attendee's last name |
 | `firstName` | String | Yes | Attendee's first name |
 | `middleInitial` | String? | No | Single letter, optionally followed by a dot |
+| `course` | String? | Conditional | Academic program (e.g. `BSCS`). Required for guests on `QCU_STUDENTS_ONLY` events, optional on `PUBLIC` events, null for members |
+| `yearLevel` | String? | Conditional | Year level (e.g. `3rd Year`). Same requirement rules as `course` |
 | `status` | RegistrationStatus | Yes | `APPROVED`, `PENDING_REVIEW`, `REJECTED`, `CANCELLED` (defaults to `APPROVED`) |
 | `manual_registration` | Boolean | Yes | `true` when OCR fails and manual review is required (never client-settable) |
 | `qrPayload` | String | Yes, unique | UUID used as the QR code payload for event check-in |
@@ -77,6 +82,9 @@ model Registration {
 
 ## Notes
 
-- Guest registrations follow a two-step flow: `POST /api/v1/ocr/verify` then `POST /api/v1/events/:eventId/register`
+- Guest registrations on `QCU_STUDENTS_ONLY` events follow a two-step flow: `POST /api/v1/ocr/verify` then `POST /api/v1/events/:eventId/register`. `PUBLIC` events skip OCR entirely and accept a self-reported `studentId`, `course`, and `yearLevel` (all optional)
+- `MEMBERS_ONLY` events reject any request that is not from an authenticated `MEMBER`
 - Authenticated members bypass OCR; their profile data is used automatically
+- Registrations are rejected while the parent event has `isRegistrationOpen: false` or its `registrationDeadline` has passed; already-created registrations are unaffected by the toggle
+
 - `manual_registration` is derived server-side from the OCR session's `manualRequired` flag — never client-settable

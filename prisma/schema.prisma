@@ -59,10 +59,14 @@ enum Campus {
 }
 
 // Event visibility and access control type.
+// QCU_STUDENTS_ONLY (V2 Flow 2) sits between PUBLIC and MEMBERS_ONLY:
+// members bypass verification, non-members must pass Zonal OCR.
 enum EventType {
   PUBLIC
+  QCU_STUDENTS_ONLY
   MEMBERS_ONLY
 }
+
 
 // Registration lifecycle status for event registrations.
 // Supports Path A (auto-approve) and Path B (manual review) flows per PRD-V1.
@@ -180,19 +184,27 @@ model Applicant {
 }
 
 model Event {
-  id                String         @id @default(uuid())
-  title             String
-  description       String?
-  date              DateTime
-  // Tiered registration windows — PRD-V1 Event Registration & Ticketing module.
-  priorityStartDate DateTime       // Members can register starting here
-  generalStartDate  DateTime       // Everyone can register starting here
-  type              EventType      @default(PUBLIC)
-  maxCapacity       Int
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  registrations     Registration[]
+  id                  String         @id @default(uuid())
+  title               String
+  description         String?
+  date                DateTime
+  venue               String?        // Physical location — V2 Flow 1
+  // DEPRECATED (V2): the tiered priority/general window is superseded by
+  // registrationDeadline + isRegistrationOpen. Kept nullable for existing
+  // V1 rows and no longer enforced by the register endpoint.
+  priorityStartDate   DateTime?      // Deprecated — members-first window start
+  generalStartDate    DateTime?      // Deprecated — general admission start
+  registrationDeadline DateTime?     // Cutoff after which no new registrations are accepted
+  bannerImageUrl      String?        // Azure Blob URL of the event banner/poster
+  requiresQrTicket    Boolean        @default(true)  // Whether attendees present a QR at the door
+  isRegistrationOpen  Boolean        @default(true)  // Manual open/close toggle — V2 Flow 6
+  type                EventType      @default(PUBLIC)
+  maxCapacity         Int
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  registrations       Registration[]
 }
+
 
 model Registration {
   id                 String             @id @default(uuid())
@@ -205,6 +217,9 @@ model Registration {
   lastName           String           @default("")
   firstName          String           @default("")
   middleInitial      String?
+  course             String?            // Academic program, e.g. BSCS — V2 Flow 2
+  yearLevel          String?            // Year level, e.g. "3rd Year" — V2 Flow 2
+
   status             RegistrationStatus @default(APPROVED)
   manual_registration Boolean           @default(false) // Flagged true when OCR fails → manual upload
   qrPayload          String             @unique // Unique UUID for QR code verification
