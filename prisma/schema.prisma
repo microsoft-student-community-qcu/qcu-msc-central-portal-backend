@@ -260,11 +260,11 @@ model ApplicationDraft {
   certificateOfRegistration   String?
   curriculumVitae             String?
 
-  interestsSkillsHobbies      String?
-  organizationHistory         String?
+  interestsSkillsHobbies      String?         @db.Text // Optional — free-form text matching Applicant's @db.Text fields
+  organizationHistory         String?         @db.Text // Optional — free-form text matching Applicant's @db.Text fields
   portfolio                   String?
   githubOrProjectLinks        String?
-  previousWorksAchievements   String?
+  previousWorksAchievements   String?         @db.Text // Optional — free-form text matching Applicant's @db.Text fields
 
   manual_application          Boolean?
   lastResumeEmailSentAt       DateTime?
