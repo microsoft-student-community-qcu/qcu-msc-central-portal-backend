@@ -312,6 +312,9 @@ curl -X POST http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-4466554
 **Description:**  
 Retrieves all registrations for a specific event, including attendance and capacity summary. Only ADMIN_LOGISTICS can view this roster.
 
+**Ordering guarantee:** registrations are always returned oldest-first (`createdAt` ascending) so admins process them in first-come, first-serve order.
+
+
 **Method:** `GET`  
 **Path:** `/api/v1/events/:eventId/registrations`
 

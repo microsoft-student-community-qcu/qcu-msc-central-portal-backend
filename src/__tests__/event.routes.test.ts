@@ -191,9 +191,41 @@ describe("POST /api/v1/events/:eventId/register (public + member)", () => {
       });
     expect(res.status).toBe(409);
   });
+
+  it("returns 409 for a second manual registration with the same email", async () => {
+    setupPublic();
+    // OCR failed → manualRequired, studentId null → email-based duplicate check
+    const session = ocrStore.createSession({
+      studentId: null,
+      lastName: null,
+      firstName: null,
+      middleInitial: null,
+      manualRequired: true,
+      attemptsRemaining: 0,
+      imagePath: "/uploads/ocr/test.jpg",
+      digitCorrectedInName: false,
+    });
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
+    (prisma.registration.count as any).mockResolvedValueOnce(50);
+    (prisma.registration.findFirst as any).mockResolvedValueOnce(
+      mockRegistrationRecord
+    );
+    const res = await request(app)
+      .post("/api/v1/events/event-1/register")
+      .send({
+        lastName: "Doe",
+        firstName: "John",
+        email: "john.doe@example.com",
+        ocrSessionId: session.ocrSessionId,
+      });
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/already registered/i);
+
+  });
 });
 
 describe("POST /api/v1/events (ADMIN_LOGISTICS)", () => {
+
   beforeEach(() => {
     vi.restoreAllMocks();
     setupAdminLogistics();
@@ -249,6 +281,21 @@ describe("GET /api/v1/events/:eventId/registrations (ADMIN_LOGISTICS)", () => {
     expect(res.status).toBe(200);
     expect(res.body.data.registrations).toHaveLength(1);
   });
+
+  it("orders registrations oldest-first (FCFS)", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
+    (prisma.registration.count as any).mockResolvedValueOnce(2);
+    (prisma.registration.findMany as any).mockResolvedValueOnce([
+      { ...mockRegistrationRecord, id: "reg-old" },
+      { ...mockRegistrationRecord, id: "reg-new" },
+    ]);
+    const res = await request(app).get("/api/v1/events/event-1/registrations");
+    expect(res.status).toBe(200);
+    expect((prisma.registration.findMany as any).mock.calls[0][0].orderBy).toEqual({
+      createdAt: "asc",
+    });
+  });
+
 
   it("returns 404 when event not found", async () => {
     (prisma.event.findUnique as any).mockResolvedValueOnce(null);

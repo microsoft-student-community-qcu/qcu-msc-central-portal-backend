@@ -184,7 +184,23 @@ export async function registerForEvent(
           });
           return;
         }
+      } else {
+        // Manual (OCR-failed) path — studentId is null, so the
+        // @@unique([eventId, studentId]) constraint cannot apply (MySQL allows
+        // repeated NULLs). Fall back to an application-level check on email so
+        // the same person cannot flood the review queue for one event.
+        const existingManual = await prisma.registration.findFirst({
+          where: { eventId, email },
+        });
+        if (existingManual) {
+          res.status(409).json({
+            success: false,
+            message: "This email is already registered for this event.",
+          });
+          return;
+        }
       }
+
     }
 
     // ── 6. Create registration ───────────────────────────────────────────
@@ -317,7 +333,12 @@ export async function createEvent(
  * Query params:
  *   - status (optional): APPROVED | PENDING_REVIEW | REJECTED | CANCELLED
  *   - hasAttended (optional): true | false
+ *
+ * Ordering guarantee: registrations are always returned oldest-first
+ * (createdAt ascending) so officers review/approve in first-come,
+ * first-serve order.
  */
+
 export async function getEventRegistrations(
   req: Request,
   res: Response
@@ -342,7 +363,10 @@ export async function getEventRegistrations(
       prisma.registration.count({ where }),
       prisma.registration.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        // FCFS: earliest registration first — createdAt is the documented
+        // priority signal for officer approval order (V2 Flow 4).
+        orderBy: { createdAt: "asc" },
+
       }),
     ]);
 
