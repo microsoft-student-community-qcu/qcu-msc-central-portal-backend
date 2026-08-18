@@ -39,9 +39,6 @@ app.use(cors({
     const allowed = [
       env.FRONTEND_URL,
       env.ADMIN_FRONTEND_URL,
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "http://localhost:8081",
     ];
     if (
       allowed.includes(origin) ||
@@ -540,7 +537,7 @@ app.use("/api/v1/events", eventRoutes);
 /**
  * Base route
  */
-app.get("/", (_req, res) => {
+app.get("/api", (_req, res) => {
   res.json({
     message: "QCU MSC Central Portal API is running.",
     version: "1.2.0",
@@ -567,7 +564,7 @@ app.get("/", (_req, res) => {
  */
 // All CRUD API routes have been removed per request.
 
-app.get("/health", async (_req, res) => {
+app.get("/api/health", async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
     res.json({ status: "healthy", database: "connected" });
