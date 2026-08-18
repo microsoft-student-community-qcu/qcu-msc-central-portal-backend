@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import { corsOptions } from "./config/cors";
 import { z } from "zod";
 import { env } from "./config/env";
 import { auth } from "./config/auth";
@@ -33,25 +34,7 @@ if (env.NODE_ENV === "development") {
 }
 
 // Middleware
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    const allowed = [
-      env.FRONTEND_URL,
-      env.ADMIN_FRONTEND_URL,
-    ];
-    if (
-      allowed.includes(origin) ||
-      /\.z23\.web\.core\.windows\.net$/.test(origin) ||
-      /\.azurestaticapps\.net$/.test(origin) ||
-      /^https:\/\/([a-z0-9-]+\.)?msc-qcu\.tech$/.test(origin)
-    ) {
-      return callback(null, true);
-    }
-    return callback(null, false);
-  },
-  credentials: true,
-}));
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Rate limiters for public POST endpoints
