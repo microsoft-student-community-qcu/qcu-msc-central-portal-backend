@@ -1,5 +1,45 @@
 # Backend Modification Changelog
 
+## 0. Event Cancellation (Soft Delete) & QR Ticket Re-send (2026-08-18)
+
+Implements V2 Flow 8 (cancel a whole event) and the V2 Flow 7 edge case (attendee lost their QR pass email).
+
+### **A. Database Schema (`prisma/schema.prisma`)**
+- Added three fields to the `Event` model: `isCancelled Boolean @default(false)`, `cancellationReason String? @db.Text`, and `cancelledAt DateTime?`.
+- Added `@@index([isCancelled, date])` — the public feed filters on `isCancelled` and orders by `date` on every request, so the composite index keeps that hot query cheap.
+- Migration: `prisma/migrations/20260818171500_add_event_cancellation_soft_delete`. Existing rows backfill to `isCancelled = false`, so all current events stay visible.
+
+### **B. Validation (`src/schemas/event.schema.ts`)**
+- Added `cancelEventSchema` requiring `reason` at 10-1000 characters with custom human-readable messages. The reason is embedded verbatim in the notification email, so blank or throwaway values are rejected with `400` rather than silently mailing an empty explanation.
+
+### **C. Email Senders (`src/services/email.service.ts`)**
+- `sendEventCancelledEmail(to, eventTitle, reason)` — cancellation notice including the admin's reason. Follows the house convention of catching its own errors, since one bad address must not abort the fan-out.
+- `resendRegistrationTicketEmail(to, eventTitle, qrPayload)` — re-sends an existing QR pass. Deliberately **propagates** errors (like `sendDraftResumeLinkEmail`) so the endpoint can answer `502`; an admin acting on one specific attendee needs to know whether delivery succeeded.
+
+### **D. Cancellation Controller (`src/controllers/eventCancellationController.ts`)**
+- New `cancelEvent` handler: validates the reason, `404`s on unknown events, `409`s on already-cancelled ones (idempotent no-op), then flags the `Event` row only — **no `Event` or `Registration` row is ever deleted**, preserving the roster for audit and reporting.
+- Notifies every `APPROVED` and `PENDING_REVIEW` registrant via `Promise.allSettled`, so a single failed address cannot block the rest of the batch. `REJECTED` / `CANCELLED` registrants are skipped — they were never (or are no longer) attending.
+- Responds with `notifiedRegistrants` so the admin UI can confirm the fan-out size.
+
+### **E. Ticket Re-send Controller (`src/controllers/eventTicketController.ts`)**
+- New `resendRegistrationTicket` handler: re-sends the **stored** `qrPayload` as-is and never regenerates it, so any copy the attendee still holds remains valid and check-in behaviour is unchanged.
+- Guards: `404` when the registration does not belong to the event in the path (prevents cross-event ID probing), `400` for non-`APPROVED` registrations, `409` when the event is cancelled, `502` on email provider failure.
+
+### **F. Cancelled-Event Exclusion (`eventsFeedController.ts`, `eventController.ts`)**
+- Public feed (`GET /api/v1/events`) now filters `isCancelled: false`.
+- Detail endpoint returns `404 "This event has been cancelled."` — deliberately not `200` with a flag, so stale links cannot render a dead event as live.
+- Registration, QR check-in, manual check-in, and ticket re-send all reject cancelled events with `409`; the admin roster endpoint still serves the record and echoes the cancellation fields.
+
+### **G. Routes (`src/routes/event.routes.ts`)**
+- `PATCH /api/v1/events/:eventId/cancel` and `POST /api/v1/events/:eventId/registrations/:registrationId/resend-ticket`, both behind `requireAdminLogistics`.
+- **TODO:** V2 Flow 8 restricts cancellation to `ADMIN_LOGISTICS_HEAD` / `SUPERADMIN`. Neither role exists in the `UserRole` enum and `authMiddleware.ts` has no matching guard, so the tighter guard is deferred to the auth/RBAC module and tracked separately.
+
+### **H. Tests (`src/__tests__/event.routes.test.ts`)**
+- 14 new cases covering the reason requirement, soft-delete assertions (`update` called, no `delete`), the `APPROVED` + `PENDING_REVIEW` email fan-out, exclusion from the public feed and detail endpoint, and every re-send guard.
+- New blocks call `vi.clearAllMocks()` alongside the suite's existing `vi.restoreAllMocks()`: the prisma/email mocks are defined in `setup.ts`, so `restoreAllMocks` leaves their call history intact and the `not.toHaveBeenCalled()` assertions would otherwise see calls leaked from earlier tests.
+
+---
+
 ## 3. Security Fixes
 
 ### **VUL-016 — Mass Assignment Privilege Escalation on User Sign-Up** (2026-07-30)

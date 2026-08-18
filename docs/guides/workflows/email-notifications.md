@@ -19,6 +19,8 @@ Selection happens once at module init in `src/services/email.service.ts`. Both p
 
 > **Exception:** `sendDraftResumeLinkEmail` deliberately **propagates errors** to the caller. The resume link is the only way forward for an applicant with an existing draft, so a failed send must surface (the OCR endpoint responds `502` and the cooldown is not recorded, letting the user retry by rescanning).
 
+> **Exception:** `resendRegistrationTicketEmail` also **propagates errors**. An admin re-sending a lost QR pass for one specific attendee needs to know whether it actually went out, so the endpoint responds `502` on failure and the admin can retry.
+
 ## Environment Variables
 
 | Variable | Required | Default | Description |
@@ -54,6 +56,8 @@ All emails are sent from `src/services/email.service.ts`. Each function is a nam
 | Guest event registration (manual review) | `sendRegistrationPendingReviewEmail` | Registration Pending Review — {event title} | Guest email |
 | Registration approved (by admin) | `sendRegistrationApprovedEmail` | Registration Approved — {event title} | Registrant email |
 | Registration rejected (by admin) | `sendRegistrationRejectedEmail` | Registration Rejected — {event title} | Registrant email |
+| Event cancelled by admin (V2 Flow 8) | `sendEventCancelledEmail` | Event Cancelled — {event title} | Every APPROVED + PENDING_REVIEW registrant |
+| QR pass re-sent by admin (attendee lost the email) | `resendRegistrationTicketEmail` | Your QR Pass — {event title} | Registrant email |
 
 The `sendSetupLinkEmail` function includes a password-setup URL built from `FRONTEND_URL` and a signed JWT token.
 All registration-related emails include the event title in the subject line; confirmed/approved emails also embed a QR payload in the email body.
@@ -71,3 +75,4 @@ All registration-related emails include the event title in the subject line; con
 | 2026-08-03 | Introduced shared branded layout `renderBrandedEmail` (`src/utils/emailTemplate.ts`) and rewired all senders to use it; added the org banner (600x150) and standard footer to every email |
 | 2026-08-03 | Restyled template to a SaaS-like layout: preheader, centered bordered card, and footer with branded monogram chips (solid-color circles, no image files) for FB/IG/LinkedIn/TikTok, `mailto:` contact (`msc-qcu@outlook.com`), and opt-out disclosure |
 | 2026-08-07 | Added `sendPasswordResetEmail` (forgot-password reset link, portal-specific target URL) and `PASSWORD_RESET_TOKEN_EXPIRY_MINUTES` env var |
+| 2026-08-18 | Added `sendEventCancelledEmail` (event cancellation notice including the admin's reason, fanned out to all APPROVED + PENDING_REVIEW registrants via `Promise.allSettled`) and `resendRegistrationTicketEmail` (admin re-send of an existing QR pass, error-propagating → `502`) |

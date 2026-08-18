@@ -180,18 +180,29 @@ model Applicant {
 }
 
 model Event {
-  id                String         @id @default(uuid())
-  title             String
-  description       String?
-  date              DateTime
+  id                 String         @id @default(uuid())
+  title              String
+  description        String?
+  date               DateTime
   // Tiered registration windows — PRD-V1 Event Registration & Ticketing module.
-  priorityStartDate DateTime       // Members can register starting here
-  generalStartDate  DateTime       // Everyone can register starting here
-  type              EventType      @default(PUBLIC)
-  maxCapacity       Int
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  registrations     Registration[]
+  priorityStartDate  DateTime       // Members can register starting here
+  generalStartDate   DateTime       // Everyone can register starting here
+  type               EventType      @default(PUBLIC)
+  maxCapacity        Int
+  // Soft-delete cancellation — V2 Flow 8. Cancelling an entire event never
+  // destroys rows: the event and its full attendee roster stay queryable for
+  // audit/reporting, and the public feed simply filters isCancelled = true out.
+  // Distinct from Registration.status = CANCELLED (single attendee opting out).
+  isCancelled        Boolean        @default(false)
+  cancellationReason String?        @db.Text // Reason shown to registrants in the cancellation email
+  cancelledAt        DateTime?      // Timestamp of the cancellation action
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  registrations      Registration[]
+
+  // The public feed filters on isCancelled and orders by date on every request,
+  // so index the pair to keep that hot query cheap.
+  @@index([isCancelled, date])
 }
 
 model Registration {

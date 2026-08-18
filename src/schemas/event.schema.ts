@@ -86,8 +86,21 @@ export const reviewRegistrationSchema = z.object({
   }),
 });
 
+// Schema for cancelling an entire event (V2 Flow 8).
+// The reason is mandatory: it is embedded verbatim in the cancellation email
+// sent to every PENDING_REVIEW and APPROVED registrant, so an empty or
+// whitespace-only value is rejected rather than silently emailing a blank note.
+export const cancelEventSchema = z.object({
+  reason: z
+    .string({ message: "A cancellation reason is required" })
+    .trim()
+    .min(10, "Please provide a cancellation reason of at least 10 characters")
+    .max(1000, "Cancellation reason must be less than 1000 characters"),
+});
+
 export type CreateEventSchema = z.infer<typeof createEventSchema>;
 export type UpdateEventSchema = z.infer<typeof updateEventSchema>;
 export type ReviewRegistrationSchema = z.infer<typeof reviewRegistrationSchema>;
+export type CancelEventSchema = z.infer<typeof cancelEventSchema>;
 export type EventTypeEnum = z.infer<typeof eventTypeEnum>;
 export type RegistrationStatusEnum = z.infer<typeof registrationStatusEnum>;

@@ -4,11 +4,16 @@ import { prisma } from "../config/database";
 import { ocrStore } from "../config/ocrStore";
 import {
   mockEventRecord,
+  mockCancelledEventRecord,
   mockRegistrationRecord,
   authUnauthenticated,
   authAdminLogistics,
   authMember,
 } from "./helpers";
+import {
+  sendEventCancelledEmail,
+  resendRegistrationTicketEmail,
+} from "../services/email.service";
 
 // ── Auth Mock Setup ──────────────────────────────────────────────────────
 const {
@@ -350,5 +355,203 @@ describe("PATCH /api/v1/events/:eventId/registrations/:registrationId/checkin (A
       .patch("/api/v1/events/event-1/registrations/nonexistent/checkin")
       .send();
     expect(res.status).toBe(404);
+  });
+});
+
+// ── Event Cancellation (V2 Flow 8) ────────────────────────────────────────
+
+describe("PATCH /api/v1/events/:eventId/cancel (ADMIN_LOGISTICS)", () => {
+  const reason = "Venue became unavailable due to a scheduling conflict.";
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    // clearAllMocks in addition to restoreAllMocks: the prisma/email mocks are
+    // created in setup.ts, so restoreAllMocks leaves their call history intact
+    // and the `not.toHaveBeenCalled()` assertions below would see earlier calls.
+    vi.clearAllMocks();
+    setupAdminLogistics();
+  });
+
+  it("soft-deletes the event and notifies pending + approved registrants", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
+    (prisma.event.update as any).mockResolvedValueOnce({
+      ...mockEventRecord,
+      isCancelled: true,
+      cancellationReason: reason,
+      cancelledAt: new Date(),
+    });
+    (prisma.registration.findMany as any).mockResolvedValueOnce([
+      { email: "approved@example.com" },
+      { email: "pending@example.com" },
+    ]);
+
+    const res = await request(app)
+      .patch("/api/v1/events/event-1/cancel")
+      .send({ reason });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.isCancelled).toBe(true);
+    expect(res.body.data.cancellationReason).toBe(reason);
+    expect(res.body.data.notifiedRegistrants).toBe(2);
+
+    // Soft delete only — the row is updated, never deleted.
+    expect(prisma.event.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "event-1" },
+        data: expect.objectContaining({ isCancelled: true, cancellationReason: reason }),
+      })
+    );
+
+    // Only PENDING_REVIEW + APPROVED registrants are queried for emails.
+    expect(prisma.registration.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { eventId: "event-1", status: { in: ["APPROVED", "PENDING_REVIEW"] } },
+      })
+    );
+
+    expect(sendEventCancelledEmail).toHaveBeenCalledTimes(2);
+    expect(sendEventCancelledEmail).toHaveBeenCalledWith(
+      "approved@example.com",
+      mockEventRecord.title,
+      reason
+    );
+  });
+
+  it("returns 400 when no reason is supplied", async () => {
+    const res = await request(app).patch("/api/v1/events/event-1/cancel").send({});
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe("Validation error");
+    expect(res.body.errors.reason).toBeDefined();
+    expect(prisma.event.update).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when the reason is too short", async () => {
+    const res = await request(app)
+      .patch("/api/v1/events/event-1/cancel")
+      .send({ reason: "nope" });
+    expect(res.status).toBe(400);
+    expect(prisma.event.update).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for a non-existent event", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(null);
+    const res = await request(app)
+      .patch("/api/v1/events/nonexistent/cancel")
+      .send({ reason });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 409 when the event is already cancelled", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockCancelledEventRecord);
+    const res = await request(app)
+      .patch("/api/v1/events/event-1/cancel")
+      .send({ reason });
+    expect(res.status).toBe(409);
+    expect(prisma.event.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("Cancelled events are hidden from public endpoints", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    setupPublic();
+  });
+
+  it("excludes cancelled events from the public feed query", async () => {
+    (prisma.event.findMany as any).mockResolvedValueOnce([]);
+    await request(app).get("/api/v1/events");
+    expect(prisma.event.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ isCancelled: false }),
+      })
+    );
+  });
+
+  it("returns 404 on the detail endpoint for a cancelled event", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockCancelledEventRecord);
+    const res = await request(app).get("/api/v1/events/event-1");
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe("This event has been cancelled.");
+  });
+
+  it("refuses registration for a cancelled event", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockCancelledEventRecord);
+    const res = await request(app).post("/api/v1/events/event-1/register").send({});
+    expect(res.status).toBe(409);
+    expect(prisma.registration.create).not.toHaveBeenCalled();
+  });
+});
+
+// ── QR Ticket Re-send (V2 Flow 7 edge case) ───────────────────────────────
+
+describe("POST /api/v1/events/:eventId/registrations/:registrationId/resend-ticket", () => {
+  const url = "/api/v1/events/event-1/registrations/reg-1/resend-ticket";
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    setupAdminLogistics();
+  });
+
+  it("re-sends the existing QR payload to an approved registrant", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
+    (prisma.registration.findUnique as any).mockResolvedValueOnce(mockRegistrationRecord);
+
+    const res = await request(app).post(url).send();
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.email).toBe(mockRegistrationRecord.email);
+    // The stored payload is reused, never regenerated.
+    expect(resendRegistrationTicketEmail).toHaveBeenCalledWith(
+      mockRegistrationRecord.email,
+      mockEventRecord.title,
+      mockRegistrationRecord.qrPayload
+    );
+  });
+
+  it("returns 400 for a registration that is not approved", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
+    (prisma.registration.findUnique as any).mockResolvedValueOnce({
+      ...mockRegistrationRecord,
+      status: "PENDING_REVIEW",
+    });
+
+    const res = await request(app).post(url).send();
+    expect(res.status).toBe(400);
+    expect(resendRegistrationTicketEmail).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the registration belongs to another event", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
+    (prisma.registration.findUnique as any).mockResolvedValueOnce({
+      ...mockRegistrationRecord,
+      eventId: "event-2",
+    });
+
+    const res = await request(app).post(url).send();
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 409 when the event has been cancelled", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockCancelledEventRecord);
+    const res = await request(app).post(url).send();
+    expect(res.status).toBe(409);
+    expect(resendRegistrationTicketEmail).not.toHaveBeenCalled();
+  });
+
+  it("returns 502 when the email provider fails", async () => {
+    (prisma.event.findUnique as any).mockResolvedValueOnce(mockEventRecord);
+    (prisma.registration.findUnique as any).mockResolvedValueOnce(mockRegistrationRecord);
+    (resendRegistrationTicketEmail as any).mockRejectedValueOnce(new Error("SMTP down"));
+
+    const res = await request(app).post(url).send();
+    expect(res.status).toBe(502);
+  });
+
+  it("returns 403 for non-logistics callers", async () => {
+    setupPublic();
+    const res = await request(app).post(url).send();
+    expect(res.status).toBe(403);
   });
 });

@@ -3,6 +3,8 @@
 ## Overview
 The Event Management API handles creation, management, and registration for workshops, seminars, and initiatives. Supports both public and members-only events with capacity management.
 
+Events can also be **cancelled** (see endpoint 9). Cancellation is a soft delete — the event and its full attendee roster are preserved for audit, cancelled events disappear from the public feed, and every affected registrant is emailed the reason.
+
 ---
 
 ## Endpoints
@@ -423,6 +425,154 @@ Allows logistics staff to manually mark a registration as attended by registrati
 
 ---
 
+### 9. Cancel Event
+
+**Description:**  
+Cancels an entire event. This is a **soft delete**: no `Event` or `Registration` row is ever destroyed — the event is flagged with `isCancelled`, the supplied reason and a timestamp, so the full attendee roster stays available for audit and reporting.
+
+A reason is **mandatory** because it is included verbatim in the notification email sent to every `PENDING_REVIEW` and `APPROVED` registrant. `REJECTED` and `CANCELLED` registrants are not notified.
+
+Once cancelled, the event is excluded from the public feed (endpoint 3), returns `404` on the detail endpoint (endpoint 2), and refuses new registrations, check-ins, and ticket re-sends.
+
+> **Note:** This is distinct from cancelling an individual registration (`Registration.status = CANCELLED`), which is tracked separately.
+
+**Method:** `PATCH`  
+**Path:** `/api/v1/events/:eventId/cancel`
+
+**Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
+
+> **TODO (auth/RBAC):** V2 Flow 8 specifies that cancellation should be restricted to `ADMIN_LOGISTICS_HEAD` / `SUPERADMIN`. Neither role exists in the `UserRole` enum yet and `authMiddleware.ts` has no matching guard, so this endpoint currently ships behind `requireAdminLogistics`. The guard will be tightened once those roles land (tracked in a separate auth/RBAC issue).
+
+**Request Parameters:**
+- `reason` (string, required): Why the event is being cancelled (10-1000 characters). Sent to all affected registrants.
+
+**Response Format:**
+```json
+{
+  "success": boolean,
+  "data": {
+    "eventId": string (UUID),
+    "title": string,
+    "isCancelled": true,
+    "cancellationReason": string,
+    "cancelledAt": string (ISO 8601),
+    "notifiedRegistrants": number
+  },
+  "message": string
+}
+```
+
+**Example Request:**
+```bash
+curl -X PATCH http://localhost:5000/api/v1/events/9f1c2b7a-1234-4c56-8def-0123456789ab/cancel \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -d '{
+    "reason": "The venue became unavailable due to a scheduling conflict."
+  }'
+```
+
+**Example Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "eventId": "9f1c2b7a-1234-4c56-8def-0123456789ab",
+    "title": "Python Workshop 2026",
+    "isCancelled": true,
+    "cancellationReason": "The venue became unavailable due to a scheduling conflict.",
+    "cancelledAt": "2026-07-10T08:15:00.000Z",
+    "notifiedRegistrants": 42
+  },
+  "message": "Event cancelled successfully. 42 registrant(s) notified."
+}
+```
+
+**Example Response (400 — missing reason):**
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": {
+    "reason": ["A cancellation reason is required"]
+  }
+}
+```
+
+**Status Codes:**
+- `200`: Event cancelled successfully and registrants notified
+- `400`: Missing, empty, or too-short cancellation reason
+- `401`: Unauthorized
+- `403`: Forbidden (not ADMIN_LOGISTICS)
+- `404`: Event not found
+- `409`: Event has already been cancelled
+- `500`: Internal server error
+
+---
+
+### 10. Re-send QR Ticket
+
+**Description:**  
+Re-sends an attendee's existing QR pass by email. Covers the V2 Flow 7 edge case where a registrant loses or never receives the original confirmation email.
+
+The stored `qrPayload` is re-sent **as-is** and never regenerated, so any copy of the pass the attendee may still have remains valid and check-in behaviour is unchanged.
+
+Only `APPROVED` registrations are eligible — `PENDING_REVIEW` attendees have no valid ticket yet, and `REJECTED` / `CANCELLED` ones must not receive one.
+
+**Method:** `POST`  
+**Path:** `/api/v1/events/:eventId/registrations/:registrationId/resend-ticket`
+
+**Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
+
+**Request Parameters:**  
+None (event and registration are identified by the path).
+
+**Response Format:**
+```json
+{
+  "success": boolean,
+  "data": {
+    "registrationId": string (UUID),
+    "eventId": string (UUID),
+    "email": string,
+    "resentAt": string (ISO 8601)
+  },
+  "message": string
+}
+```
+
+**Example Request:**
+```bash
+curl -X POST http://localhost:5000/api/v1/events/9f1c2b7a-1234-4c56-8def-0123456789ab/registrations/3d7e8f90-abcd-4123-9876-fedcba987654/resend-ticket \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Example Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "registrationId": "3d7e8f90-abcd-4123-9876-fedcba987654",
+    "eventId": "9f1c2b7a-1234-4c56-8def-0123456789ab",
+    "email": "juan.delacruz@example.com",
+    "resentAt": "2026-07-14T02:30:00.000Z"
+  },
+  "message": "QR pass re-sent to juan.delacruz@example.com"
+}
+```
+
+**Status Codes:**
+- `200`: Ticket re-sent successfully
+- `400`: Registration is not `APPROVED` (no valid QR pass to send)
+- `401`: Unauthorized
+- `403`: Forbidden (not ADMIN_LOGISTICS)
+- `404`: Event not found, or registration not found for the provided event
+- `409`: Event has been cancelled — tickets can no longer be sent
+- `502`: Email provider failed to deliver the message (safe to retry)
+- `500`: Internal server error
+
+---
+
 ## Error Responses
 
 All endpoints return appropriate HTTP status codes:
@@ -430,6 +580,7 @@ All endpoints return appropriate HTTP status codes:
 - `400`: Bad request (validation error)
 - `401`: Unauthorized (missing or invalid token)
 - `403`: Forbidden (insufficient permissions)
-- `404`: Not found (event/registration ID doesn't exist)
-- `409`: Conflict (already registered for event or at capacity)
+- `404`: Not found (event/registration ID doesn't exist, or event is cancelled)
+- `409`: Conflict (already registered, at capacity, or event cancelled)
+- `502`: Upstream email provider failure (ticket re-send only)
 - `500`: Internal server error
