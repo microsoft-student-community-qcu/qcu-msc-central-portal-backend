@@ -189,14 +189,19 @@ curl -X GET "http://localhost:5000/api/v1/events?type=PUBLIC&limit=20"
 ### 4. Register for Event
 
 **Description:**  
-Registers a guest (no account required) or an authenticated member for an event. Guest registrations must first call `POST /api/v1/ocr/verify` to obtain an `ocrSessionId`. Authenticated members bypass OCR and use their profile data automatically. The endpoint generates a QR payload for event check-in.
+Registers a guest (no account required) or an authenticated member for an event. Guest registrations must first call `POST /api/v1/ocr/verify` to obtain an `ocrSessionId`. Authenticated members bypass OCR and use their profile data automatically.
+
+Every registration is created with status `PENDING_REVIEW` and **no QR payload** — there is no auto-approve path. The attendee receives an acknowledgement email only. The QR ticket is minted and emailed when an ADMIN_LOGISTICS officer approves the registration via endpoint 5.
 
 ---
 
-### 5. Review Pending Manual Registration
+### 5. Review Pending Registration
 
 **Description:**  
-Allows ADMIN_LOGISTICS to approve or reject registrations that were flagged for manual review after OCR failure.
+Allows ADMIN_LOGISTICS to approve or reject a `PENDING_REVIEW` registration. This applies to **all** registrations, not only those flagged by OCR failure.
+
+On approval the registration's `qrPayload` is generated and the QR ticket is emailed to the attendee — this is the only place a ticket is minted. On rejection the attendee gets a generic notice with no reason (department/office balancing is an internal Logistics decision). Registrations not in `PENDING_REVIEW` are rejected with `400`.
+
 
 **Method:** `PATCH`  
 **Path:** `/api/v1/events/:eventId/registrations/:registrationId/approve`
@@ -250,26 +255,18 @@ curl -X PATCH http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655
 - `ocrSessionId` (string, required): OCR session token returned from `POST /api/v1/ocr/verify`
 - `userId` (string, optional): User ID if the attendee is already authenticated (auto-attached server-side from JWT)
 
-**Response Format:**
+**Response Format:** (`202 Accepted`)
 ```json
 {
   "success": boolean,
   "data": {
     "registrationId": string,
-    "eventId": string,
-    "lastName": string,
-    "firstName": string,
-    "middleInitial": string | null,
-    "email": string,
-    "status": "APPROVED" | "PENDING_REVIEW",
-    "manual_registration": boolean,
-    "qrPayload": string,
-    "hasAttended": boolean,
-    "createdAt": string (ISO 8601)
+    "status": "pending_review"
   },
   "message": string
 }
 ```
+
 
 **Example Request (Guest):**
 ```bash
@@ -284,26 +281,26 @@ curl -X POST http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-4466554
   }'
 ```
 
-**Example Response (Guest — Auto-Approved):**
+**Example Response (Guest — Pending Review):**
 ```json
 {
   "success": true,
   "data": {
     "registrationId": "880e8400-e29b-41d4-a716-446655440003",
-    "eventId": "770e8400-e29b-41d4-a716-446655440002",
-    "lastName": "Johnson",
-    "firstName": "Alex",
-    "middleInitial": null,
-    "email": "alex@example.com",
-    "status": "APPROVED",
-    "manual_registration": false,
-    "qrPayload": "880e8400-e29b-41d4-a716-446655440003",
-    "hasAttended": false,
-    "createdAt": "2026-06-15T11:00:00Z"
+    "status": "pending_review"
   },
-  "message": "Registration successful"
+  "message": "Registration received and pending review. Your QR ticket will be emailed once a Logistics officer approves it."
 }
 ```
+
+**Status Codes:**
+- `202`: Registration received and queued for review
+- `400`: Validation error, missing/expired `ocrSessionId`
+- `403`: Members-only event, or registration window not yet open
+- `404`: Event not found
+- `409`: Duplicate registration, or event at full capacity
+- `500`: Internal server error
+
 
 ---
 

@@ -68,6 +68,7 @@ export const mockEventRecord = {
   _count: { registrations: 5 },
 };
 
+// An approved registration — has a minted QR payload and is check-in eligible.
 export const mockRegistrationRecord = {
   id: "reg-1",
   eventId: "event-1",
@@ -84,6 +85,15 @@ export const mockRegistrationRecord = {
   createdAt: pastDate,
   updatedAt: pastDate,
 };
+
+// A freshly submitted registration — every registration starts here, with no
+// QR payload until a Logistics officer approves it.
+export const mockPendingRegistrationRecord = {
+  ...mockRegistrationRecord,
+  status: "PENDING_REVIEW" as const,
+  qrPayload: null as string | null,
+};
+
 
 // ── Real File Fixtures ────────────────────────────────────────────────────
 // Real minimal file bytes so magic-byte validation (VUL-010) accepts them.
