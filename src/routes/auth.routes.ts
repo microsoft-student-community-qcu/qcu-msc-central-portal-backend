@@ -6,6 +6,8 @@ import {
   resetPassword,
   changePassword,
 } from "../controllers/passwordReset.controller";
+import { portalSignIn } from "../controllers/auth.controller";
+import { adminSignInLimiter, studentSignInLimiter } from "../config/rateLimit";
 import { requireAuth } from "./authMiddleware";
 
 // ── Public routes ──────────────────────────────────────────────────────────
@@ -28,6 +30,10 @@ const resetPasswordLimiter = rateLimit({
 });
 
 const router = Router();
+
+// ── Portal-specific sign-in — each portal enforces its own role boundary ───
+router.post("/student/sign-in", studentSignInLimiter, portalSignIn("student"));
+router.post("/admin/sign-in", adminSignInLimiter, portalSignIn("admin"));
 
 // Portal-specific forgot-password — each portal's email links to its own
 // frontend reset page (mirrors the per-portal sign-in endpoints).
