@@ -59,37 +59,54 @@ export async function registerForEvent(
       return;
     }
 
-    // ── 3. Registration window checks (Guests only — Members bypass) ────
+    // ── 3. Registration window checks (enforced for ALL roles) ──────────
+    // The window applies identically to Members, Applicants and Guests.
+    // The only tier difference is *when* each may start: Members may
+    // register from priorityStartDate, everyone else from generalStartDate.
+    // The event date is the hard cutoff for everyone.
     const now = new Date();
     const inPriorityWindow =
       now >= event.priorityStartDate && now < event.generalStartDate;
-    if (!isMemberPath) {
-      if (now < event.priorityStartDate) {
-        res
-          .status(403)
-          .json({ success: false, message: "Registration has not opened yet." });
-        return;
-      }
-      if (inPriorityWindow) {
-        res.status(403).json({
-          success: false,
-          message: "General Admission has not started.",
-        });
-        return;
-      }
+
+    if (now < event.priorityStartDate) {
+      res
+        .status(403)
+        .json({ success: false, message: "Registration has not opened yet." });
+      return;
     }
 
-    // ── 4. Capacity check ─────────────────────────────────────────────────
-    const currentRegistrationCount = await prisma.registration.count({
-      where: { eventId, status: { not: "REJECTED" } },
+    if (inPriorityWindow && !isMemberPath) {
+      res.status(403).json({
+        success: false,
+        message: "General Admission has not started.",
+      });
+      return;
+    }
+
+    if (now >= event.date) {
+      res.status(403).json({
+        success: false,
+        message: "Registration for this event has closed.",
+      });
+      return;
+    }
+
+    // ── 4. Soft capacity check (APPROVED only) ───────────────────────────
+    // Intentionally soft per V2 spec: total PENDING_REVIEW registrations may
+    // exceed maxCapacity, and the officer resolves the overflow by approving
+    // in FCFS order. Only confirmed (APPROVED) seats count here; the hard
+    // ceiling lives on the approve path in reviewRegistration().
+    const approvedRegistrationCount = await prisma.registration.count({
+      where: { eventId, status: "APPROVED" },
     });
 
-    if (currentRegistrationCount >= event.maxCapacity) {
+    if (approvedRegistrationCount >= event.maxCapacity) {
       res
         .status(409)
         .json({ success: false, message: "Event is at full capacity." });
       return;
     }
+
 
     // ── 5. Resolve identity — Member path vs Guest path ──────────────────
     let lastName: string | null = null;
@@ -373,13 +390,25 @@ export async function getEventRegistrations(
 
 // ── Admin: Review Manual Registration ─────────────────────────────────
 
+/** Thrown inside the approve transaction when the event is already full. */
+class CapacityReachedError extends Error {}
+
+/** Thrown inside the approve transaction when another officer won the race. */
+class AlreadyReviewedError extends Error {}
+
 /**
  * PATCH /api/v1/events/:eventId/registrations/:registrationId/approve
  *
  * Allows ADMIN_LOGISTICS to approve or reject registrations that were
  * flagged for manual review after OCR failure. Approvals emit a stubbed
  * email log with a QR ticket URL derived from the registration's qrPayload.
+ *
+ * The approve path is the hard capacity ceiling: approving beyond
+ * event.maxCapacity returns 409. The count-then-update runs inside a
+ * transaction so two officers approving concurrently cannot both slip
+ * into the last remaining seat.
  */
+
 export async function reviewRegistration(
   req: Request,
   res: Response
@@ -423,11 +452,38 @@ export async function reviewRegistration(
       return;
     }
 
-    const nextStatus = parsed.data.action === "approve" ? "APPROVED" : "REJECTED";
-    const updated = await prisma.registration.update({
-      where: { id: registrationId },
-      data: { status: nextStatus },
+    const isApproval = parsed.data.action === "approve";
+    const nextStatus = isApproval ? "APPROVED" : "REJECTED";
+
+    // Count-then-update must be atomic so two officers approving the same
+    // last seat concurrently cannot both succeed. The re-read of the
+    // registration inside the transaction closes the double-approve race.
+    const updated = await prisma.$transaction(async (tx) => {
+      const current = await tx.registration.findUnique({
+        where: { id: registrationId },
+      });
+
+      if (!current || current.status !== "PENDING_REVIEW") {
+        throw new AlreadyReviewedError();
+      }
+
+      if (isApproval) {
+        const approvedCount = await tx.registration.count({
+          where: { eventId, status: "APPROVED" },
+        });
+
+        // Hard ceiling — approvals can never exceed maxCapacity.
+        if (approvedCount >= event.maxCapacity) {
+          throw new CapacityReachedError();
+        }
+      }
+
+      return tx.registration.update({
+        where: { id: registrationId },
+        data: { status: nextStatus },
+      });
     });
+
 
     if (parsed.data.action === "approve") {
       await sendRegistrationApprovedEmail(updated.email, event.title, updated.qrPayload);
@@ -449,6 +505,24 @@ export async function reviewRegistration(
           : "Registration rejected successfully",
     });
   } catch (error) {
+    if (error instanceof CapacityReachedError) {
+      res.status(409).json({
+        success: false,
+        message:
+          "Cannot approve — this event has already reached its maximum capacity.",
+      });
+      return;
+    }
+
+    if (error instanceof AlreadyReviewedError) {
+      res.status(409).json({
+        success: false,
+        message:
+          "This registration was already reviewed by another admin. Refresh and try again.",
+      });
+      return;
+    }
+
     console.error("Failed to review registration:", error);
     res.status(500).json({
       success: false,
@@ -458,6 +532,7 @@ export async function reviewRegistration(
 }
 
 // ── Admin: QR Check-In ───────────────────────────────────────────────────
+
 
 /**
  * PATCH /api/v1/events/:eventId/registrations/checkin

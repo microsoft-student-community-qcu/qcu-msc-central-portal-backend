@@ -191,12 +191,39 @@ curl -X GET "http://localhost:5000/api/v1/events?type=PUBLIC&limit=20"
 **Description:**  
 Registers a guest (no account required) or an authenticated member for an event. Guest registrations must first call `POST /api/v1/ocr/verify` to obtain an `ocrSessionId`. Authenticated members bypass OCR and use their profile data automatically. The endpoint generates a QR payload for event check-in.
 
+**Registration Window (enforced for all roles):**
+
+The window is enforced identically for members, applicants, and guests. Members do not bypass it — the only tier difference is when each may start.
+
+| Condition | Who | Result |
+|-----------|-----|--------|
+| `now < priorityStartDate` | everyone | `403` — `"Registration has not opened yet."` |
+| `priorityStartDate <= now < generalStartDate` | MEMBER | allowed (priority access) |
+| `priorityStartDate <= now < generalStartDate` | applicant / guest | `403` — `"General Admission has not started."` |
+| `generalStartDate <= now < date` | everyone | allowed |
+| `now >= date` (event date is the cutoff) | everyone | `403` — `"Registration for this event has closed."` |
+
+**Capacity behavior on this endpoint (intentionally soft):**
+
+Only `APPROVED` registrations count toward `maxCapacity` here. Total `PENDING_REVIEW` registrations may exceed `maxCapacity` by design — per the V2 spec, an officer resolves the overflow by approving in first-come-first-served order. The hard ceiling is enforced on the approve path (endpoint 5), not here.
+
+- `409` — `"Event is at full capacity."` is returned only when the `APPROVED` count has already reached `maxCapacity`.
+
 ---
+
 
 ### 5. Review Pending Manual Registration
 
 **Description:**  
 Allows ADMIN_LOGISTICS to approve or reject registrations that were flagged for manual review after OCR failure.
+
+This endpoint is the **hard capacity ceiling**. Approving a registration when the event's `APPROVED` count has already reached `maxCapacity` is rejected with `409`. The count-then-update runs inside a database transaction, so two officers approving concurrently cannot both take the last seat. Rejections are never blocked by capacity.
+
+**Capacity & Concurrency Status Codes:**
+- `409` — `"Cannot approve — this event has already reached its maximum capacity."` (APPROVED count is already at `maxCapacity`)
+- `409` — `"This registration was already reviewed by another admin. Refresh and try again."` (lost a concurrent review race; the registration is no longer `PENDING_REVIEW`)
+- `400` — `"Registration is not pending review"` (already approved/rejected before the request)
+
 
 **Method:** `PATCH`  
 **Path:** `/api/v1/events/:eventId/registrations/:registrationId/approve`

@@ -1,6 +1,20 @@
 # Backend Modification Changelog
 
+## 4. Event Registration Integrity Fixes
+
+### **#160 — Registration window bypass & missing approval capacity ceiling** (2026-08-18)
+- **Root Cause (window):** In `registerForEvent` (`src/controllers/eventController.ts`) the window check was wrapped in `if (!isMemberPath)`, so a `MEMBER` could register before `priorityStartDate` or after the event had already happened. There was also no cutoff check at all.
+- **Fix (window):** The window is now enforced for every role. Everyone is blocked before `priorityStartDate`; only members may register during the priority window (`priorityStartDate` → `generalStartDate`); everyone is blocked once `now >= event.date` with `"Registration for this event has closed."`
+- **Root Cause (capacity):** `reviewRegistration` never counted `APPROVED` registrations against `event.maxCapacity`, so approvals could push an event past its own limit — and two officers approving concurrently could both take the last seat.
+- **Fix (capacity):** The approve path is now the hard ceiling. The `APPROVED` count and the status update run inside `prisma.$transaction`, which also re-reads the registration to close the double-approve race. Returns `409` when at capacity, and `409` when another admin already reviewed the row. Rejections are never blocked by capacity.
+- **Intentional behavior (documented):** The register path's capacity check counts only `APPROVED` registrations, so total `PENDING_REVIEW` may exceed `maxCapacity` — per the V2 spec, the officer resolves the overflow by approving in FCFS order.
+- **Tests:** Added coverage in `src/__tests__/event.routes.test.ts` for member-before-window, member-after-cutoff, member-in-priority-window (allowed), guest-in-priority-window (403), pending-over-capacity still accepted, approve-at-capacity (409), rejection unaffected by capacity, and the concurrent-approval race. Added a `$transaction` mock to `src/__tests__/setup.ts`.
+- **Docs:** `docs/api/v1/events.md` updated with the window matrix and the approve-path capacity/concurrency status codes.
+
+---
+
 ## 3. Security Fixes
+
 
 ### **VUL-016 — Mass Assignment Privilege Escalation on User Sign-Up** (2026-07-30)
 - **Root Cause:** The sign-up handler at `src/app.ts` forwarded raw `req.body` to Better Auth, allowing a malicious client to inject `role: "ADMIN_HR"` and escalate privileges at account creation.
