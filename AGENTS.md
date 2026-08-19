@@ -25,7 +25,8 @@ Engineering standards for all contributors — both human and automated.
 qcu-msc-central-portal-backend/
 ├── docs/                       # Documentation
 │   ├── api/                    # Versioned API documentation
-│   ├── guides/                 # Workflow guides
+│   ├── guides/                 # Versioned workflow guides (v1/, v2/)
+│   ├── modules/                # Per-module handoff docs (V2) — docs/modules/v2/
 │   └── specs/                  # PRD, data models, DTM
 ├── prisma/
 │   ├── schema.prisma           # Database schema
@@ -162,7 +163,8 @@ Guests have no User record (behavioral role only).
   - workflows
 - If a new feature is added, create a corresponding doc file.
 - Keep documentation consistent with actual implementation (no outdated docs allowed).
-- Workflow documentation lives in `docs/guides/workflows/` — update these when registration, membership, or cancellation logic changes.
+- Workflow documentation is versioned under `docs/guides/`: V1 guides live in `docs/guides/v1/workflows/`, V2 in `docs/guides/v2/workflows/`. Update them when registration, membership, or cancellation logic changes.
+- V2 module handoff docs live in `docs/modules/v2/` — each module gets a single self-contained file; index in `docs/modules/README.md`.
 
 ## Testing Expectations
 

@@ -12,7 +12,7 @@ The submission endpoint accepts **multipart/form-data** to support file uploads 
 ### 1. Create Applicant (Submit Application)
 
 **Description:**  
-Submits a new applicant to the MSC recruitment system. **Must** be preceded by a `POST /api/v1/ocr/verify` call to obtain an `ocrSessionId` — this enforces the two-step verification flow (see [applicant-tracking.md](../../guides/workflows/applicant-tracking.md)). The backend validates the OCR session and sets `manual_application` accordingly. On success the applicant receives two emails: an application-received confirmation (under review), then the password setup link.
+Submits a new applicant to the MSC recruitment system. **Must** be preceded by a `POST /api/v1/ocr/verify` call to obtain an `ocrSessionId` — this enforces the two-step verification flow (see [applicant-tracking.md](../../guides/v1/workflows/applicant-tracking.md)). The backend validates the OCR session and sets `manual_application` accordingly. On success the applicant receives two emails: an application-received confirmation (under review), then the password setup link.
 
 **Method:** `POST`  
 **Path:** `/api/v1/applicants`  

@@ -6,7 +6,7 @@ Authentication is handled by **Better Auth** — OAuth, login, session managemen
 
 Users have one of four roles: `APPLICANT`, `MEMBER`, `ADMIN_HR`, or `ADMIN_LOGISTICS`. Unauthenticated visitors are Guests (no User record).
 
-> **Note:** There is **no public registration**. User accounts are created exclusively through the **membership application pipeline** (see [applicant activation flow](../guides/workflows/auth-workflow.md#applicant-account-activation-flow)). The sign-up endpoint below is called by the frontend password-setup page after an applicant receives the email link.
+> **Note:** There is **no public registration**. User accounts are created exclusively through the **membership application pipeline** (see [applicant activation flow](../guides/v1/workflows/auth-workflow.md#applicant-account-activation-flow)). The sign-up endpoint below is called by the frontend password-setup page after an applicant receives the email link.
 
 ---
 
