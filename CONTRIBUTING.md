@@ -40,7 +40,7 @@ graph TD
 | `develop` | `feature/*` | `release` | **Azure Web App (`msc-qcu-develop`)** / MySQL Development Database | FE (`BootlegYouki`) or BE (`mark-ianz`) |
 | `feature/*` | *Self-contained* | `develop` | Local Development (XAMPP / SQLite / local MySQL) | Contributor (Anyone) — Includes fixes, docs, refactors, chores |
 
-> **V2 Module Development:** V2 work is tracked in `docs/modules/v2/` (one file per module, sourced from `docs/specs/PRD-V2.md`). All V2 modules branch off **`develop`** and follow the same `feature/* → develop` PR flow — there is no separate V2 trunk. See AGENTS.md → **V2 Module Development** for the per-module workflow.
+> **V2 Module Development:** V2 work is tracked in `docs/modules/v2/` (one file per module, sourced from `docs/specs/PRD-V2.md`). All V2 modules branch off **`develop`** and follow the same `feature/* → develop` PR flow — there is no separate V2 trunk. See AGENTS.md → **V2 Module Development** for the per-module workflow, and `docs/modules/README.md` → **Development Waves** for the parallel build order (which modules can be assigned in parallel and which must ship first/last).
 
 ---
 

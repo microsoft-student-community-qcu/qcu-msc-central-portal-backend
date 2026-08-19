@@ -30,9 +30,29 @@ This folder contains **per-module handoff docs** for the QCU MSC Central Portal.
 | M4 — Analytics | 06 | Aggregation endpoints across events/merch/members |
 | M5 — DataCamp | 07 | Scholarship intake, evaluation, automated provisioning |
 
+## Development Waves (Parallel Execution)
+
+Modules are **not all independent** — build order matters. Assign per wave below:
+
+| Wave | Module(s) | Assignee(s) | Why this order |
+|------|-----------|-------------|----------------|
+| **Wave 0** (first) | 01 Super Admin Settings Hub | @mark-ianz | Foundation: new role guards, `SystemSetting`, `AuditLog` — every other module's admin endpoints depend on it |
+| **Wave 1** (after Wave 0 merges to `develop`) | 02 + 03 Events & Registration — **ONE assignment** | @Sanik0 | Share the same `Event`/`Registration` models and `event.routes.ts` — splitting across two devs causes constant merge conflicts |
+| | 04 Merch Pre-Orders | @mark-ianz | Brand-new models; needs the shared `qrcode` util (lands in M0/M1) |
+| | 05 Project Showcase | @Sanik0 | Brand-new models; independent of 04/07 |
+| | 07 DataCamp Scholarship | 1 dev | Reuses existing OCR + email engines; independent of 04/05 |
+| **Wave 2** (last) | 06 Analytics Dashboard | Whoever finishes first | Aggregates event (02/03) + merch (04) data — cannot be built before they exist |
+
+### Branching rules
+
+- **1 module = 1 branch = 1 PR.** Branch name: `feat/v2-<module>` (e.g., `feat/v2-merch`), cut from **latest `develop` after Wave 0 has merged**.
+- Do **not** split a module across multiple sequential PRs into `develop` (first merge orphans the second branch). For large reviews, the reviewer reviews commit-by-commit.
+- `02 + 03` ships as a **single branch** (`feat/v2-events`). `06` is a single small branch.
+- A dev taking two modules sequentially cuts the second branch only after the first PR merges.
+
 ## Workflow
 
-1. Assign yourself a module (fill the **Assignee** column).
+1. Assign yourself a module (fill the **Assignee** column) — see the wave plan above for ordering.
 2. Open the module file — it contains everything: roles, workflows, edge cases, proposed data model + API surface, testing checklist.
-3. Build on a branch off `v2-issue-169` (the V2 source-of-truth trunk).
+3. Cut `feat/v2-<module>` from the latest `develop`, build, and open a PR into `develop` (standard `feature/* → develop` flow per CONTRIBUTING.md).
 4. When the module ships, promote its workflow content into `docs/guides/v2/workflows/` and update `docs/guides/v2/workflows.md`.
