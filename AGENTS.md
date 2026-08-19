@@ -112,6 +112,8 @@ Rules:
 - APPLICANT-only routes use `requireAuth` alone (no additional guard).
 - Never reference bare `"ADMIN"` or `"STUDENT"` in role checks — those roles do not exist.
 
+> **Planned (V2, not yet implemented — Module 01 / M0):** The role model will expand to add `SUPERADMIN`, `ADMIN_FINANCE`, `ADMIN_FINANCE_HEAD`, `ADMIN_LOGISTICS_HEAD`, and `STARTUP_DEV`. `ADMIN_CORE` is intentionally removed — its permissions are folded into all heads + `SUPERADMIN`. `SUPERADMIN` will pass every `require*` guard via a single inheritance helper. New guards (`requireSuperadmin`, `requireAdminFinance`, `requireAdminFinanceHead`, `requireAdminLogisticsHead`) land with M0.
+
 ## Database & Schema
 
 - The Prisma schema lives at `prisma/schema.prisma`.
@@ -141,6 +143,8 @@ Guests have no User record (behavioral role only).
 - `manual_registration: true` means OCR failed → manual upload → enters Path B (admin review)
 - `@@unique([eventId, studentId])` prevents duplicate guest registrations per event
 
+> **Planned (V2, not yet implemented — Modules 02–03 / M1):** Default status changes from `APPROVED` to `PENDING_REVIEW`; the QR payload + QR image are generated **on approval**, not at registration. `EventType` gains a third value (`QCU_STUDENTS_ONLY`) alongside `PUBLIC`/`MEMBERS_ONLY`. Office caps (per-`Office`, `MEMBERS_ONLY` events only) and a per-event manual registration toggle are added. `Event` gains venue, registration deadline, banner image, requires-QR flag, and a soft-delete status.
+
 ## Zonal OCR Conventions
 
 - The OCR flow follows a two-step pattern:
@@ -153,6 +157,7 @@ Guests have no User record (behavioral role only).
 - Rate limit: 10 requests per minute per IP for the OCR endpoint.
 - Public OCR routes are registered BEFORE auth middleware in `src/app.ts`.
 - Zone coordinates for Zonal OCR are defined as absolute pixel values in `src/services/ocr.service.ts` — these must be re-calibrated against an actual QCU Student ID template during testing.
+- **Planned (V2):** the same OCR session flow will gate non-member registration for `QCU_STUDENTS_ONLY` events (Module 02) and DataCamp scholarship intake (Module 07). Members bypass OCR in both.
 
 ## Documentation Obligations
 
@@ -177,6 +182,19 @@ Guests have no User record (behavioral role only).
 - Use meaningful and descriptive commit messages (conventional commits).
 - Do not commit undocumented breaking changes.
 - Keep commits focused on a single logical change (avoid mixed-purpose commits).
+
+## V2 Module Development
+
+V2 (Events & Logistics Release) work is tracked in `docs/modules/v2/` — one file per module. PRD: `docs/specs/PRD-V2.md`.
+
+- **Base branch:** `develop`. All V2 module work uses the standard `feature/* → develop` PR flow (see CONTRIBUTING.md). No separate V2 trunk.
+- **Per-module flow:**
+  1. Assign yourself a module (fill the **Assignee** column in `docs/modules/README.md`).
+  2. Read the module doc — it is the single source of truth for that module (roles, workflows, edge cases, proposed data model/API surface).
+  3. Implement on a branch off `develop`; update `docs/api/v2/` and data-model docs as you go.
+  4. When the module ships, promote its workflow content into `docs/guides/v2/workflows/` and update `docs/guides/v2/workflows.md`.
+- **Shared utilities for V2:** QR image generation (`qrcode`) and audit-log middleware will be added to `src/utils/` in M0/M1 — check `src/utils/` before reimplementing.
+- **Milestone order:** M0 Foundation → M1 Events v2 → M2 Merch → M3 Showcase → M4 Analytics → M5 DataCamp. Build dependencies are listed in each module doc.
 
 ## Agent Workflow Requirements
 

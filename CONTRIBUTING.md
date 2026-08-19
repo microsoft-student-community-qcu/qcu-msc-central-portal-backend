@@ -40,6 +40,8 @@ graph TD
 | `develop` | `feature/*` | `release` | **Azure Web App (`msc-qcu-develop`)** / MySQL Development Database | FE (`BootlegYouki`) or BE (`mark-ianz`) |
 | `feature/*` | *Self-contained* | `develop` | Local Development (XAMPP / SQLite / local MySQL) | Contributor (Anyone) — Includes fixes, docs, refactors, chores |
 
+> **V2 Module Development:** V2 work is tracked in `docs/modules/v2/` (one file per module, sourced from `docs/specs/PRD-V2.md`). All V2 modules branch off **`develop`** and follow the same `feature/* → develop` PR flow — there is no separate V2 trunk. See AGENTS.md → **V2 Module Development** for the per-module workflow.
+
 ---
 
 ## Commit Conventions
@@ -89,7 +91,7 @@ When adding a new endpoint:
 - [ ] Zod schemas created or updated for new/modified endpoints
 - [ ] API documentation updated in `docs/api/`
 - [ ] Data model docs updated if the Prisma schema changed
-- [ ] RBAC guards match the 4-role model (no bare `"ADMIN"` or `"STUDENT"` checks)
+- [ ] RBAC guards match the role model for the version being developed (V1: 4 roles; V2: extended set per `docs/modules/v2/01-superadmin-settings-hub.md`) — no bare `"ADMIN"` or `"STUDENT"` checks
 - [ ] `src/config/env.ts` updated if new environment variables were added
 - [ ] Branch is up-to-date with the target branch
 - [ ] Endpoint tested with HTTP client (POSTMAN, HTTPie, Thunder Client, etc.) against payloads documented in `docs/api/v{N}/`

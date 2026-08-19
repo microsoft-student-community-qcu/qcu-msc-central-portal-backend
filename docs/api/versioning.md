@@ -12,3 +12,9 @@ All public APIs must use explicit versioning in their paths and documentation (f
 
 ## Starting Point
 - Current API surface is `v1`.
+- V2 is planned (see `docs/modules/v2/`). It will carry breaking changes: role-model expansion, new event types, and the approval-gated QR workflow. Non-breaking V1 additions may still land under `v1` until the V2 release.
+
+## Versioned Docs
+- API reference: `docs/api/v1/` (current), `docs/api/v2/` (planned)
+- Workflow guides: `docs/guides/v1/` (shipped), `docs/guides/v2/` (planned)
+- Module docs: `docs/modules/v2/`
