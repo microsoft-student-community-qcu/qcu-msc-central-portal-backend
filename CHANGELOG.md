@@ -42,3 +42,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - New V2 admin roles could not sign in through the Admin Portal (hardcoded 2-role check).
+
+### Removed
+
+- Retracted the seed-credential documentation notes (seeding guide + M0 test-case setup)
+  — they were based on a misdiagnosis: the reported sign-in failures came from testing
+  against the production endpoint (`msc-qcu.tech`), not local. No behavior change.
