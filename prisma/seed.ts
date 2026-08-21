@@ -27,10 +27,10 @@ import { auth } from "../src/config/auth";
 const prisma = new PrismaClient();
 
 // ── Tunable seed sizes ────────────────────────────────────────────────────
-const USER_COUNT = 300; // total bulk users (each gets one Account)
-const MEMBER_USER_COUNT = 75; // subset promoted to MEMBER role (approved applicants)
-const APPLICANT_COUNT = 300; // bulk applicant records (one per user)
-const DRAFT_COUNT = 150; // application drafts
+const USER_COUNT = 50; // total bulk users (each gets one Account)
+const MEMBER_USER_COUNT = 20; // subset promoted to MEMBER role (approved applicants)
+const APPLICANT_COUNT = 50; // bulk applicant records (one per user)
+const DRAFT_COUNT = 20; // application drafts
 const IRREGULAR_COUNT = 5; // students enrolled earlier than the standard cohort
 
 const USER_PASSWORD = process.env.SEED_USER_PASSWORD || "SeedPass123!";
