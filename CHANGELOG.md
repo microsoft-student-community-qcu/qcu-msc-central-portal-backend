@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - DB reset script with safety guards: refuses production DB, requires confirmation (#134).
 - Seed dataset sizes configurable via env vars (`SEED_USER_COUNT`, `SEED_MEMBER_USER_COUNT`, etc.)
   with fail-fast validation (#147, closes #146).
+- Seed data counts reduced for local testing (#154, closes #153) — superseded by #147.
 
 ### Changed
 
