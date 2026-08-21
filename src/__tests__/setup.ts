@@ -13,6 +13,8 @@ process.env.FRONTEND_URL = "http://localhost:5173";
 process.env.OCR_MAX_FAILURES = "3";
 process.env.RESEND_API_KEY = "re_test-key-for-testing";
 process.env.AZURE_STORAGE_ACCOUNT_NAME = "test-storage-account";
+process.env.GCASH_NUMBER = "09171234567";
+process.env.GCASH_QR_IMAGE_URL = "https://test-storage-account.blob.core.windows.net/merch/org-gcash-qr.png";
 
 const testUploadDir = path.join(os.tmpdir(), `qcu-test-uploads-${Date.now()}`);
 process.env.IMAGE_STORAGE_PATH = path.join(testUploadDir, "ocr");
@@ -28,8 +30,8 @@ afterAll(() => {
 });
 
 // ── Global Prisma Mock ────────────────────────────────────────────────────
-vi.mock("../config/database", () => ({
-  prisma: {
+vi.mock("../config/database", () => {
+  const prismaMock: any = {
     $queryRaw: vi.fn(),
     user: {
       findUnique: vi.fn(),
@@ -83,6 +85,7 @@ vi.mock("../config/database", () => ({
     systemSetting: {
       findMany: vi.fn(),
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
       upsert: vi.fn(),
       count: vi.fn(),
     },
@@ -92,8 +95,47 @@ vi.mock("../config/database", () => ({
       create: vi.fn(),
       count: vi.fn(),
     },
-  } as any,
-}));
+    // Merch (Module 04)
+    merchItem: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      count: vi.fn(),
+    },
+    merchVariant: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      upsert: vi.fn(),
+      count: vi.fn(),
+    },
+    merchOrder: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      count: vi.fn(),
+    },
+    paymentProofSubmission: {
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      count: vi.fn(),
+    },
+  };
+  // $transaction supports both the array form (Promise.all) and the
+  // interactive callback form (invoked with the same mock as `tx`).
+  prismaMock.$transaction = vi.fn(async (arg: any) => {
+    if (typeof arg === "function") return arg(prismaMock);
+    return Promise.all(arg);
+  });
+  return { prisma: prismaMock };
+});
 
 // ── Global External Service Mocks ─────────────────────────────────────────
 vi.mock("../utils/imageStorage", () => ({
@@ -110,6 +152,16 @@ vi.mock("../utils/imageStorage", () => ({
   ),
   getDocumentPath: vi.fn((filename: string) =>
     path.join(process.env.DOCUMENT_STORAGE_PATH!, filename)
+  ),
+  // Merch (Module 04)
+  saveMerchImage: vi.fn((_buffer: Buffer, filename: string) =>
+    Promise.resolve(`https://test-storage-account.blob.core.windows.net/merch/${filename}`)
+  ),
+  getMerchImagePath: vi.fn((filename: string) =>
+    `https://test-storage-account.blob.core.windows.net/merch/${filename}`
+  ),
+  getMerchImageStream: vi.fn(() =>
+    Promise.resolve({ stream: null, contentType: undefined, contentLength: undefined })
   ),
 }));
 
@@ -145,4 +197,12 @@ vi.mock("../services/email.service", () => ({
   sendApplicantStatusEmail: vi.fn(() => Promise.resolve()),
   sendDraftResumeLinkEmail: vi.fn(() => Promise.resolve()),
   sendPasswordResetEmail: vi.fn(() => Promise.resolve()),
+  // Merch (Module 04)
+  sendMerchOrderCreatedEmail: vi.fn(() => Promise.resolve()),
+  sendMerchProofReceivedEmail: vi.fn(() => Promise.resolve()),
+  sendMerchDuplicateReferenceEmail: vi.fn(() => Promise.resolve()),
+  sendMerchOrderConfirmedEmail: vi.fn(() => Promise.resolve()),
+  sendMerchOrderRejectedEmail: vi.fn(() => Promise.resolve()),
+  sendMerchOrderClaimedEmail: vi.fn(() => Promise.resolve()),
+  sendMerchOrderCancelledEmail: vi.fn(() => Promise.resolve()),
 }));

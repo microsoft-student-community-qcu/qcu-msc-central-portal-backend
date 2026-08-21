@@ -12,8 +12,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **V2 Module 04 (M2) — Org Merch Pre-Orders (#176):**
+  - `MerchItem`, `MerchVariant`, `MerchOrder`, `PaymentProofSubmission` models +
+    `MerchItemStatus`/`MerchOrderStatus`/`MerchRejectionReason`/`PaymentProofResult` enums —
+    migration `20260821130000_v2_add_merch_models`.
+  - Public catalog + order flow (`/api/v2/merch`): browse, pre-order, order tracking
+    (orderRef + email anti-enumeration), and payment-proof submission with an instant
+    cross-order duplicate-reference auto-reject.
+  - Finance admin (`/api/v2/admin/merch`): item CRUD, head-only archive/cancel, order
+    verification queue, confirm (atomic conditional stock decrement), reject (preset reasons),
+    claim, and a protected payment-screenshot proxy.
+  - 7 branded email triggers + a reusable `image` block in `renderBrandedEmail` for hosted QR
+    images; `qrcode` dependency + `src/utils/qr.ts` (shared QR image helper for Module 02).
+  - `merch` Azure Blob container + `saveMerchImage`/`getMerchImageStream`; image-only
+    `validateImageMimeType`; `GCASH_NUMBER` / `GCASH_QR_IMAGE_URL` env vars (static org GCash QR).
+  - Docs: `docs/api/v2/merch.md`, `docs/specs/data-models/merch.md`,
+    `docs/guides/v2/workflows/merch.md`, `docs/test-cases/v2/04-merch-pre-orders.md`;
+    tests in `src/__tests__/merch.routes.test.ts`.
+
 ### Fixed
 
+- **RBAC — `ADMIN_FINANCE_HEAD` blocked from finance endpoints (#176):** `requireAdminFinance`
+  now admits both `ADMIN_FINANCE` and `ADMIN_FINANCE_HEAD` (the head inherits every finance
+  capability per module 04 §2); updated `authMiddleware.guards.test.ts` accordingly.
 - **Schema drift fix — ApplicationDraft TEXT columns (#000):**
   - Added `@db.Text` to `interestsSkillsHobbies`, `organizationHistory`, and `previousWorksAchievements`
     in `ApplicationDraft` model to match actual DB column types and prevent `prisma migrate dev`

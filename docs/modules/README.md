@@ -14,7 +14,7 @@ This folder contains **per-module handoff docs** for the QCU MSC Central Portal.
 | 01 | [Super Admin Settings Hub](v2/01-superadmin-settings-hub.md) | M0 — Foundation | Module Specs § Super Admin Settings Hub | Implemented (M0) | @mark-ianz |
 | 02 | [Event Registration & QR Tickets](v2/02-event-registration-tickets.md) | M1 — Events v2 | Module Specs § Event Registration & QR Tickets · PRD Module 2 (Logistics) | Not Started | @Sanik0 |
 | 03 | [Event Logistics & Check-In](v2/03-event-logistics-checkin.md) | M1 — Events v2 | Module Specs § Event Logistics & Check-In · PRD Module 2 (Logistics) | Not Started | @Sanik0 |
-| 04 | [Org Merch Pre-Orders](v2/04-merch-pre-orders.md) | M2 — Merch | Module Specs § Org Merch Pre-Orders · PRD Module 1 (Finance) | Not Started | @mark-ianz |
+| 04 | [Org Merch Pre-Orders](v2/04-merch-pre-orders.md) | M2 — Merch | Module Specs § Org Merch Pre-Orders · PRD Module 1 (Finance) | Implemented (M2) | @mark-ianz |
 | 05 | [Project Incubation Showcase](v2/05-project-showcase.md) | M3 — Showcase | Module Specs § Project Incubation Showcase | Not Started | @Sanik0 |
 | 06 | [Executive Data Analytics Dashboard](v2/06-analytics-dashboard.md) | M4 — Analytics | Module Specs § Executive Data Analytics Dashboard | Not Started | |
 | 07 | [DataCamp Scholarship Gateway](v2/07-datacamp-scholarship.md) | M5 — DataCamp | Module Specs § DataCamp Scholarship Gateway | Not Started | |
