@@ -48,10 +48,10 @@ function readSeedInt(name: string, fallback: number): number {
   return value;
 }
 
-const USER_COUNT = readSeedInt("SEED_USER_COUNT", 300); // total bulk users (each gets one Account)
-const MEMBER_USER_COUNT = readSeedInt("SEED_MEMBER_USER_COUNT", 75); // subset promoted to MEMBER role (approved applicants)
-const APPLICANT_COUNT = readSeedInt("SEED_APPLICANT_COUNT", 300); // bulk applicant records (one per user)
-const DRAFT_COUNT = readSeedInt("SEED_DRAFT_COUNT", 150); // application drafts
+const USER_COUNT = readSeedInt("SEED_USER_COUNT", 50); // total bulk users (each gets one Account)
+const MEMBER_USER_COUNT = readSeedInt("SEED_MEMBER_USER_COUNT", 20); // subset promoted to MEMBER role (approved applicants)
+const APPLICANT_COUNT = readSeedInt("SEED_APPLICANT_COUNT", 50); // bulk applicant records (one per user)
+const DRAFT_COUNT = readSeedInt("SEED_DRAFT_COUNT", 20); // application drafts
 const IRREGULAR_COUNT = readSeedInt("SEED_IRREGULAR_COUNT", 5); // students enrolled earlier than the standard cohort
 const ADMIN_HR_COUNT = readSeedInt("SEED_ADMIN_HR_COUNT", 5); // ADMIN_HR admins
 const ADMIN_LOGISTICS_COUNT = readSeedInt("SEED_ADMIN_LOGISTICS_COUNT", 5); // ADMIN_LOGISTICS admins
