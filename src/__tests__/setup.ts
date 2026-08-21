@@ -125,6 +125,12 @@ vi.mock("../config/database", () => {
       findFirst: vi.fn(),
       findMany: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
+      count: vi.fn(),
+    },
+    merchRefund: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
       count: vi.fn(),
     },
   };
@@ -197,12 +203,15 @@ vi.mock("../services/email.service", () => ({
   sendApplicantStatusEmail: vi.fn(() => Promise.resolve()),
   sendDraftResumeLinkEmail: vi.fn(() => Promise.resolve()),
   sendPasswordResetEmail: vi.fn(() => Promise.resolve()),
-  // Merch (Module 04)
-  sendMerchOrderCreatedEmail: vi.fn(() => Promise.resolve()),
-  sendMerchProofReceivedEmail: vi.fn(() => Promise.resolve()),
-  sendMerchDuplicateReferenceEmail: vi.fn(() => Promise.resolve()),
-  sendMerchOrderConfirmedEmail: vi.fn(() => Promise.resolve()),
-  sendMerchOrderRejectedEmail: vi.fn(() => Promise.resolve()),
-  sendMerchOrderClaimedEmail: vi.fn(() => Promise.resolve()),
-  sendMerchOrderCancelledEmail: vi.fn(() => Promise.resolve()),
+  // Merch (Module 04) — senders return a boolean (send success) used for
+  // notification tracking; default them to `true`.
+  sendMerchOrderCreatedEmail: vi.fn(() => Promise.resolve(true)),
+  sendMerchProofReceivedEmail: vi.fn(() => Promise.resolve(true)),
+  sendMerchDuplicateReferenceEmail: vi.fn(() => Promise.resolve(true)),
+  sendMerchOrderConfirmedEmail: vi.fn(() => Promise.resolve(true)),
+  sendMerchOrderRejectedEmail: vi.fn(() => Promise.resolve(true)),
+  sendMerchOrderClaimedEmail: vi.fn(() => Promise.resolve(true)),
+  sendMerchOrderCancelledEmail: vi.fn(() => Promise.resolve(true)),
+  sendMerchOutOfStockEmail: vi.fn(() => Promise.resolve(true)),
+  sendMerchRefundProcessedEmail: vi.fn(() => Promise.resolve(true)),
 }));

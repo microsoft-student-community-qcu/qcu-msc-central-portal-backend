@@ -289,6 +289,7 @@ describe("POST /api/v2/admin/merch/orders/:orderId/confirm", () => {
     status: "PENDING_VERIFICATION",
     quantity: 2,
     variant: { id: "v-s", label: "S", item: { name: "Shirt" } },
+    proofSubmissions: [{ id: "sub-1" }],
   };
 
   it("confirms and decrements stock when available", async () => {
@@ -306,15 +307,17 @@ describe("POST /api/v2/admin/merch/orders/:orderId/confirm", () => {
     expect(prisma.auditLog.create).toHaveBeenCalled();
   });
 
-  it("auto-rejects with OUT_OF_STOCK when the decrement matches no row", async () => {
+  it("routes to REFUND_PENDING (not REJECTED) when the decrement matches no row", async () => {
     (prisma.merchOrder.findUnique as any).mockResolvedValue(pendingOrder);
     (prisma.merchVariant.updateMany as any).mockResolvedValue({ count: 0 });
 
     const res = await request(app).post("/api/v2/admin/merch/orders/order-1/confirm");
     expect(res.status).toBe(409);
+    // Oversell: paid student must NOT be rejected/told to resubmit — the order
+    // owes a refund instead (issue #178).
     expect(prisma.merchOrder.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ status: "REJECTED", rejectionReason: "OUT_OF_STOCK" }),
+        data: expect.objectContaining({ status: "REFUND_PENDING", rejectionReason: "OUT_OF_STOCK" }),
       })
     );
   });
@@ -340,5 +343,221 @@ describe("head-only merch endpoints", () => {
       .post("/api/v2/admin/merch/orders/order-1/cancel")
       .send({ financeNote: "test" });
     expect(res.status).toBe(403);
+  });
+});
+
+// ── §7a Resubmit lock (payment proof) ───────────────────────────────────────
+describe("payment-proof resubmit lock (§7a)", () => {
+  it("blocks resubmission on a REFUND_PENDING order (no double-pay)", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue({
+      id: "order-1",
+      email: "jane@example.com",
+      status: "REFUND_PENDING",
+      studentName: "Jane",
+      rejectionReason: "OUT_OF_STOCK",
+    });
+    const res = await request(app)
+      .post("/api/v2/merch/orders/MSC-MERCH-2026-0042/payment-proof")
+      .field("email", "jane@example.com")
+      .field("referenceNumber", "1234567890123")
+      .attach("screenshot", pngFixture, "proof.png");
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/being refunded/i);
+  });
+
+  it("blocks resubmission on a REJECTED+OUT_OF_STOCK order", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue({
+      id: "order-1",
+      email: "jane@example.com",
+      status: "REJECTED",
+      studentName: "Jane",
+      rejectionReason: "OUT_OF_STOCK",
+    });
+    const res = await request(app)
+      .post("/api/v2/merch/orders/MSC-MERCH-2026-0042/payment-proof")
+      .field("email", "jane@example.com")
+      .field("referenceNumber", "1234567890123")
+      .attach("screenshot", pngFixture, "proof.png");
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/not awaiting payment proof/i);
+  });
+
+  it("allows resubmission on a REJECTED+AMOUNT_MISMATCH order (student-fixable)", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue({
+      id: "order-1",
+      email: "jane@example.com",
+      status: "REJECTED",
+      studentName: "Jane",
+      rejectionReason: "AMOUNT_MISMATCH",
+    });
+    (prisma.paymentProofSubmission.findFirst as any).mockResolvedValue(null);
+    const res = await request(app)
+      .post("/api/v2/merch/orders/MSC-MERCH-2026-0042/payment-proof")
+      .field("email", "jane@example.com")
+      .field("referenceNumber", "9876543210001")
+      .attach("screenshot", pngFixture, "proof.png");
+    expect(res.status).toBe(200);
+    expect(prisma.merchOrder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "PENDING_VERIFICATION" }) })
+    );
+  });
+});
+
+// ── §7a Refund (head-only) ──────────────────────────────────────────────────
+describe("POST /api/v2/admin/merch/orders/:orderId/refund", () => {
+  const refundable = {
+    id: "order-1",
+    status: "REFUND_PENDING",
+    email: "jane@example.com",
+    studentName: "Jane",
+    orderRef: "MSC-MERCH-2026-0042",
+    amount: 350,
+    refund: null,
+  };
+
+  it("is blocked for a plain finance officer (guard 403)", async () => {
+    denyRole(mockRequireAdminFinanceHead);
+    const res = await request(app)
+      .post("/api/v2/admin/merch/orders/order-1/refund")
+      .send({ amount: 350, method: "GCASH" });
+    expect(res.status).toBe(403);
+  });
+
+  it("records a refund and moves REFUND_PENDING → REFUNDED", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue(refundable);
+    const res = await request(app)
+      .post("/api/v2/admin/merch/orders/order-1/refund")
+      .send({ amount: 350, method: "GCASH", referenceNumber: "1234567890123" });
+    expect(res.status).toBe(200);
+    expect(prisma.merchRefund.create).toHaveBeenCalled();
+    expect(prisma.merchOrder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "REFUNDED" }) })
+    );
+    expect(prisma.auditLog.create).toHaveBeenCalled();
+  });
+
+  it("rejects a refund amount greater than the order total", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue(refundable);
+    const res = await request(app)
+      .post("/api/v2/admin/merch/orders/order-1/refund")
+      .send({ amount: 500, method: "GCASH" });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/cannot exceed/i);
+  });
+
+  it("409s when the order is not awaiting a refund", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue({ ...refundable, status: "CONFIRMED" });
+    const res = await request(app)
+      .post("/api/v2/admin/merch/orders/order-1/refund")
+      .send({ amount: 350, method: "GCASH" });
+    expect(res.status).toBe(409);
+  });
+
+  it("409s when a refund already exists", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue({ ...refundable, refund: { id: "r-1" } });
+    const res = await request(app)
+      .post("/api/v2/admin/merch/orders/order-1/refund")
+      .send({ amount: 350, method: "GCASH" });
+    expect(res.status).toBe(409);
+  });
+});
+
+// ── §7b Resend email + order detail ─────────────────────────────────────────
+describe("POST /api/v2/admin/merch/orders/:orderId/resend-email", () => {
+  it("resends the status email and records the attempt + audit", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue({
+      id: "order-1",
+      orderRef: "MSC-MERCH-2026-0042",
+      email: "jane@example.com",
+      studentName: "Jane",
+      status: "PENDING_VERIFICATION",
+      quantity: 1,
+      amount: 350,
+      rejectionReason: null,
+      financeNote: null,
+      variant: { label: "S", item: { name: "Shirt" } },
+      refund: null,
+    });
+    const res = await request(app).post("/api/v2/admin/merch/orders/order-1/resend-email");
+    expect(res.status).toBe(200);
+    // Notification tracking write + audit entry.
+    expect(prisma.merchOrder.update).toHaveBeenCalled();
+    expect(prisma.auditLog.create).toHaveBeenCalled();
+  });
+
+  it("404s for an unknown order", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue(null);
+    const res = await request(app).post("/api/v2/admin/merch/orders/nope/resend-email");
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/v2/admin/merch/orders/:orderId (detail timeline)", () => {
+  it("returns the submission timeline with attempt numbers", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue({
+      id: "order-1",
+      orderRef: "MSC-MERCH-2026-0042",
+      studentName: "Jane",
+      studentId: null,
+      email: "jane@example.com",
+      gcashNumber: null,
+      quantity: 1,
+      amount: 350,
+      status: "REJECTED",
+      rejectionReason: "AMOUNT_MISMATCH",
+      financeNote: null,
+      lastNotifiedAt: null,
+      lastNotificationOk: null,
+      notificationCount: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      variant: { label: "S", item: { name: "Shirt" } },
+      proofSubmissions: [
+        { id: "s1", referenceNumber: "1111111111111", screenshotPath: "proof-a.png", result: "ACCEPTED", officerDecision: "REJECTED", rejectionReason: "AMOUNT_MISMATCH", financeNote: null, reviewedById: "fin", reviewedAt: new Date(), createdAt: new Date() },
+        { id: "s2", referenceNumber: "2222222222222", screenshotPath: "proof-b.png", result: "ACCEPTED", officerDecision: "PENDING", rejectionReason: null, financeNote: null, reviewedById: null, reviewedAt: null, createdAt: new Date() },
+      ],
+      refund: null,
+    });
+    const res = await request(app).get("/api/v2/admin/merch/orders/order-1");
+    expect(res.status).toBe(200);
+    expect(res.body.data.order.submissions).toHaveLength(2);
+    expect(res.body.data.order.submissions[0].attempt).toBe(1);
+    expect(res.body.data.order.submissions[1].attempt).toBe(2);
+  });
+
+  it("404s for an unknown order", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue(null);
+    const res = await request(app).get("/api/v2/admin/merch/orders/nope");
+    expect(res.status).toBe(404);
+  });
+});
+
+// ── §7a Image proxies (public photo vs private screenshot separation) ────────
+describe("catalog photo proxy (public) & screenshot proxy (finance)", () => {
+  it("public photo proxy refuses a non-item- filename (can't serve screenshots)", async () => {
+    const res = await request(app).get("/api/v2/merch/photos/proof-secret.png");
+    expect(res.status).toBe(400);
+  });
+
+  it("public photo proxy accepts an item- filename (404 when absent)", async () => {
+    const res = await request(app).get("/api/v2/merch/photos/item-abc.png");
+    // Default storage mock returns a null stream → 404 (not 400).
+    expect(res.status).toBe(404);
+  });
+
+  it("screenshot proxy refuses a non-proof- filename", async () => {
+    const res = await request(app).get("/api/v2/admin/merch/screenshots/item-abc.png");
+    expect(res.status).toBe(400);
+  });
+});
+
+// ── §8 Multer photo-count cap ───────────────────────────────────────────────
+describe("item photo upload cap (§8)", () => {
+  it("returns a clean 400 when more than 6 photos are attached", async () => {
+    const req = request(app).post("/api/v2/admin/merch/items").field("name", "Shirt");
+    for (let i = 0; i < 7; i++) req.attach("photos", pngFixture, `p${i}.png`);
+    const res = await req;
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/at most 6 photos/i);
   });
 });
