@@ -98,13 +98,16 @@ enum MerchItemStatus {
 }
 
 // Order lifecycle for the offline GCash pre-order flow (PRD-V2 Finance Flows 2–5).
-// Stock is only decremented on CONFIRMED; it is never reserved earlier.
+// Stock is only decremented on CONFIRMED; it is never reserved earlier
+// (see issue #178 for the oversell trade-off this creates).
 enum MerchOrderStatus {
   AWAITING_PAYMENT // Order created; student has not submitted payment proof yet
   PENDING_VERIFICATION // Proof submitted; awaiting finance officer review
   CONFIRMED // Payment verified; stock decremented; awaiting pickup
   PAID_AND_CLAIMED // Merch physically handed over — terminal success state
   REJECTED // Payment failed verification or duplicate reference — resubmittable
+  REFUND_PENDING // Student paid but item is unfulfillable (oversold) — refund owed
+  REFUNDED // Refund processed offline and recorded — terminal state
   CANCELLED // Head-cancelled (terminal); refunds handled offline
 }
 
@@ -125,6 +128,23 @@ enum MerchRejectionReason {
 enum PaymentProofResult {
   ACCEPTED // Passed the duplicate check → order moved to PENDING_VERIFICATION
   DUPLICATE_REJECTED // Reference already used elsewhere → order auto-REJECTED
+}
+
+// Officer's verification decision on a single payment-proof submission (Flow 4).
+// Distinct from PaymentProofResult (the automated intake result): this records
+// what the human officer did with the attempt, giving each submission its own
+// outcome so the order's attempt history is auditable end-to-end.
+enum PaymentProofDecision {
+  PENDING // Awaiting officer review (default on intake)
+  VERIFIED // Officer confirmed this submission's payment
+  REJECTED // Officer rejected this submission (see rejectionReason)
+}
+
+// How an offline refund was issued (recorded for transparency, Flow: refund).
+enum MerchRefundMethod {
+  GCASH
+  CASH
+  OTHER
 }
 
 // ============================================================================
@@ -396,24 +416,31 @@ model MerchVariant {
 // in; guest fields (studentName/studentId/email/gcashNumber) are always stored
 // for display regardless of auth. Stock is not reserved until CONFIRMED.
 model MerchOrder {
-  id               String                   @id @default(uuid())
-  orderRef         String                   @unique // MSC-MERCH-YYYY-NNNN
-  userId           String? // Set when placed by a logged-in Member/Applicant
-  user             User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  studentName      String
-  studentId        String? // QCU Student ID (guest-entered or from the account)
-  email            String
-  gcashNumber      String? // Payer's GCash number — recorded for reference only
-  variantId        String
-  variant          MerchVariant             @relation(fields: [variantId], references: [id])
-  quantity         Int
-  amount           Decimal                  @db.Decimal(10, 2) // Snapshot of price × quantity at order time
-  status           MerchOrderStatus         @default(AWAITING_PAYMENT)
-  rejectionReason  MerchRejectionReason? // Set when status is REJECTED
-  financeNote      String?                  @db.Text // Free-text for OTHER rejections / cancellation notes
-  createdAt        DateTime                 @default(now())
-  updatedAt        DateTime                 @updatedAt
-  proofSubmissions PaymentProofSubmission[]
+  id                 String                   @id @default(uuid())
+  orderRef           String                   @unique // MSC-MERCH-YYYY-NNNN
+  userId             String? // Set when placed by a logged-in Member/Applicant
+  user               User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  studentName        String
+  studentId          String? // QCU Student ID (guest-entered or from the account)
+  email              String
+  gcashNumber        String? // Payer's GCash number — recorded for reference only
+  variantId          String
+  variant            MerchVariant             @relation(fields: [variantId], references: [id])
+  quantity           Int
+  amount             Decimal                  @db.Decimal(10, 2) // Snapshot of price × quantity at order time
+  status             MerchOrderStatus         @default(AWAITING_PAYMENT)
+  rejectionReason    MerchRejectionReason? // Latest rejection reason (denormalised from the newest submission)
+  financeNote        String?                  @db.Text // Free-text for OTHER rejections / cancellation notes
+  // Notification tracking (Module 04 §7b) — records the latest status-email
+  // attempt so Finance can tell "emailed" from "silently failed" and find
+  // stale orders (e.g. un-notified REFUND_PENDING / AMOUNT_MISMATCH).
+  lastNotifiedAt     DateTime? // Time of the most recent status-email attempt (ok or not)
+  lastNotificationOk Boolean? // Whether that most recent attempt actually sent
+  notificationCount  Int                      @default(0) // Count of successful status emails
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  proofSubmissions   PaymentProofSubmission[]
+  refund             MerchRefund? // Present once a refund is recorded (REFUNDED)
 
   @@index([status])
   @@index([email])
@@ -427,14 +454,37 @@ model MerchOrder {
 // violation. Duplicate detection is enforced in application code across all
 // orders and submissions.
 model PaymentProofSubmission {
-  id              String             @id @default(uuid())
+  id              String                @id @default(uuid())
   orderId         String
-  order           MerchOrder         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order           MerchOrder            @relation(fields: [orderId], references: [id], onDelete: Cascade)
   screenshotPath  String // Blob path/URL to the uploaded GCash screenshot
   referenceNumber String // 13-digit GCash reference number submitted by the student
   result          PaymentProofResult
-  createdAt       DateTime           @default(now())
+  // Officer verification decision for THIS attempt (Module 04 §7b). Preserves a
+  // per-attempt history so a resubmission never erases why an earlier attempt
+  // was rejected. The order's status/rejectionReason denormalise the latest.
+  officerDecision PaymentProofDecision  @default(PENDING)
+  rejectionReason MerchRejectionReason? // Officer's reason when officerDecision = REJECTED
+  financeNote     String?               @db.Text // Free-text note for OTHER rejections
+  reviewedById    String? // Actor (user id) who reviewed this attempt
+  reviewedAt      DateTime? // When the officer decided on this attempt
+  createdAt       DateTime              @default(now())
 
   @@index([orderId])
   @@index([referenceNumber])
+}
+
+// Offline refund record for an oversold/cancelled order (Module 04 §7a).
+// One refund per order. Kept as a dedicated record (rather than a note on the
+// order) so refund amount, method, and reference are transparently auditable.
+model MerchRefund {
+  id              String            @id @default(uuid())
+  orderId         String            @unique
+  order           MerchOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount          Decimal           @db.Decimal(10, 2) // Amount refunded (≤ order.amount)
+  method          MerchRefundMethod
+  referenceNumber String? // GCash/transfer reference of the refund, when applicable
+  note            String?           @db.Text // Optional context (e.g. partial refund reason)
+  processedById   String? // Actor (user id) who recorded the refund — head-only
+  processedAt     DateTime          @default(now())
 }
