@@ -22,6 +22,10 @@ vi.mock("../routes/authMiddleware", () => ({
   requireAdminLogistics: vi.fn(),
   requireAnyAdmin: vi.fn(),
   requireMemberOrAdmin: vi.fn(),
+  requireSuperadmin: vi.fn(),
+  requireAdminFinance: vi.fn(),
+  requireAdminFinanceHead: vi.fn(),
+  requireAdminLogisticsHead: vi.fn(),
 }));
 
 // ── Password Hashing Mock ────────────────────────────────────────────────

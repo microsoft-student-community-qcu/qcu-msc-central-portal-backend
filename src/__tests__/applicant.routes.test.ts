@@ -34,6 +34,10 @@ vi.mock("../routes/authMiddleware", () => ({
   requireAdminLogistics: mockRequireAdminLogistics,
   requireAnyAdmin: mockRequireAnyAdmin,
   requireMemberOrAdmin: mockRequireMemberOrAdmin,
+  requireSuperadmin: vi.fn(),
+  requireAdminFinance: vi.fn(),
+  requireAdminFinanceHead: vi.fn(),
+  requireAdminLogisticsHead: vi.fn(),
 }));
 
 import app from "../app";

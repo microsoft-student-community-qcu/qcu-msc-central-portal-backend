@@ -20,6 +20,7 @@ import applicantRoutes from "./routes/applicant.routes";
 import applicationDraftRoutes from "./routes/application-draft.routes";
 import eventRoutes from "./routes/event.routes";
 import userRoutes from "./routes/user.routes";
+import adminRoutes from "./routes/admin.routes";
 import authRoutes, { protectedAuthRouter } from "./routes/auth.routes";
 
 initSentry();
@@ -66,6 +67,9 @@ app.use("/api/v1/auth", protectedAuthRouter);
 
 // User routes
 app.use("/api/v1/users", userRoutes);
+
+// V2 admin routes (Module 01 — Super Admin Settings Hub). SUPERADMIN-only.
+app.use("/api/v2/admin", adminRoutes);
 
 // Applicant routes
 app.use("/api/v1/applicants", applicantRoutes);

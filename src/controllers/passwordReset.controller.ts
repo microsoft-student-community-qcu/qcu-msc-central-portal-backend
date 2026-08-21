@@ -15,6 +15,7 @@ import {
   verifyPasswordResetToken,
 } from "../utils/token";
 import { sendPasswordResetEmail } from "../services/email.service";
+import { ADMIN_ROLES } from "../config/roles";
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
 
@@ -37,8 +38,8 @@ function hashToken(token: string): string {
 /** Role boundary per portal — mirrors the per-portal sign-in endpoints. */
 function roleAllowedForPortal(portal: "student" | "admin", role: string): boolean {
   return portal === "admin"
-    ? role === "ADMIN_HR" || role === "ADMIN_LOGISTICS"
-    : role === "APPLICANT" || role === "MEMBER";
+    ? (ADMIN_ROLES as readonly string[]).includes(role)
+    : !(ADMIN_ROLES as readonly string[]).includes(role);
 }
 
 /** Look up the credential (email/password) Account row for a user. */

@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { auth } from "../config/auth";
 import { prisma } from "../config/database";
+import { ADMIN_ROLES } from "../config/roles";
 import { signInSchema, signUpSchema } from "../schemas/auth.schema";
 import { verifySetupToken } from "../utils/token";
 import {
@@ -148,8 +149,8 @@ const PORTAL_SIGN_IN_PATH = "/api/auth/sign-in/email";
 
 /**
  * Portal-specific sign-in endpoint factory — enforces role boundaries:
- *   Student Portal → APPLICANT / MEMBER only
- *   Admin Portal   → ADMIN_HR / ADMIN_LOGISTICS only
+ *   Student Portal → any non-admin role (APPLICANT / MEMBER / STARTUP_DEV)
+ *   Admin Portal   → ADMIN_ROLES only (all V1 + V2 admin roles)
  *
  * The generic /api/auth/sign-in/email is disabled to prevent ambiguous access.
  */
@@ -171,15 +172,17 @@ export function portalSignIn(portal: Portal) {
         select: { role: true },
       });
 
+      const roleList = ADMIN_ROLES as readonly string[];
+
       if (portal === "student") {
-        if (user && (user.role === "ADMIN_HR" || user.role === "ADMIN_LOGISTICS")) {
+        if (user && roleList.includes(user.role)) {
           res.status(403).json({
             success: false,
             message: "Admin accounts cannot sign in through the Student Portal. Please use the Admin Portal.",
           });
           return;
         }
-      } else if (!user || (user.role !== "ADMIN_HR" && user.role !== "ADMIN_LOGISTICS")) {
+      } else if (!user || !roleList.includes(user.role)) {
         res.status(403).json({
           success: false,
           message: "Access denied. Only admin accounts can sign in through the Admin Portal.",
