@@ -4,7 +4,9 @@
 
 Authentication is handled by **Better Auth** — OAuth, login, session management, and account creation go through `/api/auth/*`. Custom user profile and admin role management are at `/api/v1/users/*`.
 
-Users have one of four roles: `APPLICANT`, `MEMBER`, `ADMIN_HR`, or `ADMIN_LOGISTICS`. Unauthenticated visitors are Guests (no User record).
+Users have one of four **V1 roles**: `APPLICANT`, `MEMBER`, `ADMIN_HR`, or `ADMIN_LOGISTICS`. Unauthenticated visitors are Guests (no User record).
+
+> **V2 roles** (`SUPERADMIN`, `ADMIN_FINANCE`, `ADMIN_FINANCE_HEAD`, `ADMIN_LOGISTICS_HEAD`, `STARTUP_DEV`) exist in the system but are managed exclusively through the SUPERADMIN-only [`/api/v2/admin`](../v2/admin.md) surface. The V1 endpoints below can never grant them.
 
 > **Note:** There is **no public registration**. User accounts are created exclusively through the **membership application pipeline** (see [applicant activation flow](../guides/v1/workflows/auth-workflow.md#applicant-account-activation-flow)). The sign-up endpoint below is called by the frontend password-setup page after an applicant receives the email link.
 
@@ -47,8 +49,8 @@ The generic `/api/auth/sign-in/email` endpoint is **disabled**. Each frontend mu
 
 | Portal | Endpoint | Allowed Roles |
 |--------|----------|---------------|
-| **Student Portal** | `POST /api/v1/auth/student/sign-in` | `APPLICANT`, `MEMBER` |
-| **Admin Portal** | `POST /api/v1/auth/admin/sign-in` | `ADMIN_HR`, `ADMIN_LOGISTICS` |
+| **Student Portal** | `POST /api/v1/auth/student/sign-in` | Any non-admin role — `APPLICANT`, `MEMBER`, `STARTUP_DEV` |
+| **Admin Portal** | `POST /api/v1/auth/admin/sign-in` | All admin roles — `ADMIN_HR`, `ADMIN_LOGISTICS`, `SUPERADMIN`, `ADMIN_FINANCE`, `ADMIN_FINANCE_HEAD`, `ADMIN_LOGISTICS_HEAD` |
 
 **Rate limit:** 10 requests/minute per IP (independent per endpoint)
 
@@ -235,7 +237,9 @@ Links the authenticated user's account to their existing applicant record. Calle
 ### 9. Update User Role (Admin Only)
 
 **Description:**  
-Updates a user's role. Only accessible to `ADMIN_HR`.
+Updates a user's role. Only accessible to `ADMIN_HR` and **restricted to the V1 role set**
+(`APPLICANT`, `MEMBER`, `ADMIN_HR`, `ADMIN_LOGISTICS`) — V2 roles can never be granted here.
+For full role management, see the SUPERADMIN-only [`PATCH /api/v2/admin/users/:userId/role`](../v2/admin.md#2-update-user-role).
 
 **Method:** `PATCH`  
 **Path:** `/api/v1/users/:userId/role`

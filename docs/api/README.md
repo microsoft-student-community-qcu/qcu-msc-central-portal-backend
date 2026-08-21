@@ -2,8 +2,8 @@
 
 This folder contains versioned API documentation. Layout:
 
-- `v1/` — Stable V1 API reference (current)
-- `v2/` — Placeholder for next major version
+- `v1/` — Stable V1 API reference (frozen — bugfixes only)
+- `v2/` — V2 API reference (open — new features ship here per module)
 - `versioning.md` — API versioning guidelines
 - `deprecation-template.md` — Template to document deprecated endpoints
 

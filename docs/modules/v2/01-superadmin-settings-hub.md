@@ -7,8 +7,8 @@
 | **Module** | Super Admin Settings Hub |
 | **PRD Reference** | `docs/specs/PRD-V2.md` — Module Specs § Super Admin Settings Hub; Global NFRs § Role Inheritance |
 | **Milestone** | M0 — Foundation |
-| **Status** | Not Started |
-| **Assignee** | |
+| **Status** | Implemented (branch `feat/v2-superadmin` — pending PR) |
+| **Assignee** | @mark-ianz |
 | **Dependencies** | None — foundational module, ships first |
 
 ## 2. Actors & Permissions
@@ -52,28 +52,32 @@ Read-only interface listing tamper-evident audit logs of all administrative acti
 > Proposed — refine during build.
 
 - **Models:**
-  - `SystemSetting` — `key` (unique), `value` (JSON/boolean), `description`, `updatedById`, timestamps. Keys: `events_registration_open`, `merch_shop_open`, `maintenance_mode`, `datacamp_max_seats`
+  - `SystemSetting` — `key` (unique), `value` (JSON/boolean), `description`, `updatedById`, timestamps. Keys: `events_registration_open`, `merch_shop_open`, `maintenance_mode` (`datacamp_max_seats` deferred to Module 07 — the whitelist in `src/config/settings.ts` is extendable)
   - `AuditLog` — `actorId`, `action` (enum/string), `entityType`, `entityId`, `details` (JSON), `ipAddress`, `createdAt`
 - **Enums:** `UserRole` += `SUPERADMIN`, `ADMIN_FINANCE`, `ADMIN_FINANCE_HEAD`, `ADMIN_LOGISTICS_HEAD`, `STARTUP_DEV`
 - **Indexes:** `SystemSetting.key` unique; `AuditLog.createdAt` (desc) for viewer pagination
 
 ## 6. API Surface
 
-> Proposed — refine during build.
+> Proposed — refined during build. Paths use the `/api/v2/` namespace (V1 is frozen;
+> see `docs/api/versioning.md`).
 
 | Method | Path | Guard | Rate Limit | Notes |
 |--------|------|-------|------------|-------|
-| GET | `/api/v1/admin/users` | `requireSuperadmin` | — | List/search users (role management table) |
-| PATCH | `/api/v1/admin/users/:userId/role` | `requireSuperadmin` | — | Role mutation; self-demotion blocked server-side |
-| GET | `/api/v1/admin/settings` | `requireSuperadmin` | — | All toggles |
-| PATCH | `/api/v1/admin/settings` | `requireSuperadmin` | — | Update toggles (audit logged) |
-| GET | `/api/v1/admin/audit-logs` | `requireSuperadmin` | — | Paginated audit viewer |
+| GET | `/api/v2/admin/users` | `requireSuperadmin` | — | List/search users (role management table) |
+| PATCH | `/api/v2/admin/users/:userId/role` | `requireSuperadmin` | 20/min | Role mutation; self-demotion + last-superadmin blocked server-side |
+| GET | `/api/v2/admin/settings` | `requireSuperadmin` | — | All toggles |
+| PATCH | `/api/v2/admin/settings` | `requireSuperadmin` | 20/min | Update toggles (audit logged) |
+| GET | `/api/v2/admin/audit-logs` | `requireSuperadmin` | — | Paginated audit viewer with chain-integrity check |
 
 ## 7. Email Triggers
 
 | Trigger | Template | Recipient |
 |---------|----------|-----------|
 | Role change notification (optional) | Role changed | Affected user |
+
+> **Decision (2026-08-19):** the optional role-change email is **deferred** — M0 ships the
+> audit log as the notification trail; revisit in M5 if the org wants email notifications.
 
 ## 8. Settings / Toggles & Audit Events
 
@@ -84,15 +88,20 @@ Read-only interface listing tamper-evident audit logs of all administrative acti
 
 | # | Question | Decision | Date |
 |---|----------|----------|------|
-| 1 | Should `ADMIN_FINANCE_HEAD` / `ADMIN_LOGISTICS_HEAD` also manage settings, or strictly `SUPERADMIN`? | TBD | |
+| 1 | Should `ADMIN_FINANCE_HEAD` / `ADMIN_LOGISTICS_HEAD` also manage settings, or strictly `SUPERADMIN`? | Strictly `SUPERADMIN` — heads have no settings access (§2 actors table) | 2026-08-19 |
 
 ## 10. Testing Checklist
 
-- [ ] 200/201 success, 400 validation, 401 auth, 403 forbidden, 404 not found
-- [ ] Self-demotion returns 400/403 and leaves role unchanged
-- [ ] SUPERADMIN passes all other modules' guards
-- [ ] Toggle PATCH writes an AuditLog entry
-- [ ] Docs updated (user.md data model, RBAC guide)
+The full prioritized manual suite (P0/P1/P2) lives in
+[`docs/test-cases/v2/01-superadmin-settings-hub.md`](../../test-cases/v2/01-superadmin-settings-hub.md).
+
+Highlights:
+
+- 200/201 success, 400 validation, 401 auth, 403 forbidden, 404 not found, 429 rate limited
+- Self-demotion and last-superadmin demotion return 403 and leave the role unchanged
+- SUPERADMIN passes all other modules' guards
+- Toggle PATCH writes an AuditLog entry; audit chain integrity verifies (`integrityOk: true`)
+- Regression: `npm test` (158/158) + `npm run build` clean
 
 ## 11. Related Docs
 

@@ -11,6 +11,8 @@ This directory contains the core data models used in the QCU MSC Central Portal,
 | Event | [event.md](event.md) | Organizational events |
 | Registration | [registration.md](registration.md) | Event registration tickets |
 | Sponsorship Inquiry | [sponsorship-inquiry.md](sponsorship-inquiry.md) | Corporate sponsorship leads |
+| System Setting | [system-setting.md](system-setting.md) | Global system toggles (V2 Module 01) |
+| Audit Log | [audit-log.md](audit-log.md) | Tamper-evident admin action trail (V2 Module 01) |
 | Application Draft | — | Inline in API docs: multi-step draft table for batch application submission |
 
 ---
@@ -24,12 +26,15 @@ User (1) ──→ (Many) Registration
 User (1) ──→ (0 or 1) Applicant
 Event (1) ──→ (Many) Registration
 ApplicationDraft ──→ (references) OCR session (in-memory)
+SystemSetting (last editor) ──→ references User.id (no FK)
+AuditLog (actor) ──→ references User.id (no FK)
 ```
 
 **Cascade Delete Rules:**
 - Deleting a User cascades to: Sessions, Accounts, Registrations
 - Deleting a User sets `Applicant.userId` to null (soft unlink, Applicant record retained)
 - Deleting an Event cascades to: Registrations
+- **AuditLog / SystemSetting rows are NOT tied to User by FK** — they survive user deletion (audit trail must never be destroyed by a user record being removed)
 
 ---
 
@@ -46,6 +51,11 @@ ApplicationDraft ──→ (references) OCR session (in-memory)
 | `Registration` | `[eventId, userId]` | Unique composite |
 | `Registration` | `[eventId, studentId]` | Unique composite |
 | `ApplicationDraft` | `ocrSessionId` | Unique |
+| `SystemSetting` | `key` | Unique |
+| `SystemSetting` | `updatedAt` | Index |
+| `AuditLog` | `createdAt` | Index (desc, viewer pagination) |
+| `AuditLog` | `actorId` | Index |
+| `AuditLog` | `action` | Index |
 
 ---
 
@@ -83,3 +93,4 @@ Draft lifecycle: created by the multi-step flow, blocks a new application while 
 | 2026-07-29 | Added `ApplicationDraft` model (multi-step batch submission); added `Office` enum |
 | 2026-08-02 | Added `lastResumeEmailSentAt` to `ApplicationDraft` for the draft resume-link cooldown; documented 7-day draft TTL and lazy expiry |
 | 2026-08-03 | Auto-link-on-sign-in fallback: `Applicant.userId` is now also populated during sign-in (idempotent `updateMany`) — no schema change |
+| 2026-08-19 | V2 Module 01 (M0): `UserRole` expanded to 9 values (`SUPERADMIN`, `ADMIN_FINANCE`, `ADMIN_FINANCE_HEAD`, `ADMIN_LOGISTICS_HEAD`, `STARTUP_DEV`); added `SystemSetting` (global toggles) and `AuditLog` (tamper-evident hash chain) models |
