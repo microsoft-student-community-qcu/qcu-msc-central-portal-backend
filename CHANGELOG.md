@@ -39,11 +39,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`src/config/roles.ts`) instead of hardcoded checks.
 - `PATCH /api/v1/users/:userId/role` locked to V1 roles and Zod-validated.
 - Seed extended (SUPERADMIN + settings); rate limiting added to admin mutation endpoints.
-- Changelog obligation established in AGENTS.md — every task logs its changes.
 
 ### Fixed
 
 - New V2 admin roles could not sign in through the Admin Portal (hardcoded 2-role check).
+
+## [1.0.2] - 2026-08-20
+
+### Added
+
+- DB reset script with safety guards: refuses production DB, requires confirmation (#134).
+- Seed dataset sizes configurable via env vars (`SEED_USER_COUNT`, `SEED_MEMBER_USER_COUNT`, etc.)
+  with fail-fast validation (#147, closes #146).
+
+### Changed
+
+- App modularized: extracted auth controller, rate limiters, CORS config from `app.ts` (#152).
+- Base routes scoped under `/api` prefix (#152).
+- CORS allowlist extended for Vercel preview deployments (#152).
+- V2 module docs scaffold (M0–M7), versioned guides, and development wave plan (#169).
+- Changelog obligation established in AGENTS.md — every task logs its changes.
 
 ### Removed
 

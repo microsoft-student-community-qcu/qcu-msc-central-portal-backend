@@ -106,7 +106,7 @@ Releases happen when you're ready to ship accumulated changes. The flow is: **de
 
 There's no fixed schedule — release when it makes sense:
 
-- **Feature milestone complete** (e.g. M0 merged → `v0.1.0`)
+- **Feature milestone complete** (e.g. M0 merged → `v1.1.0`)
 - **Ready to deploy** to staging or production
 - **Natural stopping point** (end of sprint, before next module)
 
@@ -131,36 +131,50 @@ After your feature PRs have merged to `develop`:
 4. **Commit and tag:**
    ```bash
    git add CHANGELOG.md
-   git commit -m "chore: release v0.1.0"
-   git tag v0.1.0
+   git commit -m "chore: release v1.2.0"
+   git tag v1.2.0
    ```
 
 5. **Push:**
    ```bash
    git push origin develop
-   git push origin v0.1.0
+   git push origin v1.2.0
    ```
 
 6. **Create a GitHub Release** from the tag (optional but recommended).
 
 ### Versioning (semver)
 
+We follow [Semantic Versioning](https://semver.org): **`MAJOR.MINOR.PATCH`**
+
 ```
-MAJOR.MINOR.PATCH
-  │      │     └── bugfixes only
-  │      └──────── new features (backwards compatible)
-  └─────────────── breaking changes
+MAJOR . MINOR . PATCH
+  │       │      └── 1.0.1 → 1.0.2  (bugfixes, internal cleanup, docs)
+  │       └────────  1.0.x → 1.1.0  (new features, backwards compatible)
+  └───────────────── 1.x.x → 2.0.0  (breaking changes — existing clients will fail)
 ```
 
-For V2 module development (no breaking changes to V1):
+| Type | When | Example |
+|---|---|---|
+| **PATCH** | Bugfix, internal cleanup, docs, tooling | Fix validation bug, add DB reset script, seed improvements |
+| **MINOR** | New feature, backwards compatible | Add password-reset endpoints, new admin API |
+| **MAJOR** | Breaking change — existing clients fail | Change all API paths from `/api/v1/...` to `/v1/...` |
+
+**Rule of thumb:** if a user/consumer of the API has to change their code, it's MAJOR.
+If you're adding something they can ignore, it's MINOR. If you're fixing something
+they didn't even know was broken, it's PATCH.
+
+**V2 module releases:** each module gets a MINOR bump (no breaking changes to V1):
 
 | Version | When |
 |---|---|
-| `0.1.0` | M0 (Super Admin Settings Hub) merged |
-| `0.2.0` | M1 (Events v2) merged |
-| `0.3.0` | M2 (Merch) merged |
+| `1.0.0` | Initial release |
+| `1.0.1` | Post-release fixes (password reset, applicant filters, prisma hotfix) |
+| `1.0.2` | Internal cleanup (app refactor, scaffolding, seed improvements) |
+| `1.1.0` | M0 (Super Admin Settings Hub) |
+| `1.2.0` | M1 (Events v2) |
+| `1.3.0` | M2 (Merch) |
 | ... | Each subsequent module |
-| `1.0.0` | V2 "initial release" — all modules complete |
 
 ---
 
