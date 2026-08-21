@@ -15,10 +15,11 @@ import {
   updateMerchItemSchema,
   rejectOrderSchema,
   cancelOrderSchema,
+  refundOrderSchema,
 } from "../schemas/merch.schema";
 import { validateImageMimeType } from "../utils/fileValidation";
 import { saveMerchImage, getMerchImageStream } from "../utils/imageStorage";
-import { photosToArray, imageExtensionFor } from "../utils/merch";
+import { photosToArray, imageExtensionFor, recordOrderNotification, safeStorageFilename, SCREENSHOT_PREFIX, CATALOG_PHOTO_PREFIX, merchPhotoUrl } from "../utils/merch";
 import { recordAudit } from "../utils/audit";
 import { clampPagination } from "../schemas/admin.schema";
 import { randomUUID } from "node:crypto";
@@ -27,11 +28,14 @@ import {
   sendMerchOrderRejectedEmail,
   sendMerchOrderClaimedEmail,
   sendMerchOrderCancelledEmail,
+  sendMerchOutOfStockEmail,
+  sendMerchRefundProcessedEmail,
+  sendMerchOrderCreatedEmail,
+  sendMerchProofReceivedEmail,
 } from "../services/email.service";
 import { env } from "../config/env";
 
 const MAX_ORDER_PAGE_SIZE = 50;
-const MAX_PHOTOS = 6;
 
 // Human-readable rejection reason labels for the student-facing email.
 // Typed by the Prisma enum so a new reason must be given a label here.
@@ -75,7 +79,7 @@ function serializeAdminItem(item: AdminMerchItem) {
     description: item.description,
     price: Number(item.price),
     status: item.status,
-    photos: photosToArray(item.photos),
+    photos: photosToArray(item.photos).map(merchPhotoUrl),
     lowStockThreshold: item.lowStockThreshold,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
@@ -125,10 +129,9 @@ export async function createItem(req: Request, res: Response): Promise<void> {
       res.status(400).json({ success: false, message: "At least one product photo is required." });
       return;
     }
-    if (photos.length > MAX_PHOTOS) {
-      res.status(400).json({ success: false, message: `You can upload at most ${MAX_PHOTOS} photos.` });
-      return;
-    }
+    // Note: multer's maxCount (6) already rejects the 7th+ file before we reach
+    // here (mapped to a 400 by handleMulterError), so no photos.length > MAX
+    // check is needed — it would be unreachable.
 
     // Validate every photo by magic bytes before uploading any.
     for (const photo of photos) {
@@ -141,11 +144,14 @@ export async function createItem(req: Request, res: Response): Promise<void> {
 
     const { name, description, price, lowStockThreshold, variants } = parsed.data;
 
-    // Upload photos → collect public Blob URLs (catalog is public).
-    const photoUrls: string[] = [];
+    // Upload photos → store the FILENAME (not the blob URL) so the public photo
+    // proxy (GET /api/v2/merch/photos/:filename) serves them from the private
+    // container. Serializers turn filenames back into absolute proxy URLs.
+    const photoFilenames: string[] = [];
     for (const photo of photos) {
-      const filename = `item-${randomUUID()}.${imageExtensionFor(photo.mimetype)}`;
-      photoUrls.push(await saveMerchImage(photo.buffer, filename, photo.mimetype));
+      const filename = `${CATALOG_PHOTO_PREFIX}${randomUUID()}.${imageExtensionFor(photo.mimetype)}`;
+      await saveMerchImage(photo.buffer, filename, photo.mimetype);
+      photoFilenames.push(filename);
     }
 
     const item = await prisma.merchItem.create({
@@ -154,7 +160,7 @@ export async function createItem(req: Request, res: Response): Promise<void> {
         description,
         price: new Prisma.Decimal(price),
         lowStockThreshold,
-        photos: photoUrls,
+        photos: photoFilenames,
         variants: { create: variants.map((v) => ({ label: v.label, stock: v.stock })) },
       },
       include: { variants: { orderBy: { label: "asc" } } },
@@ -207,12 +213,9 @@ export async function updateItem(req: Request, res: Response): Promise<void> {
     if (price !== undefined) data.price = new Prisma.Decimal(price);
     if (lowStockThreshold !== undefined) data.lowStockThreshold = lowStockThreshold;
 
-    // Replace the photo set only when new photos are uploaded.
+    // Replace the photo set only when new photos are uploaded. (multer's
+    // maxCount already caps the count before we get here.)
     if (photos.length > 0) {
-      if (photos.length > MAX_PHOTOS) {
-        res.status(400).json({ success: false, message: `You can upload at most ${MAX_PHOTOS} photos.` });
-        return;
-      }
       for (const photo of photos) {
         const check = await validateImageMimeType(photo.buffer, "Product photo");
         if (!check.valid) {
@@ -220,12 +223,13 @@ export async function updateItem(req: Request, res: Response): Promise<void> {
           return;
         }
       }
-      const photoUrls: string[] = [];
+      const photoFilenames: string[] = [];
       for (const photo of photos) {
-        const filename = `item-${randomUUID()}.${imageExtensionFor(photo.mimetype)}`;
-        photoUrls.push(await saveMerchImage(photo.buffer, filename, photo.mimetype));
+        const filename = `${CATALOG_PHOTO_PREFIX}${randomUUID()}.${imageExtensionFor(photo.mimetype)}`;
+        await saveMerchImage(photo.buffer, filename, photo.mimetype);
+        photoFilenames.push(filename);
       }
-      data.photos = photoUrls;
+      data.photos = photoFilenames;
     }
 
     await prisma.$transaction(async (tx) => {
@@ -324,6 +328,7 @@ export async function listOrders(req: Request, res: Response): Promise<void> {
         include: {
           variant: { select: { label: true, item: { select: { name: true } } } },
           proofSubmissions: { orderBy: { createdAt: "desc" }, take: 1 },
+          _count: { select: { proofSubmissions: true } },
         },
       }),
     ]);
@@ -343,6 +348,12 @@ export async function listOrders(req: Request, res: Response): Promise<void> {
       rejectionReason: o.rejectionReason,
       latestReferenceNumber: o.proofSubmissions[0]?.referenceNumber ?? null,
       latestScreenshot: o.proofSubmissions[0]?.screenshotPath ?? null,
+      attemptCount: o._count.proofSubmissions,
+      // Notification tracking (§7b) — lets Finance spot orders whose last email
+      // silently failed (lastNotificationOk === false) and when they last tried.
+      lastNotifiedAt: o.lastNotifiedAt,
+      lastNotificationOk: o.lastNotificationOk,
+      notificationCount: o.notificationCount,
       createdAt: o.createdAt,
       updatedAt: o.updatedAt,
     }));
@@ -364,9 +375,13 @@ export async function listOrders(req: Request, res: Response): Promise<void> {
 export async function confirmOrder(req: Request, res: Response): Promise<void> {
   try {
     const { orderId } = req.params;
+    const actorId = actorFrom(req);
     const order = await prisma.merchOrder.findUnique({
       where: { id: orderId },
-      include: { variant: { select: { id: true, label: true, item: { select: { name: true } } } } },
+      include: {
+        variant: { select: { id: true, label: true, item: { select: { name: true } } } },
+        proofSubmissions: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
+      },
     });
     if (!order) {
       res.status(404).json({ success: false, message: "Order not found" });
@@ -377,6 +392,8 @@ export async function confirmOrder(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    const latestSubmissionId = order.proofSubmissions[0]?.id ?? null;
+
     // Atomic conditional decrement — never read-then-write (PRD NFR concurrency).
     const confirmed = await prisma.$transaction(async (tx) => {
       const dec = await tx.merchVariant.updateMany({
@@ -385,38 +402,59 @@ export async function confirmOrder(req: Request, res: Response): Promise<void> {
       });
       if (dec.count === 0) return false; // Stock ran out since submission
       await tx.merchOrder.update({ where: { id: orderId }, data: { status: "CONFIRMED" } });
+      // The payment on this attempt was valid — record the officer's decision.
+      if (latestSubmissionId) {
+        await tx.paymentProofSubmission.update({
+          where: { id: latestSubmissionId },
+          data: { officerDecision: "VERIFIED", reviewedById: actorId, reviewedAt: new Date() },
+        });
+      }
       return true;
     });
 
     if (!confirmed) {
-      // Last unit claimed by another confirmed order first (Flow 4 edge case).
-      await prisma.merchOrder.update({
-        where: { id: orderId },
-        data: { status: "REJECTED", rejectionReason: "OUT_OF_STOCK" },
+      // Oversold: the student PAID but the last unit was confirmed for someone
+      // else first. This is not a payment rejection — the payment was fine — so
+      // the order moves to REFUND_PENDING (owes a refund/swap), never REJECTED,
+      // and the student gets the out-of-stock email (no "resubmit" button).
+      // See issue #178 for why oversell is structural under the no-reserve model.
+      await prisma.$transaction(async (tx) => {
+        await tx.merchOrder.update({
+          where: { id: orderId },
+          data: { status: "REFUND_PENDING", rejectionReason: "OUT_OF_STOCK" },
+        });
+        if (latestSubmissionId) {
+          await tx.paymentProofSubmission.update({
+            where: { id: latestSubmissionId },
+            data: { officerDecision: "VERIFIED", reviewedById: actorId, reviewedAt: new Date() },
+          });
+        }
       });
       await recordAudit({
-        actorId: actorFrom(req),
-        action: "MERCH_ORDER_REJECTED",
+        actorId,
+        action: "MERCH_ORDER_REFUND_PENDING",
         entityType: "MERCH_ORDER",
         entityId: orderId,
         details: { reason: "OUT_OF_STOCK", auto: true },
         ipAddress: ipFrom(req),
       });
-      await sendMerchOrderRejectedEmail(order.email, {
+      const emailed = await sendMerchOutOfStockEmail(order.email, {
         studentName: order.studentName,
         orderRef: order.orderRef,
-        reasonLabel: REJECTION_REASON_LABELS.OUT_OF_STOCK,
-        trackingUrl: trackingUrl(order.orderRef),
+        itemName: order.variant.item.name,
+        variantLabel: order.variant.label,
       });
+      await recordOrderNotification(orderId, emailed);
       res.status(409).json({
         success: false,
-        message: "Stock ran out before this order could be confirmed. The order was rejected and the student notified.",
+        message:
+          "Stock ran out before this order could be confirmed. The order is now awaiting a refund and the student has been notified — process the refund from the order.",
       });
       return;
     }
 
     await recordAudit({
-      actorId: actorFrom(req),
+      actorId,
       action: "MERCH_ORDER_CONFIRMED",
       entityType: "MERCH_ORDER",
       entityId: orderId,
@@ -424,12 +462,13 @@ export async function confirmOrder(req: Request, res: Response): Promise<void> {
       ipAddress: ipFrom(req),
     });
 
-    await sendMerchOrderConfirmedEmail(order.email, {
+    const emailed = await sendMerchOrderConfirmedEmail(order.email, {
       studentName: order.studentName,
       orderRef: order.orderRef,
       itemName: order.variant.item.name,
       variantLabel: order.variant.label,
     });
+    await recordOrderNotification(orderId, emailed);
 
     res.status(200).json({ success: true, message: "Payment confirmed. Stock updated and the student notified." });
   } catch (error) {
@@ -454,7 +493,14 @@ export async function rejectOrder(req: Request, res: Response): Promise<void> {
 
     const order = await prisma.merchOrder.findUnique({
       where: { id: orderId },
-      select: { id: true, status: true, email: true, studentName: true, orderRef: true },
+      select: {
+        id: true,
+        status: true,
+        email: true,
+        studentName: true,
+        orderRef: true,
+        proofSubmissions: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
+      },
     });
     if (!order) {
       res.status(404).json({ success: false, message: "Order not found" });
@@ -466,13 +512,33 @@ export async function rejectOrder(req: Request, res: Response): Promise<void> {
     }
 
     const { reason, financeNote } = parsed.data;
-    await prisma.merchOrder.update({
-      where: { id: orderId },
-      data: { status: "REJECTED", rejectionReason: reason, financeNote: financeNote ?? null },
+    const actorId = actorFrom(req);
+    const latestSubmissionId = order.proofSubmissions[0]?.id ?? null;
+
+    // Record the decision on BOTH the submission (per-attempt history — a later
+    // resubmission never erases why this attempt failed) and the order (latest
+    // denormalised state that the tracking page and queue read).
+    await prisma.$transaction(async (tx) => {
+      await tx.merchOrder.update({
+        where: { id: orderId },
+        data: { status: "REJECTED", rejectionReason: reason, financeNote: financeNote ?? null },
+      });
+      if (latestSubmissionId) {
+        await tx.paymentProofSubmission.update({
+          where: { id: latestSubmissionId },
+          data: {
+            officerDecision: "REJECTED",
+            rejectionReason: reason,
+            financeNote: financeNote ?? null,
+            reviewedById: actorId,
+            reviewedAt: new Date(),
+          },
+        });
+      }
     });
 
     await recordAudit({
-      actorId: actorFrom(req),
+      actorId,
       action: "MERCH_ORDER_REJECTED",
       entityType: "MERCH_ORDER",
       entityId: orderId,
@@ -480,12 +546,13 @@ export async function rejectOrder(req: Request, res: Response): Promise<void> {
       ipAddress: ipFrom(req),
     });
 
-    await sendMerchOrderRejectedEmail(order.email, {
+    const emailed = await sendMerchOrderRejectedEmail(order.email, {
       studentName: order.studentName,
       orderRef: order.orderRef,
       reasonLabel: REJECTION_REASON_LABELS[reason] ?? reason,
       trackingUrl: trackingUrl(order.orderRef),
     });
+    await recordOrderNotification(orderId, emailed);
 
     res.status(200).json({ success: true, message: "Order rejected and the student notified." });
   } catch (error) {
@@ -521,11 +588,12 @@ export async function claimOrder(req: Request, res: Response): Promise<void> {
       ipAddress: ipFrom(req),
     });
 
-    await sendMerchOrderClaimedEmail(order.email, {
+    const emailed = await sendMerchOrderClaimedEmail(order.email, {
       studentName: order.studentName,
       orderRef: order.orderRef,
       itemName: order.variant.item.name,
     });
+    await recordOrderNotification(orderId, emailed);
 
     res.status(200).json({ success: true, message: "Order marked as claimed. Receipt emailed to the student." });
   } catch (error) {
@@ -556,7 +624,11 @@ export async function cancelOrder(req: Request, res: Response): Promise<void> {
       res.status(404).json({ success: false, message: "Order not found" });
       return;
     }
-    if (order.status === "CANCELLED" || order.status === "PAID_AND_CLAIMED") {
+    // Terminal / refund-track states are not cancellable. Oversold orders
+    // (REFUND_PENDING) and refunded orders are handled by the refund endpoint,
+    // which keeps a dedicated MerchRefund record instead of a bare cancel.
+    const uncancellable: MerchOrderStatus[] = ["CANCELLED", "PAID_AND_CLAIMED", "REFUND_PENDING", "REFUNDED"];
+    if (uncancellable.includes(order.status)) {
       res.status(409).json({ success: false, message: "This order can no longer be cancelled." });
       return;
     }
@@ -584,11 +656,12 @@ export async function cancelOrder(req: Request, res: Response): Promise<void> {
       ipAddress: ipFrom(req),
     });
 
-    await sendMerchOrderCancelledEmail(order.email, {
+    const emailed = await sendMerchOrderCancelledEmail(order.email, {
       studentName: order.studentName,
       orderRef: order.orderRef,
       note: parsed.data.financeNote,
     });
+    await recordOrderNotification(orderId, emailed);
 
     res.status(200).json({ success: true, message: "Order cancelled and the student notified." });
   } catch (error) {
@@ -597,19 +670,310 @@ export async function cancelOrder(req: Request, res: Response): Promise<void> {
   }
 }
 
+// ── Order detail, refund & resend (§7a/§7b) ─────────────────────────────────
+
+/**
+ * GET /api/v2/admin/merch/orders/:orderId — full order with the payment-proof
+ * attempt timeline (§7b #7) and refund record (§7a). Lets an officer see, e.g.
+ * "attempt 2 — attempt 1 rejected AMOUNT_MISMATCH".
+ */
+export async function getOrderDetail(req: Request, res: Response): Promise<void> {
+  try {
+    const { orderId } = req.params;
+    const order = await prisma.merchOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        variant: { select: { label: true, item: { select: { name: true } } } },
+        proofSubmissions: { orderBy: { createdAt: "asc" } },
+        refund: true,
+      },
+    });
+    if (!order) {
+      res.status(404).json({ success: false, message: "Order not found" });
+      return;
+    }
+
+    const submissions = order.proofSubmissions.map((s, i) => ({
+      attempt: i + 1,
+      id: s.id,
+      referenceNumber: s.referenceNumber,
+      screenshot: s.screenshotPath,
+      // `result` is the automated intake outcome; a DUPLICATE_REJECTED attempt
+      // is terminal there and never reaches an officer (officerDecision stays
+      // PENDING). Otherwise officerDecision reflects the human review.
+      result: s.result,
+      officerDecision: s.officerDecision,
+      rejectionReason: s.rejectionReason,
+      financeNote: s.financeNote,
+      reviewedById: s.reviewedById,
+      reviewedAt: s.reviewedAt,
+      createdAt: s.createdAt,
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        order: {
+          id: order.id,
+          orderRef: order.orderRef,
+          studentName: order.studentName,
+          studentId: order.studentId,
+          email: order.email,
+          gcashNumber: order.gcashNumber,
+          itemName: order.variant.item.name,
+          variantLabel: order.variant.label,
+          quantity: order.quantity,
+          amount: Number(order.amount),
+          status: order.status,
+          rejectionReason: order.rejectionReason,
+          financeNote: order.financeNote,
+          lastNotifiedAt: order.lastNotifiedAt,
+          lastNotificationOk: order.lastNotificationOk,
+          notificationCount: order.notificationCount,
+          createdAt: order.createdAt,
+          updatedAt: order.updatedAt,
+          submissions,
+          refund: order.refund
+            ? {
+                amount: Number(order.refund.amount),
+                method: order.refund.method,
+                referenceNumber: order.refund.referenceNumber,
+                note: order.refund.note,
+                processedById: order.refund.processedById,
+                processedAt: order.refund.processedAt,
+              }
+            : null,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Failed to get merch order detail:", error);
+    res.status(500).json({ success: false, message: "Internal server error while fetching the order" });
+  }
+}
+
+/**
+ * POST /api/v2/admin/merch/orders/:orderId/refund — head-only. Records a
+ * dedicated MerchRefund for an oversold order (REFUND_PENDING → REFUNDED) so
+ * the refund amount, method, and reference are transparently auditable (§7a).
+ */
+export async function refundOrder(req: Request, res: Response): Promise<void> {
+  try {
+    const { orderId } = req.params;
+    const parsed = refundOrderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const order = await prisma.merchOrder.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        status: true,
+        email: true,
+        studentName: true,
+        orderRef: true,
+        amount: true,
+        refund: { select: { id: true } },
+      },
+    });
+    if (!order) {
+      res.status(404).json({ success: false, message: "Order not found" });
+      return;
+    }
+    // Refunds are recorded for orders that owe money after payment — the
+    // oversell REFUND_PENDING state. (Head cancellations note refunds offline.)
+    if (order.status !== "REFUND_PENDING") {
+      res.status(409).json({ success: false, message: "Only orders awaiting a refund can be refunded." });
+      return;
+    }
+    if (order.refund) {
+      res.status(409).json({ success: false, message: "A refund has already been recorded for this order." });
+      return;
+    }
+
+    const { amount, method, referenceNumber, note } = parsed.data;
+    const orderTotal = Number(order.amount);
+    if (amount > orderTotal) {
+      res.status(400).json({
+        success: false,
+        message: `Refund amount cannot exceed the order total of ₱${orderTotal.toFixed(2)}.`,
+      });
+      return;
+    }
+
+    const actorId = actorFrom(req);
+    await prisma.$transaction(async (tx) => {
+      await tx.merchRefund.create({
+        data: {
+          orderId,
+          amount: new Prisma.Decimal(amount),
+          method,
+          referenceNumber: referenceNumber ?? null,
+          note: note ?? null,
+          processedById: actorId,
+        },
+      });
+      await tx.merchOrder.update({ where: { id: orderId }, data: { status: "REFUNDED" } });
+    });
+
+    await recordAudit({
+      actorId,
+      action: "MERCH_ORDER_REFUNDED",
+      entityType: "MERCH_ORDER",
+      entityId: orderId,
+      details: { amount, method },
+      ipAddress: ipFrom(req),
+    });
+
+    const emailed = await sendMerchRefundProcessedEmail(order.email, {
+      studentName: order.studentName,
+      orderRef: order.orderRef,
+      amount,
+      method,
+      referenceNumber: referenceNumber ?? null,
+      note: note ?? null,
+    });
+    await recordOrderNotification(orderId, emailed);
+
+    res.status(200).json({ success: true, message: "Refund recorded and the student notified." });
+  } catch (error) {
+    console.error("Failed to refund merch order:", error);
+    res.status(500).json({ success: false, message: "Internal server error while recording the refund" });
+  }
+}
+
+/**
+ * POST /api/v2/admin/merch/orders/:orderId/resend-email — resend the status
+ * email for the order's current state (§5/§6). Fixes the "student never got
+ * notified" gap: senders can silently fail, so Finance needs a manual retry.
+ */
+export async function resendOrderEmail(req: Request, res: Response): Promise<void> {
+  try {
+    const { orderId } = req.params;
+    const order = await prisma.merchOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        variant: { select: { label: true, item: { select: { name: true } } } },
+        refund: true,
+      },
+    });
+    if (!order) {
+      res.status(404).json({ success: false, message: "Order not found" });
+      return;
+    }
+
+    const common = { studentName: order.studentName, orderRef: order.orderRef };
+    const itemName = order.variant.item.name;
+    const variantLabel = order.variant.label;
+    let emailed = false;
+
+    switch (order.status) {
+      case "AWAITING_PAYMENT": {
+        if (!env.GCASH_NUMBER || !env.GCASH_QR_IMAGE_URL) {
+          res.status(503).json({ success: false, message: "Payment details are not configured; cannot resend." });
+          return;
+        }
+        emailed = await sendMerchOrderCreatedEmail(order.email, {
+          ...common,
+          itemName,
+          variantLabel,
+          quantity: order.quantity,
+          amount: Number(order.amount),
+          gcashNumber: env.GCASH_NUMBER,
+          gcashQrImageUrl: env.GCASH_QR_IMAGE_URL,
+          trackingUrl: trackingUrl(order.orderRef),
+        });
+        break;
+      }
+      case "PENDING_VERIFICATION":
+        emailed = await sendMerchProofReceivedEmail(order.email, common);
+        break;
+      case "CONFIRMED":
+        emailed = await sendMerchOrderConfirmedEmail(order.email, { ...common, itemName, variantLabel });
+        break;
+      case "REJECTED":
+        emailed = await sendMerchOrderRejectedEmail(order.email, {
+          ...common,
+          reasonLabel: order.rejectionReason
+            ? REJECTION_REASON_LABELS[order.rejectionReason] ?? order.rejectionReason
+            : "Your payment could not be verified.",
+          trackingUrl: trackingUrl(order.orderRef),
+        });
+        break;
+      case "REFUND_PENDING":
+        emailed = await sendMerchOutOfStockEmail(order.email, { ...common, itemName, variantLabel });
+        break;
+      case "REFUNDED":
+        if (!order.refund) {
+          res.status(409).json({ success: false, message: "No refund record exists for this order yet." });
+          return;
+        }
+        emailed = await sendMerchRefundProcessedEmail(order.email, {
+          ...common,
+          amount: Number(order.refund.amount),
+          method: order.refund.method,
+          referenceNumber: order.refund.referenceNumber,
+          note: order.refund.note,
+        });
+        break;
+      case "PAID_AND_CLAIMED":
+        emailed = await sendMerchOrderClaimedEmail(order.email, { ...common, itemName });
+        break;
+      case "CANCELLED":
+        emailed = await sendMerchOrderCancelledEmail(order.email, {
+          ...common,
+          note: order.financeNote ?? "Your order was cancelled by the Finance team.",
+        });
+        break;
+      default:
+        res.status(409).json({ success: false, message: "No email is available for this order's status." });
+        return;
+    }
+
+    await recordOrderNotification(orderId, emailed);
+    await recordAudit({
+      actorId: actorFrom(req),
+      action: "MERCH_ORDER_EMAIL_RESENT",
+      entityType: "MERCH_ORDER",
+      entityId: orderId,
+      details: { status: order.status, ok: emailed },
+      ipAddress: ipFrom(req),
+    });
+
+    if (!emailed) {
+      res.status(502).json({ success: false, message: "The email failed to send. Please try again shortly." });
+      return;
+    }
+    res.status(200).json({ success: true, message: "Status email resent to the student." });
+  } catch (error) {
+    console.error("Failed to resend merch order email:", error);
+    res.status(500).json({ success: false, message: "Internal server error while resending the email" });
+  }
+}
+
 // ── Protected screenshot proxy ──────────────────────────────────────────────
 
 /** GET /api/v2/admin/merch/screenshots/:filename — finance-only proxy. */
 export async function serveMerchScreenshot(req: Request, res: Response): Promise<void> {
   try {
-    const { filename } = req.params;
-    const { stream, contentType, contentLength } = await getMerchImageStream(filename);
+    const safe = safeStorageFilename(req.params.filename, SCREENSHOT_PREFIX);
+    if (!safe) {
+      res.status(400).json({ success: false, message: "Invalid screenshot filename" });
+      return;
+    }
+    const { stream, contentType, contentLength } = await getMerchImageStream(safe);
     if (!stream) {
       res.status(404).json({ success: false, message: "Screenshot not found" });
       return;
     }
     res.setHeader("Content-Type", contentType || "image/jpeg");
-    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(safe)}"`);
     if (contentLength) res.setHeader("Content-Length", contentLength);
     stream.pipe(res);
   } catch (error) {

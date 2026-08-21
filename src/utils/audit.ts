@@ -29,7 +29,10 @@ export type AuditAction =
   | "MERCH_ORDER_CONFIRMED"
   | "MERCH_ORDER_REJECTED"
   | "MERCH_ORDER_CLAIMED"
-  | "MERCH_ORDER_CANCELLED";
+  | "MERCH_ORDER_CANCELLED"
+  | "MERCH_ORDER_REFUND_PENDING"
+  | "MERCH_ORDER_REFUNDED"
+  | "MERCH_ORDER_EMAIL_RESENT";
 
 export interface RecordAuditInput {
   actorId: string | null;

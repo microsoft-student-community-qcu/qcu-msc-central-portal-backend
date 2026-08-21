@@ -9,7 +9,15 @@
 
 import { Request, Response } from "express";
 import { prisma } from "../config/database";
-import { isMerchShopOpen, photosToArray, isLowStock } from "../utils/merch";
+import {
+  isMerchShopOpen,
+  photosToArray,
+  isLowStock,
+  merchPhotoUrl,
+  safeStorageFilename,
+  CATALOG_PHOTO_PREFIX,
+} from "../utils/merch";
+import { getMerchImageStream } from "../utils/imageStorage";
 
 // Shared presentation shape for a catalog item (public-safe fields only).
 function serializeItem(item: {
@@ -29,7 +37,7 @@ function serializeItem(item: {
     description: item.description,
     // Prisma Decimal → number for JSON; PHP merch prices are well within range.
     price: Number(item.price),
-    photos: photosToArray(item.photos as never),
+    photos: photosToArray(item.photos as never).map(merchPhotoUrl),
     lowStockThreshold: item.lowStockThreshold,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
@@ -103,5 +111,37 @@ export async function getCatalogItem(req: Request, res: Response): Promise<void>
   } catch (error) {
     console.error("Failed to fetch merch item:", error);
     res.status(500).json({ success: false, message: "Internal server error while fetching the item" });
+  }
+}
+
+/**
+ * GET /api/v2/merch/photos/:filename — public proxy for catalog photos.
+ *
+ * Catalog photos live in the private `merch` blob container (shared with
+ * payment screenshots), so their blob URLs 403 for anonymous browsers. This
+ * unauthenticated proxy streams them with long cache headers. It is restricted
+ * to the `item-` filename prefix so it can NEVER serve a `proof-` payment
+ * screenshot, even if the filename were known.
+ */
+export async function getCatalogPhoto(req: Request, res: Response): Promise<void> {
+  try {
+    const safe = safeStorageFilename(req.params.filename, CATALOG_PHOTO_PREFIX);
+    if (!safe) {
+      res.status(400).json({ success: false, message: "Invalid photo filename" });
+      return;
+    }
+    const { stream, contentType, contentLength } = await getMerchImageStream(safe);
+    if (!stream) {
+      res.status(404).json({ success: false, message: "Photo not found" });
+      return;
+    }
+    res.setHeader("Content-Type", contentType || "image/jpeg");
+    // Catalog photos are immutable (filename is UUID-based) — cache aggressively.
+    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+    if (contentLength) res.setHeader("Content-Length", contentLength);
+    stream.pipe(res);
+  } catch (error) {
+    console.error("Failed to serve merch photo:", error);
+    res.status(404).json({ success: false, message: "Photo not found or inaccessible" });
   }
 }

@@ -1,8 +1,9 @@
-import { Router, Request, Response, NextFunction } from "express";
-import multer, { MulterError } from "multer";
+import { Router } from "express";
+import multer from "multer";
 import { merchOrderLimiter, merchPaymentProofLimiter, merchTrackingLimiter } from "../config/rateLimit";
-import { getCatalog, getCatalogItem } from "../controllers/merch.controller";
+import { getCatalog, getCatalogItem, getCatalogPhoto } from "../controllers/merch.controller";
 import { createOrder, trackOrder, submitPaymentProof } from "../controllers/merch-order.controller";
+import { multerErrorHandler } from "../utils/multerError";
 
 /**
  * Public merch routes (V2 Module 04 — Finance). No authentication required.
@@ -13,25 +14,22 @@ import { createOrder, trackOrder, submitPaymentProof } from "../controllers/merc
  */
 
 // In-memory upload — screenshots are streamed straight to Blob (10MB cap,
-// matching the applicant upload limit).
-const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } });
+// matching the applicant upload limit; `files` caps the count so extras fail
+// fast rather than buffering).
+const upload = multer({ limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
 
-function handleMulterError(err: Error, _req: Request, res: Response, next: NextFunction): void {
-  if (err instanceof MulterError) {
-    if (err.code === "LIMIT_FILE_SIZE") {
-      res.status(400).json({ success: false, message: "The screenshot must not exceed 10MB" });
-      return;
-    }
-    res.status(400).json({ success: false, message: "File upload error" });
-    return;
-  }
-  next(err);
-}
+const handleMulterError = multerErrorHandler(
+  "The screenshot must not exceed 10MB",
+  "Only one screenshot may be uploaded"
+);
 
 const router = Router();
 
 // ── Public catalog ──────────────────────────────────────────────────────────
 router.get("/", getCatalog);
+// Photo proxy must be registered before the ":itemId" param route so
+// "/photos/:filename" is not captured as an item id.
+router.get("/photos/:filename", getCatalogPhoto);
 router.get("/:itemId", getCatalogItem);
 
 // ── Orders ────────────────────────────────────────────────────────────────

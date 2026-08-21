@@ -181,9 +181,32 @@ export const cancelOrderSchema = z.object({
     .max(500, "Note must be less than 500 characters"),
 });
 
+// Refund method mirrors Prisma MerchRefundMethod.
+export const merchRefundMethodEnum = z.enum(["GCASH", "CASH", "OTHER"], {
+  error: "Refund method must be GCASH, CASH, or OTHER",
+});
+
+// POST /api/v2/admin/merch/orders/:orderId/refund (head-only). The amount is
+// additionally checked against the order total in the controller (the schema
+// cannot see the order).
+export const refundOrderSchema = z.object({
+  amount: z.coerce
+    .number({ error: "Refund amount is required and must be a number" })
+    .positive("Refund amount must be greater than zero")
+    .max(1_000_000, "Refund amount is unrealistically high"),
+  method: merchRefundMethodEnum,
+  referenceNumber: z
+    .string()
+    .trim()
+    .max(50, "Reference number must be less than 50 characters")
+    .optional(),
+  note: z.string().trim().max(500, "Note must be less than 500 characters").optional(),
+});
+
 export type CreateMerchItemInput = z.infer<typeof createMerchItemSchema>;
 export type UpdateMerchItemInput = z.infer<typeof updateMerchItemSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type SubmitPaymentProofInput = z.infer<typeof submitPaymentProofSchema>;
 export type RejectOrderInput = z.infer<typeof rejectOrderSchema>;
 export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;
+export type RefundOrderInput = z.infer<typeof refundOrderSchema>;

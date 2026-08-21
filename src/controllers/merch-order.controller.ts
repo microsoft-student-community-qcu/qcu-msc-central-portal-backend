@@ -14,7 +14,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../config/database";
 import { env } from "../config/env";
 import { createOrderSchema, trackOrderQuerySchema, submitPaymentProofSchema } from "../schemas/merch.schema";
-import { isMerchShopOpen, generateOrderRef, imageExtensionFor } from "../utils/merch";
+import { isMerchShopOpen, generateOrderRef, imageExtensionFor, isResubmittableRejection, recordOrderNotification } from "../utils/merch";
 import { validateImageMimeType } from "../utils/fileValidation";
 import { saveMerchImage } from "../utils/imageStorage";
 import {
@@ -22,9 +22,6 @@ import {
   sendMerchProofReceivedEmail,
   sendMerchDuplicateReferenceEmail,
 } from "../services/email.service";
-
-// Order states that still accept a (re)submission of payment proof.
-const PROOF_SUBMITTABLE_STATUSES = ["AWAITING_PAYMENT", "REJECTED"] as const;
 
 /** Build the student-facing tracking URL for an order. */
 function trackingUrl(orderRef: string): string {
@@ -127,7 +124,7 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
     const authedUserId = req.userId ?? null;
 
     // Create the order, retrying on the rare orderRef collision (unique index).
-    let created: { orderRef: string } | null = null;
+    let created: { id: string; orderRef: string } | null = null;
     for (let attempt = 0; attempt < 5 && !created; attempt++) {
       const orderRef = await generateOrderRef();
       try {
@@ -144,7 +141,7 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
             amount,
             status: "AWAITING_PAYMENT", // Stock NOT reserved yet
           },
-          select: { orderRef: true },
+          select: { id: true, orderRef: true },
         });
       } catch (err) {
         // P2002 = unique constraint (orderRef race) → regenerate and retry.
@@ -162,7 +159,7 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
 
     // Fire-and-forget style email (the send helper logs and swallows failures
     // like the rest of the codebase, so a mail outage never blocks an order).
-    await sendMerchOrderCreatedEmail(email, {
+    const emailed = await sendMerchOrderCreatedEmail(email, {
       studentName,
       orderRef: created.orderRef,
       itemName: variant.item.name,
@@ -173,6 +170,7 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
       gcashQrImageUrl: env.GCASH_QR_IMAGE_URL,
       trackingUrl: trackingUrl(created.orderRef),
     });
+    await recordOrderNotification(created.id, emailed);
 
     res.status(201).json({
       success: true,
@@ -272,7 +270,7 @@ export async function submitPaymentProof(req: Request, res: Response): Promise<v
 
     const order = await prisma.merchOrder.findUnique({
       where: { orderRef },
-      select: { id: true, email: true, status: true, studentName: true },
+      select: { id: true, email: true, status: true, studentName: true, rejectionReason: true },
     });
 
     // Anti-enumeration: unknown order or email mismatch both return 404.
@@ -281,7 +279,24 @@ export async function submitPaymentProof(req: Request, res: Response): Promise<v
       return;
     }
 
-    if (!(PROOF_SUBMITTABLE_STATUSES as readonly string[]).includes(order.status)) {
+    // A paid order that's being refunded (e.g. sold out after payment) must
+    // never accept another payment — that's the double-pay exploit (issue #178).
+    if (order.status === "REFUND_PENDING" || order.status === "REFUNDED") {
+      res.status(409).json({
+        success: false,
+        message:
+          "This order is being refunded and can no longer accept payment. Our Finance team will contact you about your refund or a replacement.",
+      });
+      return;
+    }
+
+    // Resubmission is only allowed for a fresh order or a student-fixable
+    // rejection (bad reference, amount mismatch, unclear screenshot, duplicate
+    // typo, other). OUT_OF_STOCK is never resubmittable — see isResubmittableRejection.
+    const canSubmit =
+      order.status === "AWAITING_PAYMENT" ||
+      (order.status === "REJECTED" && isResubmittableRejection(order.rejectionReason));
+    if (!canSubmit) {
       res.status(409).json({
         success: false,
         message: "This order is not awaiting payment proof.",
@@ -320,10 +335,11 @@ export async function submitPaymentProof(req: Request, res: Response): Promise<v
         }),
       ]);
 
-      await sendMerchDuplicateReferenceEmail(order.email, {
+      const dupEmailed = await sendMerchDuplicateReferenceEmail(order.email, {
         studentName: order.studentName,
         orderRef,
       });
+      await recordOrderNotification(order.id, dupEmailed);
 
       res.status(409).json({
         success: false,
@@ -345,7 +361,8 @@ export async function submitPaymentProof(req: Request, res: Response): Promise<v
       }),
     ]);
 
-    await sendMerchProofReceivedEmail(order.email, { studentName: order.studentName, orderRef });
+    const proofEmailed = await sendMerchProofReceivedEmail(order.email, { studentName: order.studentName, orderRef });
+    await recordOrderNotification(order.id, proofEmailed);
 
     res.status(200).json({
       success: true,

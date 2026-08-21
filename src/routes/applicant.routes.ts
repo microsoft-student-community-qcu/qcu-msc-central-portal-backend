@@ -1,7 +1,8 @@
-import { Router, Request, Response, NextFunction } from "express";
-import multer, { MulterError } from "multer";
+import { Router } from "express";
+import multer from "multer";
 import rateLimit from "express-rate-limit";
 import { requireAdminHR, requireAuth } from "./authMiddleware";
+import { multerErrorHandler } from "../utils/multerError";
 import {
   createApplicant,
   getApplicant,
@@ -19,7 +20,7 @@ import {
 } from "../controllers/applicant.controller";
 
 const upload = multer({
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024, files: 2 },
 });
 
 const applicantLimiter = rateLimit({
@@ -33,23 +34,12 @@ const applicantLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-function handleMulterError(err: Error, _req: Request, res: Response, next: NextFunction): void {
-  if (err instanceof MulterError) {
-    if (err.code === "LIMIT_FILE_SIZE") {
-      res.status(400).json({
-        success: false,
-        message: "Each file must not exceed 10MB",
-      });
-      return;
-    }
-    res.status(400).json({
-      success: false,
-      message: "File upload error",
-    });
-    return;
-  }
-  next(err);
-}
+// Drains the request on upload errors so oversized/extra files return a clean
+// JSON 400 instead of a dropped connection (see src/utils/multerError.ts).
+const handleMulterError = multerErrorHandler(
+  "Each file must not exceed 10MB",
+  "Too many files uploaded"
+);
 
 const router = Router();
 

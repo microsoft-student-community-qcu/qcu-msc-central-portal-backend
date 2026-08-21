@@ -1,40 +1,37 @@
-import { Router, Request, Response, NextFunction } from "express";
-import multer, { MulterError } from "multer";
+import { Router } from "express";
+import multer from "multer";
 import { requireAdminFinance, requireAdminFinanceHead } from "./authMiddleware";
 import { adminMutationLimiter } from "../config/rateLimit";
+import { multerErrorHandler } from "../utils/multerError";
 import {
   listItemsAdmin,
   createItem,
   updateItem,
   archiveItem,
   listOrders,
+  getOrderDetail,
   confirmOrder,
   rejectOrder,
   claimOrder,
   cancelOrder,
+  refundOrder,
+  resendOrderEmail,
   serveMerchScreenshot,
 } from "../controllers/merch-admin.controller";
 
 /**
  * Finance admin merch routes (V2 Module 04). Mounted at /api/v2/admin/merch
  * after authMiddleware. `requireAdminFinance` admits ADMIN_FINANCE,
- * ADMIN_FINANCE_HEAD, and SUPERADMIN (role inheritance); archive + cancel are
- * head-only. Mutations are additionally rate-limited (defense in depth).
+ * ADMIN_FINANCE_HEAD, and SUPERADMIN (role inheritance); archive, cancel, and
+ * refund are head-only. Mutations are additionally rate-limited (defense in depth).
  */
 
-const upload = multer({ limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ limits: { fileSize: 10 * 1024 * 1024, files: 6 } });
 
-function handleMulterError(err: Error, _req: Request, res: Response, next: NextFunction): void {
-  if (err instanceof MulterError) {
-    if (err.code === "LIMIT_FILE_SIZE") {
-      res.status(400).json({ success: false, message: "Each photo must not exceed 10MB" });
-      return;
-    }
-    res.status(400).json({ success: false, message: "File upload error" });
-    return;
-  }
-  next(err);
-}
+const handleMulterError = multerErrorHandler(
+  "Each photo must not exceed 10MB",
+  "You can upload at most 6 photos"
+);
 
 const router = Router();
 
@@ -60,10 +57,15 @@ router.post("/items/:itemId/archive", requireAdminFinanceHead, adminMutationLimi
 
 // ── Order verification (Flows 4–5) ──────────────────────────────────────────
 router.get("/orders", requireAdminFinance, listOrders);
+router.get("/orders/:orderId", requireAdminFinance, getOrderDetail);
 router.post("/orders/:orderId/confirm", requireAdminFinance, adminMutationLimiter, confirmOrder);
 router.post("/orders/:orderId/reject", requireAdminFinance, adminMutationLimiter, rejectOrder);
 router.post("/orders/:orderId/claim", requireAdminFinance, adminMutationLimiter, claimOrder);
 router.post("/orders/:orderId/cancel", requireAdminFinanceHead, adminMutationLimiter, cancelOrder);
+// Refund is head-only (records a MerchRefund + moves REFUND_PENDING → REFUNDED).
+router.post("/orders/:orderId/refund", requireAdminFinanceHead, adminMutationLimiter, refundOrder);
+// Manual re-notify for orders whose status email may have silently failed.
+router.post("/orders/:orderId/resend-email", requireAdminFinance, adminMutationLimiter, resendOrderEmail);
 
 // ── Protected screenshot proxy ──────────────────────────────────────────────
 router.get("/screenshots/:filename", requireAdminFinance, serveMerchScreenshot);

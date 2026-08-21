@@ -455,8 +455,13 @@ export interface MerchOrderCreatedEmailData {
   trackingUrl: string;
 }
 
-/** Flow 2 — pre-order created; payment QR + instructions. */
-export async function sendMerchOrderCreatedEmail(to: string, data: MerchOrderCreatedEmailData): Promise<void> {
+/**
+ * Flow 2 — pre-order created; payment QR + instructions.
+ * All merch senders return `true` on a successful send and `false` on failure
+ * (they still never throw). Callers use this to record notification tracking
+ * (Module 04 §7b) so Finance can tell "emailed" from "silently failed".
+ */
+export async function sendMerchOrderCreatedEmail(to: string, data: MerchOrderCreatedEmailData): Promise<boolean> {
   try {
     await provider.sendEmail(
       to,
@@ -475,8 +480,10 @@ export async function sendMerchOrderCreatedEmail(to: string, data: MerchOrderCre
       }),
     );
     logSent("Merch order created", to);
+    return true;
   } catch (err) {
     logFailed("merch order created", to, err);
+    return false;
   }
 }
 
@@ -484,7 +491,7 @@ export async function sendMerchOrderCreatedEmail(to: string, data: MerchOrderCre
 export async function sendMerchProofReceivedEmail(
   to: string,
   data: { studentName: string; orderRef: string }
-): Promise<void> {
+): Promise<boolean> {
   try {
     await provider.sendEmail(
       to,
@@ -499,8 +506,10 @@ export async function sendMerchProofReceivedEmail(
       }),
     );
     logSent("Merch proof received", to);
+    return true;
   } catch (err) {
     logFailed("merch proof received", to, err);
+    return false;
   }
 }
 
@@ -508,7 +517,7 @@ export async function sendMerchProofReceivedEmail(
 export async function sendMerchDuplicateReferenceEmail(
   to: string,
   data: { studentName: string; orderRef: string }
-): Promise<void> {
+): Promise<boolean> {
   try {
     await provider.sendEmail(
       to,
@@ -518,14 +527,16 @@ export async function sendMerchDuplicateReferenceEmail(
         greeting: `Hello ${data.studentName},`,
         paragraphs: [
           `The GCash reference number you submitted for order <strong>${esc(data.orderRef)}</strong> has already been used on another order.`,
-          "If you believe this is an error, please contact the Finance team directly.",
+          "If this was a typo, you can resubmit your correct 13-digit reference number from your order page. If you believe this is an error, please contact the Finance team directly.",
         ],
         supportLine: true,
       }),
     );
     logSent("Merch duplicate reference", to);
+    return true;
   } catch (err) {
     logFailed("merch duplicate reference", to, err);
+    return false;
   }
 }
 
@@ -533,7 +544,7 @@ export async function sendMerchDuplicateReferenceEmail(
 export async function sendMerchOrderConfirmedEmail(
   to: string,
   data: { studentName: string; orderRef: string; itemName: string; variantLabel: string }
-): Promise<void> {
+): Promise<boolean> {
   try {
     await provider.sendEmail(
       to,
@@ -548,16 +559,23 @@ export async function sendMerchOrderConfirmedEmail(
       }),
     );
     logSent("Merch order confirmed", to);
+    return true;
   } catch (err) {
     logFailed("merch order confirmed", to, err);
+    return false;
   }
 }
 
-/** Flow 4 — payment rejected; reason + resubmit link. */
+/**
+ * Flow 4 — payment rejected; reason + resubmit link. Only used for
+ * student-fixable rejections (bad reference, amount mismatch, unclear
+ * screenshot, other). Out-of-stock uses sendMerchOutOfStockEmail instead —
+ * a paid student must never be told to "resubmit" for a sold-out item.
+ */
 export async function sendMerchOrderRejectedEmail(
   to: string,
   data: { studentName: string; orderRef: string; reasonLabel: string; trackingUrl: string }
-): Promise<void> {
+): Promise<boolean> {
   try {
     await provider.sendEmail(
       to,
@@ -573,8 +591,79 @@ export async function sendMerchOrderRejectedEmail(
       }),
     );
     logSent("Merch order rejected", to);
+    return true;
   } catch (err) {
     logFailed("merch order rejected", to, err);
+    return false;
+  }
+}
+
+/**
+ * Oversell handling (§7a) — item sold out AFTER the student paid. No resubmit
+ * button; reassures the student their money is safe and Finance will arrange a
+ * swap or full refund. Sent when a confirm fails the stock decrement.
+ */
+export async function sendMerchOutOfStockEmail(
+  to: string,
+  data: { studentName: string; orderRef: string; itemName: string; variantLabel: string }
+): Promise<boolean> {
+  try {
+    await provider.sendEmail(
+      to,
+      `Action Needed — Order ${data.orderRef} Sold Out`,
+      renderBrandedEmail({
+        headline: "Your item sold out — a refund is due",
+        greeting: `Hello ${data.studentName},`,
+        paragraphs: [
+          `We're very sorry — <strong>${esc(data.itemName)}</strong> (${esc(data.variantLabel)}) for order <strong>${esc(data.orderRef)}</strong> sold out before we could confirm your payment.`,
+          "<strong>You have not lost your money.</strong> Our Finance team will contact you to arrange either a swap for another available item/size, or a full refund of your payment.",
+          "No action is needed from you right now — please do <strong>not</strong> resubmit payment. We'll reach out using this email address.",
+        ],
+        supportLine: true,
+      }),
+    );
+    logSent("Merch out of stock", to);
+    return true;
+  } catch (err) {
+    logFailed("merch out of stock", to, err);
+    return false;
+  }
+}
+
+/** Refund processed (§7a) — offline refund recorded; transparency receipt. */
+export async function sendMerchRefundProcessedEmail(
+  to: string,
+  data: {
+    studentName: string;
+    orderRef: string;
+    amount: number;
+    method: string;
+    referenceNumber?: string | null;
+    note?: string | null;
+  }
+): Promise<boolean> {
+  try {
+    await provider.sendEmail(
+      to,
+      `Refund Processed — Order ${data.orderRef}`,
+      renderBrandedEmail({
+        headline: "Your refund has been processed",
+        greeting: `Hello ${data.studentName},`,
+        paragraphs: [
+          `A refund of <strong>${esc(peso(data.amount))}</strong> for order <strong>${esc(data.orderRef)}</strong> has been processed via <strong>${esc(data.method)}</strong>.`,
+          data.referenceNumber
+            ? `Refund reference: <strong>${esc(data.referenceNumber)}</strong>.`
+            : "Please allow some time for the amount to reflect on your account.",
+        ],
+        note: data.note ?? undefined,
+        supportLine: true,
+      }),
+    );
+    logSent("Merch refund processed", to);
+    return true;
+  } catch (err) {
+    logFailed("merch refund processed", to, err);
+    return false;
   }
 }
 
@@ -582,7 +671,7 @@ export async function sendMerchOrderRejectedEmail(
 export async function sendMerchOrderClaimedEmail(
   to: string,
   data: { studentName: string; orderRef: string; itemName: string }
-): Promise<void> {
+): Promise<boolean> {
   try {
     await provider.sendEmail(
       to,
@@ -597,8 +686,10 @@ export async function sendMerchOrderClaimedEmail(
       }),
     );
     logSent("Merch order claimed", to);
+    return true;
   } catch (err) {
     logFailed("merch order claimed", to, err);
+    return false;
   }
 }
 
@@ -606,7 +697,7 @@ export async function sendMerchOrderClaimedEmail(
 export async function sendMerchOrderCancelledEmail(
   to: string,
   data: { studentName: string; orderRef: string; note: string }
-): Promise<void> {
+): Promise<boolean> {
   try {
     await provider.sendEmail(
       to,
@@ -623,7 +714,9 @@ export async function sendMerchOrderCancelledEmail(
       }),
     );
     logSent("Merch order cancelled", to);
+    return true;
   } catch (err) {
     logFailed("merch order cancelled", to, err);
+    return false;
   }
 }
