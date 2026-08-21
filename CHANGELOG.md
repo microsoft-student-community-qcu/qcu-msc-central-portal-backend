@@ -51,7 +51,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - DB reset script with safety guards: refuses production DB, requires confirmation (#134).
 - Seed dataset sizes configurable via env vars (`SEED_USER_COUNT`, `SEED_MEMBER_USER_COUNT`, etc.)
   with fail-fast validation (#147, closes #146).
-- Seed data counts reduced for local testing (#154, closes #153) — superseded by #147.
 
 ### Changed
 
@@ -59,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Base routes scoped under `/api` prefix (#152).
 - CORS allowlist extended for Vercel preview deployments (#152).
 - V2 module docs scaffold (M0–M7), versioned guides, and development wave plan (#169).
+- Seed data counts reduced for local testing (#154, closes #153) — superseded by #147.
 - Changelog obligation established in AGENTS.md — every task logs its changes.
 
 ### Removed
