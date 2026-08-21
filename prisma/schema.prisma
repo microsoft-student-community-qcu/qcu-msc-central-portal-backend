@@ -88,6 +88,45 @@ enum SponsorshipStatus {
   CLOSED
 }
 
+// ── Merch Pre-Orders (V2 Module 04 — Finance) ───────────────────────────────
+
+// Catalog item lifecycle. ARCHIVED hides the item from the public catalog
+// while preserving historical order records.
+enum MerchItemStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+// Order lifecycle for the offline GCash pre-order flow (PRD-V2 Finance Flows 2–5).
+// Stock is only decremented on CONFIRMED; it is never reserved earlier.
+enum MerchOrderStatus {
+  AWAITING_PAYMENT // Order created; student has not submitted payment proof yet
+  PENDING_VERIFICATION // Proof submitted; awaiting finance officer review
+  CONFIRMED // Payment verified; stock decremented; awaiting pickup
+  PAID_AND_CLAIMED // Merch physically handed over — terminal success state
+  REJECTED // Payment failed verification or duplicate reference — resubmittable
+  CANCELLED // Head-cancelled (terminal); refunds handled offline
+}
+
+// Preset rejection reasons for a failed payment verification (Flow 4).
+// OTHER pairs with a free-text financeNote on the order.
+enum MerchRejectionReason {
+  REFERENCE_NOT_FOUND
+  AMOUNT_MISMATCH
+  SCREENSHOT_UNCLEAR
+  DUPLICATE_REFERENCE
+  OUT_OF_STOCK
+  OTHER
+}
+
+// Immediate automated outcome of a single payment-proof submission attempt.
+// Officer verify/reject decisions live on the order (status + rejectionReason),
+// not here — this only records what the automated intake did with the attempt.
+enum PaymentProofResult {
+  ACCEPTED // Passed the duplicate check → order moved to PENDING_VERIFICATION
+  DUPLICATE_REJECTED // Reference already used elsewhere → order auto-REJECTED
+}
+
 // ============================================================================
 // MODELS
 // ============================================================================
@@ -98,18 +137,19 @@ model User {
   lastName      String?
   firstName     String?
   middleInitial String?
-  name          String?        // Full name (Better Auth standard field — constructed server-side from firstName + lastName)
+  name          String? // Full name (Better Auth standard field — constructed server-side from firstName + lastName)
   studentId     String         @unique
   emailVerified Boolean        @default(false)
   image         String?
   role          UserRole       @default(APPLICANT)
-  password      String?        // Optional password field (managed by Better Auth in Account table)
+  password      String? // Optional password field (managed by Better Auth in Account table)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   sessions      Session[]
   accounts      Account[]
   registrations Registration[]
-  applicant     Applicant?     // Optional one-to-one relation to Applicant (if linked to a member)
+  merchOrders   MerchOrder[] // Merch pre-orders placed while authenticated (Module 04)
+  applicant     Applicant? // Optional one-to-one relation to Applicant (if linked to a member)
 }
 
 model Session {
@@ -151,39 +191,39 @@ model Verification {
 }
 
 model Applicant {
-  id                          String          @id @default(uuid())
-  lastName                    String          @default("")
-  firstName                   String          @default("")
-  middleInitial               String?
-  email                       String          @unique
-  college                     String
-  program                     String
-  section                     String
-  campus                      Campus
-  studentId                   String?         // QCU Student ID (YY-NNNN), extracted from Zonal OCR
-  dateOfBirth                 DateTime
-  placeOfBirth                String
-  gender                      Gender
-  office                      Office
-  certificateOfRegistration   String          // Filesystem path to uploaded Certificate of Registration
-  curriculumVitae             String          // Filesystem path to uploaded Curriculum Vitae
-  houseAddress                String
-  cellphoneNumber             String
-  facebookLink                String
-  interestsSkillsHobbies      String          @db.Text
-  organizationHistory         String          @db.Text
-  portfolio                   String?         // Optional — URL to portfolio
-  githubOrProjectLinks        String?         // Optional — URL to GitHub or project links
-  previousWorksAchievements   String?         @db.Text // Optional — previous works or achievements
-  status                      ApplicantStatus @default(PENDING_REVIEW)
-  manual_application          Boolean         @default(false) // Flagged true when OCR fails → manual upload
-  idImagePath                 String?         // Filesystem path to uploaded Student ID image
-  adminMessage                String?         @db.Text // Admin remark (used for RESUBMIT reason, etc.)
-  resubmitFields              String?         // Comma-separated list or JSON array of fields to resubmit
-  userId                      String?         @unique // Nullable one-to-one link to User when applicant becomes a member
-  user                        User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  createdAt                   DateTime        @default(now())
-  updatedAt                   DateTime        @updatedAt
+  id                        String          @id @default(uuid())
+  lastName                  String          @default("")
+  firstName                 String          @default("")
+  middleInitial             String?
+  email                     String          @unique
+  college                   String
+  program                   String
+  section                   String
+  campus                    Campus
+  studentId                 String? // QCU Student ID (YY-NNNN), extracted from Zonal OCR
+  dateOfBirth               DateTime
+  placeOfBirth              String
+  gender                    Gender
+  office                    Office
+  certificateOfRegistration String // Filesystem path to uploaded Certificate of Registration
+  curriculumVitae           String // Filesystem path to uploaded Curriculum Vitae
+  houseAddress              String
+  cellphoneNumber           String
+  facebookLink              String
+  interestsSkillsHobbies    String          @db.Text
+  organizationHistory       String          @db.Text
+  portfolio                 String? // Optional — URL to portfolio
+  githubOrProjectLinks      String? // Optional — URL to GitHub or project links
+  previousWorksAchievements String?         @db.Text // Optional — previous works or achievements
+  status                    ApplicantStatus @default(PENDING_REVIEW)
+  manual_application        Boolean         @default(false) // Flagged true when OCR fails → manual upload
+  idImagePath               String? // Filesystem path to uploaded Student ID image
+  adminMessage              String?         @db.Text // Admin remark (used for RESUBMIT reason, etc.)
+  resubmitFields            String? // Comma-separated list or JSON array of fields to resubmit
+  userId                    String?         @unique // Nullable one-to-one link to User when applicant becomes a member
+  user                      User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
 }
 
 model Event {
@@ -192,8 +232,8 @@ model Event {
   description       String?
   date              DateTime
   // Tiered registration windows — PRD-V1 Event Registration & Ticketing module.
-  priorityStartDate DateTime       // Members can register starting here
-  generalStartDate  DateTime       // Everyone can register starting here
+  priorityStartDate DateTime // Members can register starting here
+  generalStartDate  DateTime // Everyone can register starting here
   type              EventType      @default(PUBLIC)
   maxCapacity       Int
   createdAt         DateTime       @default(now())
@@ -202,24 +242,24 @@ model Event {
 }
 
 model Registration {
-  id                 String             @id @default(uuid())
-  eventId            String
-  event              Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  userId             String?
-  user               User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
-  studentId          String?            // QCU Student ID from Zonal OCR (guest registrations)
-  email              String
-  lastName           String           @default("")
-  firstName          String           @default("")
-  middleInitial      String?
-  status             RegistrationStatus @default(APPROVED)
-  manual_registration Boolean           @default(false) // Flagged true when OCR fails → manual upload
-  qrPayload          String             @unique // Unique UUID for QR code verification
-  hasAttended        Boolean            @default(false)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  id                  String             @id @default(uuid())
+  eventId             String
+  event               Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId              String?
+  user                User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  studentId           String? // QCU Student ID from Zonal OCR (guest registrations)
+  email               String
+  lastName            String             @default("")
+  firstName           String             @default("")
+  middleInitial       String?
+  status              RegistrationStatus @default(APPROVED)
+  manual_registration Boolean            @default(false) // Flagged true when OCR fails → manual upload
+  qrPayload           String             @unique // Unique UUID for QR code verification
+  hasAttended         Boolean            @default(false)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
-  @@unique([eventId, userId])    // One registration per authenticated user per event
+  @@unique([eventId, userId]) // One registration per authenticated user per event
   @@unique([eventId, studentId]) // One registration per student ID per event (guests)
 }
 
@@ -240,43 +280,43 @@ model SponsorshipInquiry {
 // Multi-step application draft — stores partial applicant submissions per batch step.
 // Deleted after the applicant record is created on final submission (step 3).
 model ApplicationDraft {
-  id                          String          @id @default(uuid())
-  currentStep                 Int             @default(0)
-  ocrSessionId                String          @unique
+  id           String @id @default(uuid())
+  currentStep  Int    @default(0)
+  ocrSessionId String @unique
 
-  lastName                    String?
-  firstName                   String?
-  middleInitial               String?
-  email                       String?
+  lastName      String?
+  firstName     String?
+  middleInitial String?
+  email         String?
 
-  studentId                   String?
-  idImagePath                 String?
+  studentId   String?
+  idImagePath String?
 
-  dateOfBirth                 DateTime?
-  placeOfBirth                String?
-  gender                      Gender?
-  cellphoneNumber             String?
-  houseAddress                String?
-  facebookLink                String?
+  dateOfBirth     DateTime?
+  placeOfBirth    String?
+  gender          Gender?
+  cellphoneNumber String?
+  houseAddress    String?
+  facebookLink    String?
 
-  college                     String?
-  program                     String?
-  section                     String?
-  campus                      Campus?
-  office                      Office?
-  certificateOfRegistration   String?
-  curriculumVitae             String?
+  college                   String?
+  program                   String?
+  section                   String?
+  campus                    Campus?
+  office                    Office?
+  certificateOfRegistration String?
+  curriculumVitae           String?
 
-  interestsSkillsHobbies      String?         @db.Text
-  organizationHistory         String?         @db.Text
-  portfolio                   String?
-  githubOrProjectLinks        String?
-  previousWorksAchievements   String?         @db.Text
+  interestsSkillsHobbies    String? @db.Text
+  organizationHistory       String? @db.Text
+  portfolio                 String?
+  githubOrProjectLinks      String?
+  previousWorksAchievements String? @db.Text
 
-  manual_application          Boolean?
-  lastResumeEmailSentAt       DateTime?
-  createdAt                   DateTime        @default(now())
-  updatedAt                   DateTime        @updatedAt
+  manual_application    Boolean?
+  lastResumeEmailSentAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 }
 
 // Global system toggles — V2 Super Admin Settings Hub (Module 01 / M0).
@@ -315,4 +355,86 @@ model AuditLog {
   @@index([createdAt(sort: Desc)])
   @@index([actorId])
   @@index([action])
+}
+
+// A merch catalog product (V2 Module 04). Photos are stored as a JSON array of
+// Blob URLs (MySQL has no scalar string arrays). Price is Decimal to avoid
+// floating-point money errors. Variants hold the actual sellable stock.
+model MerchItem {
+  id                String          @id @default(uuid())
+  name              String
+  description       String          @db.Text
+  price             Decimal         @db.Decimal(10, 2) // PHP, e.g. 350.00
+  status            MerchItemStatus @default(ACTIVE)
+  photos            Json            @default("[]") // Array of Blob image URLs (front/back/detail)
+  lowStockThreshold Int             @default(10) // Variants at/below this show a "Low Stock" flag
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  variants          MerchVariant[]
+
+  @@index([status])
+}
+
+// A sellable size/variant of a MerchItem with its own stock counter.
+// Stock is decremented only when an order reaches CONFIRMED (Flow 4).
+model MerchVariant {
+  id        String       @id @default(uuid())
+  itemId    String
+  item      MerchItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  label     String // e.g. "S", "M", "L", "XL", "One Size"
+  stock     Int          @default(0)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  orders    MerchOrder[]
+
+  @@unique([itemId, label]) // No duplicate variant labels within one item
+  @@index([itemId])
+}
+
+// A single pre-order. orderRef is the human-facing tracking ID
+// (MSC-MERCH-YYYY-NNNN). userId links to the account when the buyer was logged
+// in; guest fields (studentName/studentId/email/gcashNumber) are always stored
+// for display regardless of auth. Stock is not reserved until CONFIRMED.
+model MerchOrder {
+  id               String                   @id @default(uuid())
+  orderRef         String                   @unique // MSC-MERCH-YYYY-NNNN
+  userId           String? // Set when placed by a logged-in Member/Applicant
+  user             User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  studentName      String
+  studentId        String? // QCU Student ID (guest-entered or from the account)
+  email            String
+  gcashNumber      String? // Payer's GCash number — recorded for reference only
+  variantId        String
+  variant          MerchVariant             @relation(fields: [variantId], references: [id])
+  quantity         Int
+  amount           Decimal                  @db.Decimal(10, 2) // Snapshot of price × quantity at order time
+  status           MerchOrderStatus         @default(AWAITING_PAYMENT)
+  rejectionReason  MerchRejectionReason? // Set when status is REJECTED
+  financeNote      String?                  @db.Text // Free-text for OTHER rejections / cancellation notes
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  proofSubmissions PaymentProofSubmission[]
+
+  @@index([status])
+  @@index([email])
+  @@index([studentId])
+  @@index([userId])
+}
+
+// Append-only audit trail of every payment-proof submission attempt (Flow 3–4).
+// referenceNumber is indexed but NOT unique: a duplicate is the very thing we
+// must record, so a unique constraint would block the write that logs the
+// violation. Duplicate detection is enforced in application code across all
+// orders and submissions.
+model PaymentProofSubmission {
+  id              String             @id @default(uuid())
+  orderId         String
+  order           MerchOrder         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  screenshotPath  String // Blob path/URL to the uploaded GCash screenshot
+  referenceNumber String // 13-digit GCash reference number submitted by the student
+  result          PaymentProofResult
+  createdAt       DateTime           @default(now())
+
+  @@index([orderId])
+  @@index([referenceNumber])
 }

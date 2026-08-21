@@ -13,6 +13,7 @@ This directory contains the core data models used in the QCU MSC Central Portal,
 | Sponsorship Inquiry | [sponsorship-inquiry.md](sponsorship-inquiry.md) | Corporate sponsorship leads |
 | System Setting | [system-setting.md](system-setting.md) | Global system toggles (V2 Module 01) |
 | Audit Log | [audit-log.md](audit-log.md) | Tamper-evident admin action trail (V2 Module 01) |
+| Merch | [merch.md](merch.md) | Merch catalog, variants, pre-orders, payment proofs (V2 Module 04) |
 | Application Draft | — | Inline in API docs: multi-step draft table for batch application submission |
 
 ---
@@ -28,12 +29,19 @@ Event (1) ──→ (Many) Registration
 ApplicationDraft ──→ (references) OCR session (in-memory)
 SystemSetting (last editor) ──→ references User.id (no FK)
 AuditLog (actor) ──→ references User.id (no FK)
+MerchItem (1) ──→ (Many) MerchVariant
+MerchVariant (1) ──→ (Many) MerchOrder
+MerchOrder (1) ──→ (Many) PaymentProofSubmission
+User (1) ──→ (Many) MerchOrder
 ```
 
 **Cascade Delete Rules:**
 - Deleting a User cascades to: Sessions, Accounts, Registrations
 - Deleting a User sets `Applicant.userId` to null (soft unlink, Applicant record retained)
+- Deleting a User sets `MerchOrder.userId` to null (order record retained)
 - Deleting an Event cascades to: Registrations
+- Deleting a MerchItem cascades to: MerchVariants; deleting a MerchOrder cascades to: PaymentProofSubmissions
+- A MerchVariant cannot be deleted while orders reference it (`RESTRICT`) — archive the item instead
 - **AuditLog / SystemSetting rows are NOT tied to User by FK** — they survive user deletion (audit trail must never be destroyed by a user record being removed)
 
 ---
@@ -56,6 +64,9 @@ AuditLog (actor) ──→ references User.id (no FK)
 | `AuditLog` | `createdAt` | Index (desc, viewer pagination) |
 | `AuditLog` | `actorId` | Index |
 | `AuditLog` | `action` | Index |
+| `MerchVariant` | `[itemId, label]` | Unique composite |
+| `MerchOrder` | `orderRef` | Unique |
+| `MerchItem` / `MerchVariant` / `MerchOrder` / `PaymentProofSubmission` | see [merch.md](merch.md) | Additional secondary indexes |
 
 ---
 
@@ -94,3 +105,4 @@ Draft lifecycle: created by the multi-step flow, blocks a new application while 
 | 2026-08-02 | Added `lastResumeEmailSentAt` to `ApplicationDraft` for the draft resume-link cooldown; documented 7-day draft TTL and lazy expiry |
 | 2026-08-03 | Auto-link-on-sign-in fallback: `Applicant.userId` is now also populated during sign-in (idempotent `updateMany`) — no schema change |
 | 2026-08-19 | V2 Module 01 (M0): `UserRole` expanded to 9 values (`SUPERADMIN`, `ADMIN_FINANCE`, `ADMIN_FINANCE_HEAD`, `ADMIN_LOGISTICS_HEAD`, `STARTUP_DEV`); added `SystemSetting` (global toggles) and `AuditLog` (tamper-evident hash chain) models |
+| 2026-08-21 | V2 Module 04 (M2): added `MerchItem`, `MerchVariant`, `MerchOrder`, `PaymentProofSubmission` models and `MerchItemStatus`/`MerchOrderStatus`/`MerchRejectionReason`/`PaymentProofResult` enums; added `User.merchOrders` back-relation (see [merch.md](merch.md)) |
