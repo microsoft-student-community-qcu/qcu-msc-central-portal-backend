@@ -39,7 +39,7 @@ is closed.
     "items": [
       {
         "id": "…", "name": "MSC Shirt", "description": "Cotton tee",
-        "price": 350, "photos": ["https://…/merch/a.png"], "lowStockThreshold": 10,
+        "price": 350, "photos": ["https://api.example/api/v2/merch/photos/item-abc.png"], "lowStockThreshold": 10,
         "createdAt": "…", "updatedAt": "…",
         "variants": [
           { "id": "…", "label": "S", "stock": 3, "inStock": true, "lowStock": true },
@@ -59,6 +59,16 @@ is closed.
 Returns a single `ACTIVE` item. `ARCHIVED` items return `404` even by direct ID.
 
 **Errors:** `404` not found / archived · `503` shop closed · `500` internal
+
+### 2b. Get Catalog Photo (proxy)
+
+**Method:** `GET` **Path:** `/api/v2/merch/photos/:filename` **Auth:** none
+
+Streams a catalog photo from the private blob container (catalog `photos` are stored as filenames
+and returned as absolute URLs pointing here). Restricted to the `item-` filename prefix, so it can
+**never** serve a payment screenshot. Sends `Cache-Control: public, max-age=86400, immutable`.
+
+**Errors:** `400` invalid / non-`item-` filename · `404` not found · `500` internal
 
 ---
 
@@ -122,14 +132,17 @@ never confirmed to a non-owner.
 | `referenceNumber` | string (13 digits) | Yes | GCash reference number |
 | `screenshot` | file (JPEG/PNG/WEBP, ≤10MB) | Yes | Magic-byte validated |
 
-Only orders in `AWAITING_PAYMENT` or `REJECTED` accept a submission. Runs an **instant
-duplicate-reference check across every other order** — a duplicate auto-rejects
+A submission is accepted only when the order is `AWAITING_PAYMENT`, or `REJECTED` with a
+**student-fixable** reason (`REFERENCE_NOT_FOUND`, `AMOUNT_MISMATCH`, `SCREENSHOT_UNCLEAR`,
+`DUPLICATE_REFERENCE`, `OTHER`). `OUT_OF_STOCK` and `REFUND_PENDING` are **not** resubmittable — a
+paid-but-unfulfillable order can never be pushed into paying again (it awaits a refund). Runs an
+**instant duplicate-reference check across every other order** — a duplicate auto-rejects
 (`DUPLICATE_REFERENCE`) with no officer review. A unique reference moves the order to
 `PENDING_VERIFICATION`.
 
 **Success (200):** `{ success, message: "Your payment proof has been received…" }`
 
-**Errors:** `400` validation / missing screenshot / non-image · `404` not found / email mismatch · `409` duplicate reference / not awaiting payment · `500` internal
+**Errors:** `400` validation / missing screenshot / non-image · `404` not found / email mismatch · `409` duplicate reference / not awaiting payment / order being refunded · `500` internal
 
 ---
 
@@ -177,15 +190,20 @@ New `photos` **replace** the set; `variants` upsert by label (stock update / add
 ### 10. List Orders (queue)
 
 `GET /api/v2/admin/merch/orders?status=&page=&pageSize=` — FCFS (createdAt asc), paginated (max 50). Auth: finance.
-Each row includes the latest reference number + screenshot filename (serve via §14).
+`status` accepts any `MerchOrderStatus` (incl. `REFUND_PENDING`). Each row includes the latest
+reference number + screenshot filename (serve via §15), `attemptCount`, and notification tracking
+(`lastNotifiedAt`, `lastNotificationOk`, `notificationCount`) so stale/failed notifications are findable.
 
 ### 11. Confirm Payment
 
 `POST /api/v2/admin/merch/orders/:orderId/confirm` — Auth: finance. Order must be `PENDING_VERIFICATION`.
-Decrements stock via a single **atomic conditional update** (`stock >= quantity`). If the decrement
-matches no row (stock gone), the order is auto-rejected `OUT_OF_STOCK`.
+Decrements stock via a single **atomic conditional update** (`stock >= quantity`) and marks the
+latest submission `VERIFIED`. If the decrement matches no row (oversold — stock gone), the order
+moves to **`REFUND_PENDING`** (not `REJECTED`) and the student gets the out-of-stock email (no
+resubmit button); process the refund via §17.
 **Success (200):** confirmed + student emailed · Audit: `MERCH_ORDER_CONFIRMED`
-**Errors:** `404` not found · `409` not pending / stock ran out · `500` internal
+**409 (oversold):** order set `REFUND_PENDING` + student notified · Audit: `MERCH_ORDER_REFUND_PENDING`
+**Errors:** `404` not found · `409` not pending / oversold → refund pending · `500` internal
 
 ### 12. Reject Payment
 
@@ -196,7 +214,8 @@ matches no row (stock gone), the order is auto-rejected `OUT_OF_STOCK`.
 | `reason` | enum | `REFERENCE_NOT_FOUND`, `AMOUNT_MISMATCH`, `SCREENSHOT_UNCLEAR`, `OUT_OF_STOCK`, `OTHER` |
 | `financeNote` | string? | Required when `reason=OTHER` |
 
-Student emailed the reason + resubmit link. Audit: `MERCH_ORDER_REJECTED`.
+Student emailed the reason + resubmit link. The decision is recorded on the **latest submission**
+(per-attempt history) and denormalised onto the order. Audit: `MERCH_ORDER_REJECTED`.
 **Errors:** `400` validation · `404` not found · `409` not pending · `500` internal
 
 ### 13. Mark Claimed
@@ -212,14 +231,46 @@ Student emailed the reason + resubmit link. Audit: `MERCH_ORDER_REJECTED`.
 |-------|------|-------|
 | `financeNote` | string | Required — cancellation reason |
 
-Cancellable at any stage except `CANCELLED` / `PAID_AND_CLAIMED`. If the order was `CONFIRMED`,
-its stock is **restored**. Student emailed. Audit: `MERCH_ORDER_CANCELLED`.
-**Errors:** `400` validation · `403` non-head · `404` not found · `409` terminal state · `500` internal
+Cancellable while live except `CANCELLED`, `PAID_AND_CLAIMED`, `REFUND_PENDING`, `REFUNDED`
+(the last two are handled by the refund endpoint §17). If the order was `CONFIRMED`, its stock is
+**restored**. Student emailed. Audit: `MERCH_ORDER_CANCELLED`.
+**Errors:** `400` validation · `403` non-head · `404` not found · `409` terminal / refund-track state · `500` internal
 
 ### 15. Serve Screenshot
 
 `GET /api/v2/admin/merch/screenshots/:filename` — Auth: finance. Streams the payment screenshot
-through a protected proxy (screenshots are never linked publicly).
+through a protected proxy (screenshots are never linked publicly). Restricted to the `proof-`
+filename prefix; rejects traversal / illegal filenames with `400`.
+
+### 16. Order Detail (timeline)
+
+`GET /api/v2/admin/merch/orders/:orderId` — Auth: finance. Returns the full order plus the
+payment-proof **attempt timeline** (each with an `attempt` number, automated `result`, officer
+`officerDecision`/`rejectionReason`/`financeNote`, reviewer + timestamp) and the `refund` record
+if present. Lets an officer see e.g. "attempt 2 — attempt 1 rejected AMOUNT_MISMATCH".
+**Errors:** `404` not found · `500` internal
+
+### 17. Record Refund — head-only
+
+`POST /api/v2/admin/merch/orders/:orderId/refund` — Auth: **ADMIN_FINANCE_HEAD**. Order must be `REFUND_PENDING`.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `amount` | number | > 0 and ≤ order total |
+| `method` | enum | `GCASH`, `CASH`, `OTHER` |
+| `referenceNumber` | string? | Refund transfer reference |
+| `note` | string? | Optional context (≤500) |
+
+Creates a `MerchRefund`, moves the order to `REFUNDED`, emails the student a receipt. One refund
+per order. Audit: `MERCH_ORDER_REFUNDED`.
+**Errors:** `400` validation / amount > total · `403` non-head · `404` not found · `409` not refund-pending / already refunded · `500` internal
+
+### 18. Resend Status Email
+
+`POST /api/v2/admin/merch/orders/:orderId/resend-email` — Auth: finance. Resends the email matching
+the order's **current status** (handles the case where an earlier send silently failed). Updates
+notification tracking. Audit: `MERCH_ORDER_EMAIL_RESENT`.
+**Errors:** `404` not found · `409` no email for status / no refund record yet · `502` send failed · `503` payment details unconfigured (AWAITING_PAYMENT) · `500` internal
 
 ---
 
@@ -227,7 +278,15 @@ through a protected proxy (screenshots are never linked publicly).
 
 - **Toggle:** `merch_shop_open` (Module 01 whitelist) — gates all public endpoints.
 - **Audit actions:** `MERCH_ITEM_CREATED`, `MERCH_ITEM_EDITED`, `MERCH_ITEM_ARCHIVED`,
-  `MERCH_ORDER_CONFIRMED`, `MERCH_ORDER_REJECTED`, `MERCH_ORDER_CLAIMED`, `MERCH_ORDER_CANCELLED`.
+  `MERCH_ORDER_CONFIRMED`, `MERCH_ORDER_REJECTED`, `MERCH_ORDER_CLAIMED`, `MERCH_ORDER_CANCELLED`,
+  `MERCH_ORDER_REFUND_PENDING`, `MERCH_ORDER_REFUNDED`, `MERCH_ORDER_EMAIL_RESENT`.
+
+## Oversell & Refunds
+
+Stock is only decremented at `CONFIRMED` and never reserved earlier, so an item can be oversold
+(more paid orders than stock). The confirm that loses the race moves its order to `REFUND_PENDING`
+and the student is told (no resubmit). A head records the offline refund via §17. Structural
+prevention (TTL soft-hold reservations) is proposed in **issue #178**.
 
 ## Related
 

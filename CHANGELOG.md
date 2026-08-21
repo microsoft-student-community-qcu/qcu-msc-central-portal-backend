@@ -14,6 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **V2 Module 04 (M2) — Merch refunds + operability (§7a/§7b, #176; oversell tracked in #178):**
+  - Refund flow: new `REFUND_PENDING` / `REFUNDED` order states, `MerchRefund` record
+    (amount, method, reference, note, processor), and head-only
+    `POST /api/v2/admin/merch/orders/:orderId/refund` — migration
+    `20260822120000_v2_merch_refunds_notifications`.
+  - Payment-proof attempt history: per-submission officer decision fields
+    (`officerDecision`, `rejectionReason`, `financeNote`, `reviewedById`, `reviewedAt`) +
+    `GET /api/v2/admin/merch/orders/:orderId` returning the full attempt timeline.
+  - Notification tracking: `lastNotifiedAt` / `lastNotificationOk` / `notificationCount` on
+    `MerchOrder` (merch email senders now return a boolean); admin order list surfaces these +
+    `attemptCount` and accepts the `REFUND_PENDING` status filter.
+  - `POST /api/v2/admin/merch/orders/:orderId/resend-email` — manual re-notify for orders whose
+    status email may have silently failed.
+  - Public catalog photo proxy `GET /api/v2/merch/photos/:filename` (serves catalog images from
+    the private blob container; restricted to the `item-` prefix so it can never serve a payment
+    screenshot); catalog `photos` now store filenames, not blob URLs.
+  - Two new emails: `sendMerchOutOfStockEmail`, `sendMerchRefundProcessedEmail`.
+
 - **V2 Module 04 (M2) — Org Merch Pre-Orders (#176):**
   - `MerchItem`, `MerchVariant`, `MerchOrder`, `PaymentProofSubmission` models +
     `MerchItemStatus`/`MerchOrderStatus`/`MerchRejectionReason`/`PaymentProofResult` enums —
@@ -38,6 +56,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Merch oversell told paid students to "resubmit payment" (#176):** confirming an oversold
+  order now routes it to `REFUND_PENDING` (never `REJECTED`) and sends a dedicated out-of-stock
+  email with no resubmit button; payment-proof resubmission is blocked for `REFUND_PENDING` and
+  for non-fixable rejections (`OUT_OF_STOCK`) so a paid student can no longer be led into paying
+  twice. Structural oversell prevention (soft-hold) is deferred to #178.
+- **Merch >6-photo upload closed the connection (#176):** shared `multerErrorHandler`
+  (`src/utils/multerError.ts`) drains the request before responding, so exceeding the photo cap
+  returns a clean `400 "You can upload at most 6 photos"` instead of a dropped connection; also
+  applied to `applicant.routes.ts`. Removed the now-unreachable in-controller photo-count check.
+- **Merch screenshot proxy path traversal (#176):** `serveMerchScreenshot` now validates the
+  filename (basename + allowlist + `proof-` prefix), closing a local-fallback traversal vector.
 - **RBAC — `ADMIN_FINANCE_HEAD` blocked from finance endpoints (#176):** `requireAdminFinance`
   now admits both `ADMIN_FINANCE` and `ADMIN_FINANCE_HEAD` (the head inherits every finance
   capability per module 04 §2); updated `authMiddleware.guards.test.ts` accordingly.

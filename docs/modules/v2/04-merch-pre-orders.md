@@ -92,19 +92,23 @@ Officer finds CONFIRMED order, clicks **"Mark as Claimed"** → **PAID_AND_CLAIM
 |--------|------|-------|------------|-------|
 | GET | `/api/v2/merch` | none | — | Public catalog (active items + variants + stock) |
 | GET | `/api/v2/merch/:itemId` | none | — | Item detail |
+| GET | `/api/v2/merch/photos/:filename` | none | — | Public catalog-photo proxy (`item-` prefix only) |
 | POST | `/api/v2/merch/orders` | none (branches auth) | 10/min | Pre-order; real-time stock check |
 | GET | `/api/v2/merch/orders/:orderRef` | none (orderRef + email) | 30/min | Public order tracking |
-| POST | `/api/v2/merch/orders/:orderRef/payment-proof` | none (orderRef + email) | 10/min | Screenshot + reference; duplicate auto-reject |
+| POST | `/api/v2/merch/orders/:orderRef/payment-proof` | none (orderRef + email) | 10/min | Screenshot + reference; duplicate auto-reject; resubmit lock |
 | GET | `/api/v2/admin/merch/items` | `requireAdminFinance` | — | Full catalog incl. archived |
 | POST | `/api/v2/admin/merch/items` | `requireAdminFinance` | 20/min | Create item (multipart photos) |
 | PATCH | `/api/v2/admin/merch/items/:itemId` | `requireAdminFinance` | 20/min | Edit item |
 | POST | `/api/v2/admin/merch/items/:itemId/archive` | `requireAdminFinanceHead` | 20/min | Archive (head only) |
 | GET | `/api/v2/admin/merch/orders` | `requireAdminFinance` | — | Finance queue (status filter + pagination) |
-| POST | `/api/v2/admin/merch/orders/:orderId/confirm` | `requireAdminFinance` | 20/min | Atomic stock decrement |
-| POST | `/api/v2/admin/merch/orders/:orderId/reject` | `requireAdminFinance` | 20/min | Preset reasons |
+| GET | `/api/v2/admin/merch/orders/:orderId` | `requireAdminFinance` | — | Order detail + payment-proof timeline |
+| POST | `/api/v2/admin/merch/orders/:orderId/confirm` | `requireAdminFinance` | 20/min | Atomic stock decrement; oversold → REFUND_PENDING |
+| POST | `/api/v2/admin/merch/orders/:orderId/reject` | `requireAdminFinance` | 20/min | Preset reasons; per-attempt decision recorded |
 | POST | `/api/v2/admin/merch/orders/:orderId/claim` | `requireAdminFinance` | 20/min | PAID_AND_CLAIMED + receipt email |
 | POST | `/api/v2/admin/merch/orders/:orderId/cancel` | `requireAdminFinanceHead` | 20/min | Head only; restores stock if confirmed |
-| GET | `/api/v2/admin/merch/screenshots/:filename` | `requireAdminFinance` | — | Protected screenshot proxy |
+| POST | `/api/v2/admin/merch/orders/:orderId/refund` | `requireAdminFinanceHead` | 20/min | Head only; REFUND_PENDING → REFUNDED + MerchRefund |
+| POST | `/api/v2/admin/merch/orders/:orderId/resend-email` | `requireAdminFinance` | 20/min | Re-send current-status email |
+| GET | `/api/v2/admin/merch/screenshots/:filename` | `requireAdminFinance` | — | Protected screenshot proxy (`proof-` prefix only) |
 
 ## 7. Email Triggers
 
@@ -113,31 +117,44 @@ Officer finds CONFIRMED order, clicks **"Mark as Claimed"** → **PAID_AND_CLAIM
 | Pre-order created | Payment QR + order details | Student |
 | Payment proof received | Verification in progress | Student |
 | Payment CONFIRMED | Pre-order secured + pickup instructions | Student |
-| Payment REJECTED | Reason + resubmit button | Student |
+| Payment REJECTED (fixable) | Reason + resubmit button | Student |
 | Duplicate reference | Auto-reject notice | Student |
+| Sold out after payment | Refund/swap notice, **no** resubmit button | Student |
+| Refund processed | Refund receipt (amount + method) | Student |
 | Order claimed | Final receipt | Student |
 | Order cancelled (head) | Cancellation note | Student |
+
+All senders return a success boolean; the order's `lastNotifiedAt` / `lastNotificationOk` /
+`notificationCount` record the outcome, and `resend-email` re-sends on silent failure.
 
 ## 8. Settings / Toggles & Audit Events
 
 - **SystemSetting keys:** `merch_shop_open` (global open/close)
-- **AuditLog events:** `MERCH_ITEM_CREATED`, `MERCH_ITEM_EDITED`, `MERCH_ITEM_ARCHIVED`, `MERCH_ORDER_CONFIRMED`, `MERCH_ORDER_REJECTED`, `MERCH_ORDER_CLAIMED`, `MERCH_ORDER_CANCELLED`
+- **AuditLog events:** `MERCH_ITEM_CREATED`, `MERCH_ITEM_EDITED`, `MERCH_ITEM_ARCHIVED`, `MERCH_ORDER_CONFIRMED`, `MERCH_ORDER_REJECTED`, `MERCH_ORDER_CLAIMED`, `MERCH_ORDER_CANCELLED`, `MERCH_ORDER_REFUND_PENDING`, `MERCH_ORDER_REFUNDED`, `MERCH_ORDER_EMAIL_RESENT`
 
 ## 9. Open Questions
 
 | # | Question | Decision | Date |
 |---|----------|----------|------|
-| 1 | Should `ADMIN_FINANCE_HEAD` be a separate role or a flag on `ADMIN_FINANCE`? (PRD lists it as separate role) | Separate role (already in `UserRole` since M0). `requireAdminFinance` admits both `ADMIN_FINANCE` and `ADMIN_FINANCE_HEAD`; head-only actions (archive, cancel) use `requireAdminFinanceHead`. | 2026-08-21 |
+| 1 | Should `ADMIN_FINANCE_HEAD` be a separate role or a flag on `ADMIN_FINANCE`? (PRD lists it as separate role) | Separate role (already in `UserRole` since M0). `requireAdminFinance` admits both `ADMIN_FINANCE` and `ADMIN_FINANCE_HEAD`; head-only actions (archive, cancel, refund) use `requireAdminFinanceHead`. | 2026-08-21 |
 | 2 | Dynamic amount-locked GCash QR vs static org QR? | **Static org QR** (`GCASH_QR_IMAGE_URL`) shown with the exact amount as text. Verification hinges on the reference number, so a dynamic EMVCo QR adds spec/scan-testing risk for no functional gain. | 2026-08-21 |
+| 3 | How to handle overselling (paid order, no stock)? | **Reactive refund** for now: oversold confirm → `REFUND_PENDING` → head records a `MerchRefund` → `REFUNDED`. No resubmission for a paid student. Structural prevention (TTL soft-hold) deferred to **issue #178**. | 2026-08-22 |
+| 4 | Catalog photos in a private blob container 403 for anonymous browsers? | **Public proxy** `GET /api/v2/merch/photos/:filename` streams from the private container, restricted to the `item-` prefix so it can never serve a payment screenshot. Photos are stored as filenames. | 2026-08-22 |
 
 ## 10. Testing Checklist
 
 - [x] 200/201 success, 400 validation, 401 auth, 403 forbidden, 404 not found
 - [x] Duplicate reference auto-rejects regardless of other order status
 - [x] Real-time stock check on submit; stock decrement only on CONFIRMED
+- [x] Oversold confirm → REFUND_PENDING (not REJECTED); out-of-stock email has no resubmit button
+- [x] Resubmit blocked for OUT_OF_STOCK / REFUND_PENDING; allowed for fixable rejections
+- [x] Refund (head-only) records MerchRefund and moves REFUND_PENDING → REFUNDED
+- [x] Per-attempt officer decision preserved; order detail timeline returns attempts
+- [x] Resend-email + notification tracking
+- [x] >6-photo upload returns clean 400; screenshot/photo proxies reject traversal + wrong prefix
 - [x] Archive preserves order records
 - [x] Head-only endpoints 403 for plain finance officers
-- [x] Docs updated (new merch data models + workflow guide)
+- [x] Docs updated (data models + workflow guide + API)
 
 Automated: `src/__tests__/merch.routes.test.ts` · Manual: `docs/test-cases/v2/04-merch-pre-orders.md`
 
