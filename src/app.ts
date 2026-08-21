@@ -15,6 +15,7 @@ import { resendSetupLink } from "./controllers/applicant.controller";
 import { verifySetupToken } from "./utils/token";
 import eventRoutes from "./routes/event.routes";
 import userRoutes from "./routes/user.routes";
+import authRoutes, { protectedAuthRouter } from "./routes/auth.routes";
 
 import path from "node:path";
 
@@ -513,12 +514,20 @@ app.post("/api/v1/auth/admin/sign-in", adminSignInLimiter, async (req, res) => {
   res.send(bodyText);
 });
 
+// ── Password Reset (public) ────────────────────────────────────────────────
+// Forgot-password, token validation, and password reset are public POST routes
+// (rate-limited). Registered before authMiddleware like the OCR routes.
+app.use("/api/v1/auth", authRoutes);
+
 /**
  * Authentication middleware — validates the session via Better Auth.
  * Sets req.userId / req.userRole to null for unauthenticated requests.
  * Routes registered after this point can be either public or protected.
  */
 app.use(authMiddleware);
+
+// Protected auth routes — change-password for logged-in users.
+app.use("/api/v1/auth", protectedAuthRouter);
 
 // User routes
 app.use("/api/v1/users", userRoutes);
@@ -538,6 +547,11 @@ app.get("/", (_req, res) => {
     endpoints: {
       "auth:sign-in:student": "POST /api/v1/auth/student/sign-in",
       "auth:sign-in:admin": "POST /api/v1/auth/admin/sign-in",
+      "auth:forgot-password:student": "POST /api/v1/auth/student/forgot-password",
+      "auth:forgot-password:admin": "POST /api/v1/auth/admin/forgot-password",
+      "auth:validate-reset-token": "POST /api/v1/auth/validate-reset-token",
+      "auth:reset-password": "POST /api/v1/auth/reset-password",
+      "auth:change-password": "POST /api/v1/auth/change-password",
       users: "GET /api/v1/users/me",
       ocr: "POST /api/v1/ocr/verify",
       applicants: "POST /api/v1/applicants (multipart/form-data)",
