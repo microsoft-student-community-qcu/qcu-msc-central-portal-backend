@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import nodemailer from "nodemailer";
 import { env } from "../config/env";
-import { renderBrandedEmail, type BrandedEmailOptions } from "../utils/emailTemplate";
+import { renderBrandedEmail, esc, type BrandedEmailOptions } from "../utils/emailTemplate";
 
 // ── Provider interface ─────────────────────────────────────────────────────
 
@@ -433,5 +433,197 @@ export async function sendPasswordResetEmail(
     logSent("Password reset link", to);
   } catch (err) {
     logFailed("password reset link", to, err);
+  }
+}
+
+// ── Merch pre-orders (Module 04 — Finance) ──────────────────────────────────
+// Every dynamic value is esc()-wrapped because `paragraphs` render as raw HTML.
+// Sends are best-effort: failures are logged, never thrown, so a mail outage
+// never blocks an order mutation.
+
+const peso = (amount: number): string => `₱${amount.toFixed(2)}`;
+
+export interface MerchOrderCreatedEmailData {
+  studentName: string;
+  orderRef: string;
+  itemName: string;
+  variantLabel: string;
+  quantity: number;
+  amount: number;
+  gcashNumber: string;
+  gcashQrImageUrl: string;
+  trackingUrl: string;
+}
+
+/** Flow 2 — pre-order created; payment QR + instructions. */
+export async function sendMerchOrderCreatedEmail(to: string, data: MerchOrderCreatedEmailData): Promise<void> {
+  try {
+    await provider.sendEmail(
+      to,
+      `Merch Pre-Order ${data.orderRef} — Complete Your Payment`,
+      renderBrandedEmail({
+        headline: "Pre-order received — payment needed",
+        greeting: `Hello ${data.studentName},`,
+        paragraphs: [
+          `Your pre-order <strong>${esc(data.orderRef)}</strong> for <strong>${esc(data.itemName)}</strong> (${esc(data.variantLabel)}) ×${data.quantity} has been created.`,
+          `Amount due: <strong>${esc(peso(data.amount))}</strong>.`,
+          `Scan the GCash QR below with your GCash app and pay the exact amount to <strong>${esc(data.gcashNumber)}</strong>. After paying, return to your order page and submit the 13-digit GCash reference number.`,
+        ],
+        image: { src: data.gcashQrImageUrl, alt: "GCash payment QR code", caption: `Pay exactly ${peso(data.amount)}` },
+        button: { href: data.trackingUrl, label: "Submit Payment Proof" },
+        expiryNote: "Your pre-order is not secured until payment is verified by our Finance team.",
+      }),
+    );
+    logSent("Merch order created", to);
+  } catch (err) {
+    logFailed("merch order created", to, err);
+  }
+}
+
+/** Flow 3 — payment proof received; verification in progress. */
+export async function sendMerchProofReceivedEmail(
+  to: string,
+  data: { studentName: string; orderRef: string }
+): Promise<void> {
+  try {
+    await provider.sendEmail(
+      to,
+      `Payment Proof Received — ${data.orderRef}`,
+      renderBrandedEmail({
+        headline: "Payment proof received",
+        greeting: `Hello ${data.studentName},`,
+        paragraphs: [
+          `We've received your payment proof for order <strong>${esc(data.orderRef)}</strong>.`,
+          "Our Finance team will verify your payment shortly. You'll get another email once it's confirmed.",
+        ],
+      }),
+    );
+    logSent("Merch proof received", to);
+  } catch (err) {
+    logFailed("merch proof received", to, err);
+  }
+}
+
+/** Flow 3 — duplicate GCash reference; auto-rejected. */
+export async function sendMerchDuplicateReferenceEmail(
+  to: string,
+  data: { studentName: string; orderRef: string }
+): Promise<void> {
+  try {
+    await provider.sendEmail(
+      to,
+      `Action Needed — Order ${data.orderRef}`,
+      renderBrandedEmail({
+        headline: "Duplicate GCash reference number",
+        greeting: `Hello ${data.studentName},`,
+        paragraphs: [
+          `The GCash reference number you submitted for order <strong>${esc(data.orderRef)}</strong> has already been used on another order.`,
+          "If you believe this is an error, please contact the Finance team directly.",
+        ],
+        supportLine: true,
+      }),
+    );
+    logSent("Merch duplicate reference", to);
+  } catch (err) {
+    logFailed("merch duplicate reference", to, err);
+  }
+}
+
+/** Flow 4 — payment confirmed; pickup instructions. */
+export async function sendMerchOrderConfirmedEmail(
+  to: string,
+  data: { studentName: string; orderRef: string; itemName: string; variantLabel: string }
+): Promise<void> {
+  try {
+    await provider.sendEmail(
+      to,
+      `Pre-Order Confirmed — ${data.orderRef}`,
+      renderBrandedEmail({
+        headline: "Your pre-order is secured!",
+        greeting: `Hello ${data.studentName},`,
+        paragraphs: [
+          `Payment for order <strong>${esc(data.orderRef)}</strong> — <strong>${esc(data.itemName)}</strong> (${esc(data.variantLabel)}) — has been verified.`,
+          "We'll announce the pickup schedule soon. Bring your order reference (or student ID) to claim your merch.",
+        ],
+      }),
+    );
+    logSent("Merch order confirmed", to);
+  } catch (err) {
+    logFailed("merch order confirmed", to, err);
+  }
+}
+
+/** Flow 4 — payment rejected; reason + resubmit link. */
+export async function sendMerchOrderRejectedEmail(
+  to: string,
+  data: { studentName: string; orderRef: string; reasonLabel: string; trackingUrl: string }
+): Promise<void> {
+  try {
+    await provider.sendEmail(
+      to,
+      `Payment Issue — Order ${data.orderRef}`,
+      renderBrandedEmail({
+        headline: "We couldn't verify your payment",
+        greeting: `Hello ${data.studentName},`,
+        paragraphs: [
+          `There was an issue verifying the payment for order <strong>${esc(data.orderRef)}</strong>.`,
+        ],
+        note: data.reasonLabel,
+        button: { href: data.trackingUrl, label: "Resubmit Payment Proof" },
+      }),
+    );
+    logSent("Merch order rejected", to);
+  } catch (err) {
+    logFailed("merch order rejected", to, err);
+  }
+}
+
+/** Flow 5 — order claimed; final receipt. */
+export async function sendMerchOrderClaimedEmail(
+  to: string,
+  data: { studentName: string; orderRef: string; itemName: string }
+): Promise<void> {
+  try {
+    await provider.sendEmail(
+      to,
+      `Merch Claimed — ${data.orderRef}`,
+      renderBrandedEmail({
+        headline: "Merch claimed — thank you!",
+        greeting: `Hello ${data.studentName},`,
+        paragraphs: [
+          `This confirms you've collected your order <strong>${esc(data.orderRef)}</strong> — <strong>${esc(data.itemName)}</strong>.`,
+          "Thanks for supporting the Microsoft Student Community. See you at the next drop!",
+        ],
+      }),
+    );
+    logSent("Merch order claimed", to);
+  } catch (err) {
+    logFailed("merch order claimed", to, err);
+  }
+}
+
+/** Head-cancelled order; cancellation note. */
+export async function sendMerchOrderCancelledEmail(
+  to: string,
+  data: { studentName: string; orderRef: string; note: string }
+): Promise<void> {
+  try {
+    await provider.sendEmail(
+      to,
+      `Order Cancelled — ${data.orderRef}`,
+      renderBrandedEmail({
+        headline: "Your order has been cancelled",
+        greeting: `Hello ${data.studentName},`,
+        paragraphs: [
+          `Order <strong>${esc(data.orderRef)}</strong> has been cancelled by the Finance team.`,
+          "If a payment was already made, any refund will be arranged offline.",
+        ],
+        note: data.note,
+        supportLine: true,
+      }),
+    );
+    logSent("Merch order cancelled", to);
+  } catch (err) {
+    logFailed("merch order cancelled", to, err);
   }
 }

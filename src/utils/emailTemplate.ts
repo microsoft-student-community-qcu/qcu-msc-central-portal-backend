@@ -39,6 +39,9 @@ export interface BrandedEmailOptions {
   button?: EmailButton;
   /** Large-print payload block (e.g. QR ticket code). */
   qrPayload?: string;
+  /** Hosted image block (e.g. a GCash payment QR). Must be a public URL —
+   *  email clients strip inline base64 data URIs. */
+  image?: { src: string; alt: string; caption?: string };
   /** Small footer note (e.g. expiry warning). */
   expiryNote?: string;
   /** Append the standard "contact the administrators" line. */
@@ -72,6 +75,14 @@ function buttonBlock(button?: EmailButton): string {
 function qrBlock(payload?: string): string {
   if (!payload) return "";
   return `<div style="margin:16px 0;padding:16px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;text-align:center;"><p style="margin:0 0 6px;font-size:12px;color:${TEXT_MUTED};letter-spacing:0.5px;text-transform:uppercase;">Your entry pass</p><p style="margin:0;font-size:26px;font-weight:700;letter-spacing:3px;color:${TEXT_PRIMARY};">${esc(payload)}</p></div>`;
+}
+
+function imageBlock(image?: { src: string; alt: string; caption?: string }): string {
+  if (!image) return "";
+  const caption = image.caption
+    ? `<p style="margin:10px 0 0;font-size:12px;color:${TEXT_MUTED};">${esc(image.caption)}</p>`
+    : "";
+  return `<div style="margin:16px 0;padding:16px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;text-align:center;"><img src="${escapeAttribute(image.src)}" alt="${esc(image.alt)}" width="220" height="220" style="display:block;margin:0 auto;width:220px;height:220px;max-width:100%;border:0;" />${caption}</div>`;
 }
 
 function socialRow(): string {
@@ -119,6 +130,7 @@ function contents(options: BrandedEmailOptions): string {
     blockQuote(options.note),
     buttonBlock(options.button),
     qrBlock(options.qrPayload),
+    imageBlock(options.image),
     options.expiryNote
       ? `<p style="margin:16px 0 0;font-size:12px;color:${TEXT_MUTED};">${esc(options.expiryNote)}</p>`
       : "",

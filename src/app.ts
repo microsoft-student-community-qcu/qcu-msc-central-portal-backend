@@ -21,6 +21,8 @@ import applicationDraftRoutes from "./routes/application-draft.routes";
 import eventRoutes from "./routes/event.routes";
 import userRoutes from "./routes/user.routes";
 import adminRoutes from "./routes/admin.routes";
+import merchRoutes from "./routes/merch.routes";
+import merchAdminRoutes from "./routes/merch-admin.routes";
 import authRoutes, { protectedAuthRouter } from "./routes/auth.routes";
 
 initSentry();
@@ -70,6 +72,13 @@ app.use("/api/v1/users", userRoutes);
 
 // V2 admin routes (Module 01 — Super Admin Settings Hub). SUPERADMIN-only.
 app.use("/api/v2/admin", adminRoutes);
+
+// V2 merch routes (Module 04 — Finance). Registered after authMiddleware so
+// req.userId is set for authenticated pre-orders while guests still pass
+// through (the guard is per-route, not global). Public catalog + order flow
+// under /api/v2/merch; finance admin under /api/v2/admin/merch.
+app.use("/api/v2/admin/merch", merchAdminRoutes);
+app.use("/api/v2/merch", merchRoutes);
 
 // Applicant routes
 app.use("/api/v1/applicants", applicantRoutes);

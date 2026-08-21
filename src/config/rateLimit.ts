@@ -28,3 +28,12 @@ export const resendSetupLinkLimiter = limiter(3, "Too many requests. Please try 
 
 // Defense-in-depth on top of session auth for SUPERADMIN-only mutations.
 export const adminMutationLimiter = limiter(20, "Too many admin requests. Please try again later.");
+
+// ── Merch pre-orders (Module 04) — public endpoints ─────────────────────────
+export const merchOrderLimiter = limiter(10, "Too many pre-order attempts. Please try again later.");
+
+export const merchPaymentProofLimiter = limiter(10, "Too many payment-proof submissions. Please try again later.");
+
+// Order tracking is a public GET keyed by orderRef+email — limit to blunt
+// enumeration attempts.
+export const merchTrackingLimiter = limiter(30, "Too many requests. Please try again later.");
