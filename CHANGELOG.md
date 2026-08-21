@@ -66,3 +66,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Retracted the seed-credential documentation notes (seeding guide + M0 test-case setup)
   — they were based on a misdiagnosis: the reported sign-in failures came from testing
   against the production endpoint (`msc-qcu.tech`), not local. No behavior change.
+
+## [1.0.1] - 2026-08-21
+
+### Added
+
+- Sentry: `SENTRY_ENV` override for environment scoping (#129).
+- Applicant listing: search, office/campus/college/program/section filters (#138, #140).
+- Dashboard-stats aggregation endpoints for applicant management (#141).
+- Password reset flow: forgot-password email link (single-use JWT, TTL), validate-reset-token,
+  and reset-password endpoints per portal (student/admin) with role boundaries and
+  anti-enumeration responses (#139).
+- Change-password endpoint (`requireAuth`): verifies current password, keeps current session,
+  deletes all others.
+
+### Changed
+
+- Seed process: enhanced data generation and safety checks.
+- Seed: admin accounts use `AdminPass123!` (override via `SEED_ADMIN_PASSWORD`).
+
+### Fixed
+
+- Reject resetting to a password that matches the current one (#150).
+- Prisma: `adminMessage` field changed to `TEXT` type to prevent truncation (#133).
+
+## [1.0.0] - 2026-08-07
+
+Initial release.
+
+### Added
+
+- Express + Prisma + Better Auth backend scaffold (`feat: initialize backend project`).
+- Student and Admin portal sign-in/sign-up flows (email + password, Google OAuth).
+- Applicant management: registration, listing with search/filters, approval workflow.
+- Event management: CRUD, tiered registration (early-bird / regular / walk-in), sponsorship inquiry.
+- Dashboard-stats aggregation endpoints.
+- User role management (`APPLICANT`, `MEMBER`, `ADMIN_HR`, `ADMIN_LOGISTICS`).
+- Sentry error tracking with `SENTRY_ENV` scoping.
+- Comprehensive API documentation (`docs/api/v1/`).
+- Data models, workflow guides, and PRD specs (`docs/specs/`).
