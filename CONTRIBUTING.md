@@ -118,14 +118,14 @@ After your feature PRs have merged to `develop`:
 
 2. **Rename `[Unreleased]`** to the version number with today's date:
    ```markdown
-   ## [0.1.0] - 2026-08-21
+   ## [1.2.0] - 2026-08-21
    ```
 
 3. **Add a fresh empty `[Unreleased]`** above it:
    ```markdown
    ## [Unreleased]
 
-   ## [0.1.0] - 2026-08-21
+   ## [1.2.0] - 2026-08-21
    ```
 
 4. **Commit and tag:**
