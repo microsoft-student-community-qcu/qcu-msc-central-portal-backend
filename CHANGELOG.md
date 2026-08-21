@@ -12,9 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-21
+
 ### Added
 
-- **V2 Module 01 (M0) — Super Admin Settings Hub:**
+- **V2 Module 01 (M0) — Super Admin Settings Hub (#171, closes #170):**
   - `SUPERADMIN`, `ADMIN_FINANCE`, `ADMIN_FINANCE_HEAD`, `ADMIN_LOGISTICS_HEAD`, `STARTUP_DEV`
     role values (`UserRole`).
   - `SystemSetting` + `AuditLog` models — migration
