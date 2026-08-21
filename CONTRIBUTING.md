@@ -98,6 +98,72 @@ When adding a new endpoint:
 
 ---
 
+## Release Process
+
+Releases happen when you're ready to ship accumulated changes. The flow is: **develop → release → main** (per the branch strategy above).
+
+### When to release
+
+There's no fixed schedule — release when it makes sense:
+
+- **Feature milestone complete** (e.g. M0 merged → `v0.1.0`)
+- **Ready to deploy** to staging or production
+- **Natural stopping point** (end of sprint, before next module)
+
+### How to cut a release
+
+After your feature PRs have merged to `develop`:
+
+1. **Update the changelog** — make sure all entries under `[Unreleased]` are accurate.
+
+2. **Rename `[Unreleased]`** to the version number with today's date:
+   ```markdown
+   ## [0.1.0] - 2026-08-21
+   ```
+
+3. **Add a fresh empty `[Unreleased]`** above it:
+   ```markdown
+   ## [Unreleased]
+
+   ## [0.1.0] - 2026-08-21
+   ```
+
+4. **Commit and tag:**
+   ```bash
+   git add CHANGELOG.md
+   git commit -m "chore: release v0.1.0"
+   git tag v0.1.0
+   ```
+
+5. **Push:**
+   ```bash
+   git push origin develop
+   git push origin v0.1.0
+   ```
+
+6. **Create a GitHub Release** from the tag (optional but recommended).
+
+### Versioning (semver)
+
+```
+MAJOR.MINOR.PATCH
+  │      │     └── bugfixes only
+  │      └──────── new features (backwards compatible)
+  └─────────────── breaking changes
+```
+
+For V2 module development (no breaking changes to V1):
+
+| Version | When |
+|---|---|
+| `0.1.0` | M0 (Super Admin Settings Hub) merged |
+| `0.2.0` | M1 (Events v2) merged |
+| `0.3.0` | M2 (Merch) merged |
+| ... | Each subsequent module |
+| `1.0.0` | V2 "initial release" — all modules complete |
+
+---
+
 ## Need Help?
 
 Open an issue at https://github.com/microsoft-student-community-qcu/qcu-msc-central-portal-backend/issues

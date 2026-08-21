@@ -180,6 +180,7 @@ Guests have no User record (behavioral role only).
 - **Every completed task must update `CHANGELOG.md` — even a single change.** Entries go under `[Unreleased]` in the matching category.
 - A task is not considered done until its changelog entry exists.
 - Reference the issue/PR number in the entry when available.
+- **Releases:** when cutting a release, rename `[Unreleased]` to `## [X.Y.Z] - <date>` and add a fresh empty `[Unreleased]` above it. See CONTRIBUTING.md → Release Process.
 
 ## Testing Expectations
 
