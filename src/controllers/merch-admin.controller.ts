@@ -8,7 +8,7 @@
  */
 
 import { Request, Response } from "express";
-import { Prisma } from "@prisma/client";
+import { Prisma, MerchItemStatus, MerchOrderStatus, MerchRejectionReason } from "@prisma/client";
 import { prisma } from "../config/database";
 import {
   createMerchItemSchema,
@@ -34,7 +34,8 @@ const MAX_ORDER_PAGE_SIZE = 50;
 const MAX_PHOTOS = 6;
 
 // Human-readable rejection reason labels for the student-facing email.
-const REJECTION_REASON_LABELS: Record<string, string> = {
+// Typed by the Prisma enum so a new reason must be given a label here.
+const REJECTION_REASON_LABELS: Record<MerchRejectionReason, string> = {
   REFERENCE_NOT_FOUND: "Reference number not found in GCash history",
   AMOUNT_MISMATCH: "Amount received does not match the order total",
   SCREENSHOT_UNCLEAR: "Screenshot is unclear or inconsistent with the reference number",
@@ -44,7 +45,7 @@ const REJECTION_REASON_LABELS: Record<string, string> = {
 };
 
 function actorFrom(req: Request): string | null {
-  return ((req as any).userId as string | null) ?? null;
+  return req.userId ?? null;
 }
 function ipFrom(req: Request): string | null {
   return typeof req.ip === "string" ? req.ip : null;
@@ -53,7 +54,21 @@ function trackingUrl(orderRef: string): string {
   return `${env.FRONTEND_URL}/merch/orders/${encodeURIComponent(orderRef)}`;
 }
 
-function serializeAdminItem(item: any) {
+// Narrow an arbitrary query string to a known enum value (or null). The cast is
+// guarded by a runtime membership check against the actual Prisma enum, so it
+// is provably safe and keeps the valid-status list single-sourced from Prisma.
+function toItemStatus(value: string): MerchItemStatus | null {
+  return (Object.values(MerchItemStatus) as string[]).includes(value) ? (value as MerchItemStatus) : null;
+}
+function toOrderStatus(value: string): MerchOrderStatus | null {
+  return (Object.values(MerchOrderStatus) as string[]).includes(value) ? (value as MerchOrderStatus) : null;
+}
+
+// Exact shape returned by the admin item queries (always includes variants).
+// Derived from the Prisma payload so it stays in sync with the schema.
+type AdminMerchItem = Prisma.MerchItemGetPayload<{ include: { variants: true } }>;
+
+function serializeAdminItem(item: AdminMerchItem) {
   return {
     id: item.id,
     name: item.name,
@@ -64,7 +79,7 @@ function serializeAdminItem(item: any) {
     lowStockThreshold: item.lowStockThreshold,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
-    variants: item.variants?.map((v: any) => ({ id: v.id, label: v.label, stock: v.stock })) ?? [],
+    variants: item.variants.map((v) => ({ id: v.id, label: v.label, stock: v.stock })),
   };
 }
 
@@ -74,7 +89,8 @@ function serializeAdminItem(item: any) {
 export async function listItemsAdmin(req: Request, res: Response): Promise<void> {
   try {
     const statusFilter = typeof req.query.status === "string" ? req.query.status.toUpperCase() : "";
-    const where = statusFilter === "ACTIVE" || statusFilter === "ARCHIVED" ? { status: statusFilter as any } : {};
+    const status = toItemStatus(statusFilter);
+    const where: Prisma.MerchItemWhereInput = status ? { status } : {};
 
     const items = await prisma.merchItem.findMany({
       where,
@@ -234,6 +250,12 @@ export async function updateItem(req: Request, res: Response): Promise<void> {
       where: { id: itemId },
       include: { variants: { orderBy: { label: "asc" } } },
     });
+    // The row was verified above and updated in a transaction, so a missing
+    // record here is an unexpected internal fault rather than a client error.
+    if (!item) {
+      res.status(500).json({ success: false, message: "Internal server error while updating the item" });
+      return;
+    }
 
     await recordAudit({
       actorId: actorFrom(req),
@@ -289,10 +311,8 @@ export async function listOrders(req: Request, res: Response): Promise<void> {
   try {
     const { page, pageSize } = clampPagination(req.query.page, req.query.pageSize, MAX_ORDER_PAGE_SIZE);
     const statusFilter = typeof req.query.status === "string" ? req.query.status.toUpperCase() : "";
-    const validStatuses = [
-      "AWAITING_PAYMENT", "PENDING_VERIFICATION", "CONFIRMED", "PAID_AND_CLAIMED", "REJECTED", "CANCELLED",
-    ];
-    const where = validStatuses.includes(statusFilter) ? { status: statusFilter as any } : {};
+    const status = toOrderStatus(statusFilter);
+    const where: Prisma.MerchOrderWhereInput = status ? { status } : {};
 
     const [total, orders] = await Promise.all([
       prisma.merchOrder.count({ where }),

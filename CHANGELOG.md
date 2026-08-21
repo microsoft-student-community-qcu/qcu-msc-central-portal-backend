@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Docs: `docs/api/v2/merch.md`, `docs/specs/data-models/merch.md`,
     `docs/guides/v2/workflows/merch.md`, `docs/test-cases/v2/04-merch-pre-orders.md`;
     tests in `src/__tests__/merch.routes.test.ts`.
+  - Type-safety: global Express `Request` augmentation (`src/types/express.d.ts`) exposes
+    `req.userId` / `req.userRole` without `any`; merch controllers now use Prisma enum types
+    (`MerchItemStatus`/`MerchOrderStatus`/`MerchRejectionReason`) and a `MerchItemGetPayload`
+    serializer type in place of `any` casts.
 
 ### Fixed
 

@@ -124,7 +124,7 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
 
     // amount snapshot = unit price × quantity (Decimal maths, not float).
     const amount = new Prisma.Decimal(variant.item.price as Prisma.Decimal).mul(quantity);
-    const authedUserId = ((req as any).userId as string | null) ?? null;
+    const authedUserId = req.userId ?? null;
 
     // Create the order, retrying on the rare orderRef collision (unique index).
     let created: { orderRef: string } | null = null;
