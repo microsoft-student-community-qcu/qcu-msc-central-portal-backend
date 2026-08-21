@@ -267,11 +267,11 @@ model ApplicationDraft {
   certificateOfRegistration   String?
   curriculumVitae             String?
 
-  interestsSkillsHobbies      String?
-  organizationHistory         String?
+  interestsSkillsHobbies      String?         @db.Text
+  organizationHistory         String?         @db.Text
   portfolio                   String?
   githubOrProjectLinks        String?
-  previousWorksAchievements   String?
+  previousWorksAchievements   String?         @db.Text
 
   manual_application          Boolean?
   lastResumeEmailSentAt       DateTime?
