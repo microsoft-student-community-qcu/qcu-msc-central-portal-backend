@@ -66,6 +66,8 @@ All environment variables are validated via Zod in `src/config/env.ts` at startu
 | `AZURE_CLIENT_ID` | Azure Service Principal client ID | *(required)* |
 | `AZURE_CLIENT_SECRET` | Azure Service Principal client secret | *(required)* |
 | `AZURE_TENANT_ID` | Azure Service Principal tenant ID | *(required)* |
+| `GCASH_NUMBER` | Org GCash number shown on the merch payment screen (Module 04) | *(optional)* |
+| `GCASH_QR_IMAGE_URL` | URL to the org's static GCash QR image (Module 04) | *(optional)* |
 | `EMAIL_PROVIDER` | Email delivery backend | `RESEND` or `SMTP` |
 | `RESEND_API_KEY` | Resend API key (when `EMAIL_PROVIDER=RESEND`) | *(required for RESEND)* |
 | `RESEND_FROM_EMAIL` | Resend sender email | `no-reply@msc-qcu.tech` |

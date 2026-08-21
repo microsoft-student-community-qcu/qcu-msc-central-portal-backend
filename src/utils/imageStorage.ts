@@ -27,6 +27,7 @@ function getBlobServiceClient(): BlobServiceClient {
 
 const OCR_CONTAINER = "ocr";
 const DOCUMENTS_CONTAINER = "documents";
+const MERCH_CONTAINER = "merch";
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
 // ── Local disk fallback: DEVELOPMENT ONLY ────────────────────────────────
@@ -168,6 +169,61 @@ export async function getImageStream(filename: string) {
   }
   const client = getBlobServiceClient();
   const containerClient = client.getContainerClient(OCR_CONTAINER);
+  const blockBlobClient = containerClient.getBlockBlobClient(filename);
+  const downloadResponse = await blockBlobClient.download(0);
+  return {
+    stream: downloadResponse.readableStreamBody,
+    contentType: downloadResponse.contentType,
+    contentLength: downloadResponse.contentLength,
+  };
+}
+
+// ── Merch Storage (product photos + payment-proof screenshots) ───────────
+//
+// Module 04 — Finance merch pre-orders. Product photos are public-facing;
+// payment screenshots are admin-only and served through a protected proxy
+// (see the merch controller), never linked directly.
+
+export async function saveMerchImage(buffer: Buffer, filename: string, mimetype?: string): Promise<string> {
+  try {
+    const client = getBlobServiceClient();
+    const containerClient = client.getContainerClient(MERCH_CONTAINER);
+    await containerClient.createIfNotExists();
+    const blockBlobClient = containerClient.getBlockBlobClient(filename);
+    await blockBlobClient.upload(buffer, buffer.length, {
+      blobHTTPHeaders: mimetype ? { blobContentType: mimetype } : undefined,
+    });
+    return blockBlobClient.url;
+  } catch (azureErr) {
+    if (!isLocalFallbackAllowed()) {
+      handleStorageError(azureErr, "merch image upload");
+    }
+    console.warn(`[STORAGE] Azure Blob upload failed (${(azureErr as Error).message}), falling back to local storage.`);
+    return await saveLocal(MERCH_CONTAINER, filename, buffer);
+  }
+}
+
+export function getMerchImagePath(filename: string): string {
+  const localFile = path.join(UPLOADS_DIR, MERCH_CONTAINER, filename);
+  if (isLocalFallbackAllowed() && fs.existsSync(localFile)) {
+    const port = env.PORT || 5000;
+    return `http://localhost:${port}/uploads/${MERCH_CONTAINER}/${filename}`;
+  }
+  return `https://${env.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/${MERCH_CONTAINER}/${filename}`;
+}
+
+export async function getMerchImageStream(filename: string) {
+  const localFile = path.join(UPLOADS_DIR, MERCH_CONTAINER, filename);
+  if (isLocalFallbackAllowed() && fs.existsSync(localFile)) {
+    const stat = await fs.promises.stat(localFile);
+    return {
+      stream: fs.createReadStream(localFile),
+      contentType: undefined,
+      contentLength: stat.size,
+    };
+  }
+  const client = getBlobServiceClient();
+  const containerClient = client.getContainerClient(MERCH_CONTAINER);
   const blockBlobClient = containerClient.getBlockBlobClient(filename);
   const downloadResponse = await blockBlobClient.download(0);
   return {

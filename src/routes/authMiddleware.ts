@@ -63,7 +63,10 @@ export const requireMemberOrAdmin = requireRole("MEMBER", "ADMIN_HR", "ADMIN_LOG
 
 export const requireSuperadmin = requireRole(SUPERADMIN);
 
-export const requireAdminFinance = requireRole("ADMIN_FINANCE");
+// ADMIN_FINANCE_HEAD inherits every ADMIN_FINANCE capability (module 04 §2:
+// the head does "everything Finance officers can do, plus" head-only actions).
+// Head-only endpoints (archive/cancel) use requireAdminFinanceHead instead.
+export const requireAdminFinance = requireRole("ADMIN_FINANCE", "ADMIN_FINANCE_HEAD");
 
 export const requireAdminFinanceHead = requireRole("ADMIN_FINANCE_HEAD");
 

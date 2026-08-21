@@ -38,3 +38,38 @@ export async function validateFileMimeType(
 
   return { valid: true };
 }
+
+// Image-only whitelist — merch product photos and GCash payment screenshots
+// must never accept PDFs (unlike the applicant document validator above).
+const ALLOWED_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+const ALLOWED_IMAGE_MIME_LABELS = "JPEG, PNG, or WEBP";
+
+/**
+ * Validates a file buffer as an image using magic-byte detection. Rejects any
+ * non-image content (including PDFs) regardless of the filename extension or
+ * Content-Type header sent by the client. Used by Module 04 (merch photos +
+ * payment-proof screenshots).
+ */
+export async function validateImageMimeType(
+  buffer: Buffer,
+  fieldName: string
+): Promise<{ valid: boolean; message?: string }> {
+  const detected = await FileType.fromBuffer(buffer);
+
+  if (!detected) {
+    return {
+      valid: false,
+      message: `${fieldName}: Could not detect file type. Only ${ALLOWED_IMAGE_MIME_LABELS} images are allowed.`,
+    };
+  }
+
+  if (!ALLOWED_IMAGE_MIME_TYPES.includes(detected.mime)) {
+    return {
+      valid: false,
+      message: `${fieldName}: Invalid file type (${detected.mime}). Only ${ALLOWED_IMAGE_MIME_LABELS} images are allowed.`,
+    };
+  }
+
+  return { valid: true };
+}

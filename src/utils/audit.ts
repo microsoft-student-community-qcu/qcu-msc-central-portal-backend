@@ -18,7 +18,18 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../config/database";
 import { env } from "../config/env";
 
-export type AuditAction = "ROLE_CHANGE" | "SETTING_UPDATE" | "SYSTEM_MAINTENANCE";
+export type AuditAction =
+  | "ROLE_CHANGE"
+  | "SETTING_UPDATE"
+  | "SYSTEM_MAINTENANCE"
+  // Module 04 — Merch Pre-Orders (Finance)
+  | "MERCH_ITEM_CREATED"
+  | "MERCH_ITEM_EDITED"
+  | "MERCH_ITEM_ARCHIVED"
+  | "MERCH_ORDER_CONFIRMED"
+  | "MERCH_ORDER_REJECTED"
+  | "MERCH_ORDER_CLAIMED"
+  | "MERCH_ORDER_CANCELLED";
 
 export interface RecordAuditInput {
   actorId: string | null;

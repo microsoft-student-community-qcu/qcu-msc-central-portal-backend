@@ -47,7 +47,7 @@ describe("role guards", () => {
     { guard: requireAnyAdmin, name: "requireAnyAdmin", allowed: ["ADMIN_HR", "ADMIN_LOGISTICS"] },
     { guard: requireMemberOrAdmin, name: "requireMemberOrAdmin", allowed: ["MEMBER", "ADMIN_HR", "ADMIN_LOGISTICS"] },
     { guard: requireSuperadmin, name: "requireSuperadmin", allowed: ["SUPERADMIN"] },
-    { guard: requireAdminFinance, name: "requireAdminFinance", allowed: ["ADMIN_FINANCE"] },
+    { guard: requireAdminFinance, name: "requireAdminFinance", allowed: ["ADMIN_FINANCE", "ADMIN_FINANCE_HEAD"] },
     { guard: requireAdminFinanceHead, name: "requireAdminFinanceHead", allowed: ["ADMIN_FINANCE_HEAD"] },
     { guard: requireAdminLogisticsHead, name: "requireAdminLogisticsHead", allowed: ["ADMIN_LOGISTICS_HEAD"] },
   ];

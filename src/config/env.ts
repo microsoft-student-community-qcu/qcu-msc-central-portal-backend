@@ -34,6 +34,12 @@ const envSchema = z.object({
   AZURE_TENANT_ID: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
 
+  // Merch pre-orders (Module 04) — org GCash payment details. Optional at boot
+  // so non-merch deployments still start; the merch order endpoint returns a
+  // clear 503 when they are unset (see merch.controller.ts).
+  GCASH_NUMBER: z.string().optional(),
+  GCASH_QR_IMAGE_URL: z.string().url().optional(),
+
   // Email provider selection
   EMAIL_PROVIDER: z.enum(["RESEND", "SMTP"]).default("RESEND"),
 
