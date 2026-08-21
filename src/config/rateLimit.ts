@@ -25,3 +25,6 @@ export const studentSignInLimiter = limiter(10, "Too many sign-in attempts. Plea
 export const adminSignInLimiter = limiter(10, "Too many sign-in attempts. Please try again later.");
 
 export const resendSetupLinkLimiter = limiter(3, "Too many requests. Please try again later.");
+
+// Defense-in-depth on top of session auth for SUPERADMIN-only mutations.
+export const adminMutationLimiter = limiter(20, "Too many admin requests. Please try again later.");

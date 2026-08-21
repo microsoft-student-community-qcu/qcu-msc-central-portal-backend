@@ -13,13 +13,20 @@ generator client {
 // ============================================================================
 
 // User role enumeration for role-based access control.
-// Split ADMIN into domain-specific admins per PRD-V1 Section 2:
-// Admin (Management & Dev) and Admin (Logistics) have distinct permissions.
+// V1 roles: APPLICANT, MEMBER, ADMIN_HR, ADMIN_LOGISTICS (PRD-V1).
+// V2 (PRD-V2) adds domain admins + SUPERADMIN; ADMIN_CORE was intentionally
+// removed — its permissions are folded into the heads and SUPERADMIN.
+// SUPERADMIN passes every require* guard via role inheritance.
 enum UserRole {
   APPLICANT
   MEMBER
   ADMIN_HR
   ADMIN_LOGISTICS
+  SUPERADMIN
+  ADMIN_FINANCE
+  ADMIN_FINANCE_HEAD
+  ADMIN_LOGISTICS_HEAD
+  STARTUP_DEV
 }
 
 // Applicant status enumeration for tracking recruitment pipeline.
@@ -270,4 +277,42 @@ model ApplicationDraft {
   lastResumeEmailSentAt       DateTime?
   createdAt                   DateTime        @default(now())
   updatedAt                   DateTime        @updatedAt
+}
+
+// Global system toggles — V2 Super Admin Settings Hub (Module 01 / M0).
+// Governs subsystem availability across the entire portal (e.g. registration
+// windows, merch shop, maintenance mode). Written only by SUPERADMIN via
+// PATCH /api/v2/admin/settings; every change is audit-logged.
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique // Whitelisted key, e.g. events_registration_open
+  value       Json // Boolean state of the toggle (JSON so future types are possible)
+  description String?
+  updatedById String? // User id of the last editor (no FK — survives user deletion)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
+// Append-only, tamper-evident audit trail of administrative actions — V2
+// Super Admin Settings Hub (Module 01 / M0). Each row carries the hash of the
+// previous row (hash chain); integrity is verified on read. No update/delete
+// paths exist for this table. actorId has no FK on purpose so audit rows
+// survive user deletion.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String? // User id who performed the action (null = system)
+  action     String // e.g. ROLE_CHANGE, SETTING_UPDATE, SYSTEM_MAINTENANCE
+  entityType String // e.g. "USER", "SYSTEM_SETTING"
+  entityId   String?
+  details    Json? // Action-specific payload (never contains secrets)
+  ipAddress  String?
+  prevHash   String? // Hash of the previous log row (hash chain linkage)
+  hash       String // HMAC-SHA256 of this row's canonical payload
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([actorId])
+  @@index([action])
 }

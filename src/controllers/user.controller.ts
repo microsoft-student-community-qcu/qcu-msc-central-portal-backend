@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { prisma } from "../config/database";
 import { z } from "zod";
 import { verifySetupToken } from "../utils/token";
+import { updateUserRoleSchema } from "../schemas/user.schema";
 
 export async function getMe(req: Request, res: Response): Promise<void> {
   try {
@@ -50,16 +51,21 @@ export async function getMe(req: Request, res: Response): Promise<void> {
 export async function updateUserRole(req: Request, res: Response): Promise<void> {
   try {
     const { userId } = req.params;
-    const { role } = req.body;
 
-    const validRoles = ["APPLICANT", "MEMBER", "ADMIN_HR", "ADMIN_LOGISTICS"];
-    if (!validRoles.includes(role)) {
+    // Zod validation against the V1 role set only — ADMIN_HR can never grant
+    // V2 roles (SUPERADMIN / finance / heads / startup dev). V2 role mutation
+    // lives under /api/v2/admin/users/:userId/role (SUPERADMIN only).
+    const parsed = updateUserRoleSchema.safeParse(req.body);
+    if (!parsed.success) {
       res.status(400).json({
         success: false,
-        message: `Role must be one of: ${validRoles.join(", ")}`,
+        message: "Validation error",
+        errors: parsed.error.flatten().fieldErrors,
       });
       return;
     }
+
+    const { role } = parsed.data;
 
     const existing = await prisma.user.findUnique({
       where: { id: userId },

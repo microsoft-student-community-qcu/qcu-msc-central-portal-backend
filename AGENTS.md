@@ -27,7 +27,8 @@ qcu-msc-central-portal-backend/
 │   ├── api/                    # Versioned API documentation
 │   ├── guides/                 # Versioned workflow guides (v1/, v2/)
 │   ├── modules/                # Per-module handoff docs (V2) — docs/modules/v2/
-│   └── specs/                  # PRD, data models, DTM
+│   ├── specs/                  # PRD, data models, DTM
+│   └── test-cases/             # Manual test-case checklists (per version)
 ├── prisma/
 │   ├── schema.prisma           # Database schema
 │   └── migrations/             # SQL migration history
@@ -42,6 +43,7 @@ qcu-msc-central-portal-backend/
 │   └── index.ts                # Server entry point
 ├── .env.example
 ├── AGENTS.md
+├── CHANGELOG.md                # Release notes — updated on EVERY task (see Changelog Obligations)
 ├── CONTRIBUTING.md
 ├── tsconfig.json
 └── package.json
@@ -170,6 +172,14 @@ Guests have no User record (behavioral role only).
 - Keep documentation consistent with actual implementation (no outdated docs allowed).
 - Workflow documentation is versioned under `docs/guides/`: V1 guides live in `docs/guides/v1/workflows/`, V2 in `docs/guides/v2/workflows/`. Update them when registration, membership, or cancellation logic changes.
 - V2 module handoff docs live in `docs/modules/v2/` — each module gets a single self-contained file; index in `docs/modules/README.md`.
+- Manual test cases live in `docs/test-cases/{version}/` — add or update a suite whenever endpoint behavior, auth rules, or workflows change.
+
+## Changelog Obligations
+
+- The project keeps a `CHANGELOG.md` at the repository root (Keep a Changelog format, categories: `Added`, `Changed`, `Fixed`, `Security`, `Removed`).
+- **Every completed task must update `CHANGELOG.md` — even a single change.** Entries go under `[Unreleased]` in the matching category.
+- A task is not considered done until its changelog entry exists.
+- Reference the issue/PR number in the entry when available.
 
 ## Testing Expectations
 

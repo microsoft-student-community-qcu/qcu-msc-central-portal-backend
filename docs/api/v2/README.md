@@ -1,5 +1,7 @@
-# API v2 (Placeholder)
+# API v2
 
-This folder will contain documentation for the v2 API once development begins.
+Version 2 API reference for the QCU MSC Central Portal.
 
-Use this space to stage breaking changes and migration guides.
+- [Admin API — Super Admin Settings Hub (Module 01 / M0)](admin.md) — role management, system toggles, tamper-evident audit viewer
+
+More endpoints land here as V2 modules ship (events, merch, showcase, analytics, DataCamp).

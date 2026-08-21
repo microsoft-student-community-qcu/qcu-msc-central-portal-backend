@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { auth } from "../config/auth";
+import { SUPERADMIN, isSuperadmin } from "../config/roles";
 
 export async function authMiddleware(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
@@ -22,6 +23,25 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
   next();
 }
 
+/**
+ * Guard factory with SUPERADMIN role inheritance (PRD-V2 Global NFR:
+ * "Superadmin is automatically authorized for any restricted action").
+ * A user passes when their role is in `allowedRoles` OR is SUPERADMIN.
+ */
+function requireRole(...allowedRoles: readonly string[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const userRole = (req as any).userRole;
+    if (!allowedRoles.includes(userRole) && !isSuperadmin(userRole)) {
+      res.status(403).json({
+        success: false,
+        message: `Forbidden - ${allowedRoles.join(" or ")} access required`,
+      });
+      return;
+    }
+    next();
+  };
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if (!(req as any).userId) {
     res.status(401).json({
@@ -33,49 +53,19 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   next();
 }
 
-export function requireAdminHR(req: Request, res: Response, next: NextFunction): void {
-  if ((req as any).userRole !== "ADMIN_HR") {
-    res.status(403).json({
-      success: false,
-      message: "Forbidden - ADMIN_HR access required",
-    });
-    return;
-  }
-  next();
-}
+export const requireAdminHR = requireRole("ADMIN_HR");
 
-export function requireAdminLogistics(req: Request, res: Response, next: NextFunction): void {
-  if ((req as any).userRole !== "ADMIN_LOGISTICS") {
-    res.status(403).json({
-      success: false,
-      message: "Forbidden - ADMIN_LOGISTICS access required",
-    });
-    return;
-  }
-  next();
-}
+export const requireAdminLogistics = requireRole("ADMIN_LOGISTICS");
 
-export function requireAnyAdmin(req: Request, res: Response, next: NextFunction): void {
-  const userRole = (req as any).userRole;
-  if (!["ADMIN_HR", "ADMIN_LOGISTICS"].includes(userRole)) {
-    res.status(403).json({
-      success: false,
-      message: "Forbidden - admin access required",
-    });
-    return;
-  }
-  next();
-}
+export const requireAnyAdmin = requireRole("ADMIN_HR", "ADMIN_LOGISTICS");
 
-export function requireMemberOrAdmin(req: Request, res: Response, next: NextFunction): void {
-  const userRole = (req as any).userRole;
-  if (!["MEMBER", "ADMIN_HR", "ADMIN_LOGISTICS"].includes(userRole)) {
-    res.status(403).json({
-      success: false,
-      message: "Forbidden - MEMBER or admin access required",
-    });
-    return;
-  }
-  next();
-}
+export const requireMemberOrAdmin = requireRole("MEMBER", "ADMIN_HR", "ADMIN_LOGISTICS");
+
+export const requireSuperadmin = requireRole(SUPERADMIN);
+
+export const requireAdminFinance = requireRole("ADMIN_FINANCE");
+
+export const requireAdminFinanceHead = requireRole("ADMIN_FINANCE_HEAD");
+
+export const requireAdminLogisticsHead = requireRole("ADMIN_LOGISTICS_HEAD");
 

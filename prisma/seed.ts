@@ -1,6 +1,7 @@
 import { v5 as uuidv5 } from "uuid";
 import { PrismaClient, UserRole, ApplicantStatus, Gender, Office, Campus } from "@prisma/client";
 import { auth } from "../src/config/auth";
+import { ALLOWED_SETTING_KEYS, SETTING_DESCRIPTIONS } from "../src/config/settings";
 
 // ============================================================================
 // Central seed — run locally with `npx prisma db seed` and automatically by
@@ -10,6 +11,8 @@ import { auth } from "../src/config/auth";
 //   - 300 users + accounts (75 MEMBER + 225 APPLICANT) via Better Auth, so the
 //     mocked users can actually log in with the documented password.
 //   - 10 admins (5 ADMIN_HR + 5 ADMIN_LOGISTICS) with distinct credentials.
+//   - 1 SUPERADMIN (V2 Module 01) with its own credential.
+//   - 3 default SystemSetting toggles (V2 Module 01).
 //   - 300 applicant records (one per user) with a realistic status spread.
 //   - 150 application drafts across all form steps.
 //
@@ -17,11 +20,12 @@ import { auth } from "../src/config/auth";
 //   - Emails: lastname.firstname.mi@gmail.com (digit suffix on collisions).
 //   - Student IDs: YY-NNNN — year correlates with section year level
 //     (4th year -> 23 ... 1st year -> 26; a few irregulars get 21-22),
-//     number in the 1000-2900 range.
+//     number in the 1000-2900 range. Admins use the 00-01XX staff range,
+//     SUPERADMIN uses 00-0000.
 //   - Document fields use the fixed mock blob URLs below.
 //
 // SAFETY: hard-refuses to run on production/main. Idempotent — re-runs skip
-// existing records (matched by email / studentId / ocrSessionId).
+// existing records (matched by email / studentId / ocrSessionId / setting key).
 // ============================================================================
 
 const prisma = new PrismaClient();
@@ -35,6 +39,7 @@ const IRREGULAR_COUNT = 5; // students enrolled earlier than the standard cohort
 
 const USER_PASSWORD = process.env.SEED_USER_PASSWORD || "SeedPass123!";
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "AdminPass123!";
+const SUPERADMIN_PASSWORD = process.env.SEED_SUPERADMIN_PASSWORD || "SuperAdminPass123!";
 
 // ── Fixed mock document URLs (shared dev-storage blobs) ───────────────────
 const ID_IMAGE_URL = "https://stsamscqcubackenddev.blob.core.windows.net/ocr/ocr_1785936580931_student-id.png";
@@ -453,6 +458,46 @@ async function main() {
     createdTotal++;
   }
 
+  // ── 1b. SUPERADMIN account (V2 Module 01 — first admin of the system) ─────
+  const SUPERADMIN_EMAIL = process.env.SEED_SUPERADMIN_EMAIL || "superadmin@msc-qcu.tech";
+  const SUPERADMIN_STUDENT_ID = "00-0000";
+
+  if (!usedEmails.has(SUPERADMIN_EMAIL) && !usedStudentIds.has(SUPERADMIN_STUDENT_ID)) {
+    await auth.api.signUpEmail({
+      body: {
+        email: SUPERADMIN_EMAIL,
+        password: SUPERADMIN_PASSWORD,
+        name: "System Superadmin",
+        firstName: "System",
+        lastName: "Superadmin",
+        studentId: SUPERADMIN_STUDENT_ID,
+      },
+    });
+
+    await prisma.user.update({
+      where: { email: SUPERADMIN_EMAIL },
+      data: { role: UserRole.SUPERADMIN },
+    });
+
+    createdTotal++;
+  } else {
+    skippedTotal++;
+  }
+
+  // ── 1c. Default SystemSetting toggles (V2 Module 01) ──────────────────────
+  // Idempotent upsert — existing rows keep their current values.
+  for (const key of ALLOWED_SETTING_KEYS) {
+    await prisma.systemSetting.upsert({
+      where: { key },
+      update: {},
+      create: {
+        key,
+        value: key === "events_registration_open",
+        description: SETTING_DESCRIPTIONS[key],
+      },
+    });
+  }
+
   // ── 2. Bulk person pool — built ONCE and reused by the user and applicant
   // loops so both sides always reference the exact same people. ─────────────
   const pool: Person[] = Array.from({ length: USER_COUNT }, (_, i) =>
@@ -490,7 +535,7 @@ async function main() {
       data: { role: isMember ? UserRole.MEMBER : UserRole.APPLICANT },
     });
 
-    userIdByIndex.set(i, result.user.id);
+userIdByIndex.set(i, result.user.id);
     createdTotal++;
   }
 
@@ -613,6 +658,7 @@ async function main() {
   );
   console.log(`Bulk user login password: ${USER_PASSWORD}`);
   console.log(`Admin login password: ${ADMIN_PASSWORD}`);
+  console.log(`Superadmin login → ${SUPERADMIN_EMAIL} / ${SUPERADMIN_PASSWORD}`);
   console.log(`Admins → ${admins.map((a) => `${a.role}: ${a.email}`).join(", ")}`);
 }
 

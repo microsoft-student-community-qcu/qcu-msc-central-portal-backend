@@ -2,7 +2,7 @@
 
 ## Overview
 
-Represents an authenticated system user. Users exist in one of four strict roles after registration; guests have no User record.
+Represents an authenticated system user. Users exist in strict roles; guests have no User record.
 
 ## Prisma Definition
 
@@ -12,6 +12,11 @@ enum UserRole {
   MEMBER
   ADMIN_HR
   ADMIN_LOGISTICS
+  SUPERADMIN
+  ADMIN_FINANCE
+  ADMIN_FINANCE_HEAD
+  ADMIN_LOGISTICS_HEAD
+  STARTUP_DEV
 }
 
 model User {
@@ -63,6 +68,14 @@ model User {
 | `MEMBER` | Active QCU MSC member |
 | `ADMIN_HR` | Management & Dev — manages applicant pipeline only |
 | `ADMIN_LOGISTICS` | Logistics — manages events only |
+| `SUPERADMIN` | System lead — inherits every restricted action; role management, system toggles, audit viewer |
+| `ADMIN_FINANCE` | Finance — merch catalog, pre-orders, payment status |
+| `ADMIN_FINANCE_HEAD` | Finance head — inherits finance perms + ADMIN_CORE (removed) perms |
+| `ADMIN_LOGISTICS_HEAD` | Logistics head — inherits logistics perms + ADMIN_CORE (removed) perms |
+| `STARTUP_DEV` | Technical talent — showcase submissions (student portal surface) |
+
+> **Inheritance (PRD-V2 Global NFR):** SUPERADMIN passes every `require*` guard in the system.
+> `ADMIN_CORE` was intentionally removed — its permissions are folded into the heads and SUPERADMIN.
 
 ## Relations
 

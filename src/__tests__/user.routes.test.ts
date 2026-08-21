@@ -31,6 +31,10 @@ vi.mock("../routes/authMiddleware", () => ({
   requireAdminLogistics: mockRequireAdminLogistics,
   requireAnyAdmin: mockRequireAnyAdmin,
   requireMemberOrAdmin: mockRequireMemberOrAdmin,
+  requireSuperadmin: vi.fn(),
+  requireAdminFinance: vi.fn(),
+  requireAdminFinanceHead: vi.fn(),
+  requireAdminLogisticsHead: vi.fn(),
 }));
 
 import app from "../app";
@@ -238,6 +242,17 @@ describe("PATCH /api/v1/users/:userId/role (ADMIN_HR)", () => {
       .patch("/api/v1/users/user-1/role")
       .send({ role: "INVALID" });
     expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when attempting to assign a V2 role via the V1 endpoint", async () => {
+    // V2 roles (SUPERADMIN, finance, heads) must never be grantable through
+    // the legacy ADMIN_HR endpoint — they live under /api/v2/admin only.
+    for (const role of ["SUPERADMIN", "ADMIN_FINANCE", "ADMIN_LOGISTICS_HEAD", "STARTUP_DEV"]) {
+      const res = await request(app)
+        .patch("/api/v1/users/user-1/role")
+        .send({ role });
+      expect(res.status).toBe(400);
+    }
   });
 
   it("returns 404 when user not found", async () => {

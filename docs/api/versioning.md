@@ -11,10 +11,15 @@ All public APIs must use explicit versioning in their paths and documentation (f
 - Provide migration notes and example requests/responses for the replacement endpoint.
 
 ## Starting Point
-- Current API surface is `v1`.
-- V2 is planned (see `docs/modules/v2/`). It will carry breaking changes: role-model expansion, new event types, and the approval-gated QR workflow. Non-breaking V1 additions may still land under `v1` until the V2 release.
+- Current stable API surface is `v1` — **frozen (bugfixes only)**. The live student/admin portals
+  depend on it, so V1 endpoints are not removed or changed behaviorally while V2 is developed.
+- **The `/api/v2/` namespace is open as of Module 01 (M0).** Every new V2 feature ships under
+  `/api/v2/` the moment its module lands, so parallel module branches target a stable version path.
+- Breaking changes (role-model expansion, new event types, approval-gated QR) land under `v2`.
+- V1 endpoints are deprecated *with a timeline* only when the V2 release replaces them
+  (see `docs/api/deprecation-template.md`).
 
 ## Versioned Docs
-- API reference: `docs/api/v1/` (current), `docs/api/v2/` (planned)
-- Workflow guides: `docs/guides/v1/` (shipped), `docs/guides/v2/` (planned)
+- API reference: `docs/api/v1/` (frozen, current), `docs/api/v2/` (open — V2 features)
+- Workflow guides: `docs/guides/v1/` (shipped), `docs/guides/v2/` (built per module)
 - Module docs: `docs/modules/v2/`

@@ -1,9 +1,16 @@
 import { z } from "zod";
+import { V1_ROLES, ALL_ROLES } from "../config/roles";
 
-export const userRoleEnum = z.enum(
-  ["APPLICANT", "MEMBER", "ADMIN_HR", "ADMIN_LOGISTICS"],
-  { error: "Role must be APPLICANT, MEMBER, ADMIN_HR, or ADMIN_LOGISTICS" }
-);
+// V1 role enum — locked to the V1 role set so legacy ADMIN_HR role updates can
+// never grant V2 roles (SUPERADMIN / finance / logistics head / startup dev).
+export const userRoleEnum = z.enum(V1_ROLES, {
+  error: "Role must be APPLICANT, MEMBER, ADMIN_HR, or ADMIN_LOGISTICS",
+});
+
+// Full V2 role enum — used by the SUPERADMIN-only admin role management API.
+export const adminUserRoleEnum = z.enum(ALL_ROLES, {
+  error: "Role must be a valid system role",
+});
 
 export const createUserSchema = z.object({
   student_id: z
@@ -27,6 +34,10 @@ export const loginUserSchema = z.object({
 
 export const updateUserRoleSchema = z.object({
   role: userRoleEnum,
+});
+
+export const adminUpdateUserRoleSchema = z.object({
+  role: adminUserRoleEnum,
 });
 
 export type CreateUserSchema = z.infer<typeof createUserSchema>;

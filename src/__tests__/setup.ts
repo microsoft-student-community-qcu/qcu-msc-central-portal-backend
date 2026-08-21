@@ -72,6 +72,26 @@ vi.mock("../config/database", () => ({
       update: vi.fn(),
       count: vi.fn(),
     },
+    applicationDraft: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+      count: vi.fn(),
+    },
+    systemSetting: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      upsert: vi.fn(),
+      count: vi.fn(),
+    },
+    auditLog: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      count: vi.fn(),
+    },
   } as any,
 }));
 
