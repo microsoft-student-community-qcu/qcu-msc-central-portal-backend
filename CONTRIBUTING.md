@@ -72,8 +72,9 @@ When adding a new endpoint:
 3. **Route** — Create a route file in `src/routes/` with rate limiting on public POST routes
 4. **App** — Register the route in `src/app.ts` at `/api/v{N}/...`
 5. **Docs** — Document the endpoint in `docs/api/v{N}/` (see AGENTS.md for documentation obligations)
-6. **Generate** — Run `npx prisma generate` if the Prisma schema changed
-7. **Test** — Test the endpoint using **POSTMAN**, **HTTPie**, **Thunder Client** (VS Code), or your preferred HTTP client. Request/response payload formats are documented in `docs/api/v{N}/<endpoint>.md`.
+6. **Changelog** — Update `CHANGELOG.md` under `[Unreleased]` in the matching category (`Added`, `Changed`, `Fixed`, `Security`, `Removed`). A task is not done until its changelog entry exists. See AGENTS.md → Changelog Obligations.
+7. **Generate** — Run `npx prisma generate` if the Prisma schema changed
+8. **Test** — Test the endpoint using **POSTMAN**, **HTTPie**, **Thunder Client** (VS Code), or your preferred HTTP client. Request/response payload formats are documented in `docs/api/v{N}/<endpoint>.md`.
 
 ---
 
@@ -91,6 +92,7 @@ When adding a new endpoint:
 - [ ] Zod schemas created or updated for new/modified endpoints
 - [ ] API documentation updated in `docs/api/`
 - [ ] Data model docs updated if the Prisma schema changed
+- [ ] **`CHANGELOG.md` updated under `[Unreleased]`** (see AGENTS.md → Changelog Obligations)
 - [ ] RBAC guards match the role model for the version being developed (V1: 4 roles; V2: extended set per `docs/modules/v2/01-superadmin-settings-hub.md`) — no bare `"ADMIN"` or `"STUDENT"` checks
 - [ ] `src/config/env.ts` updated if new environment variables were added
 - [ ] Branch is up-to-date with the target branch

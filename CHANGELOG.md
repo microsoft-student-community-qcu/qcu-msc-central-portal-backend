@@ -12,6 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Schema drift fix — ApplicationDraft TEXT columns (#000):**
+  - Added `@db.Text` to `interestsSkillsHobbies`, `organizationHistory`, and `previousWorksAchievements`
+    in `ApplicationDraft` model to match actual DB column types and prevent `prisma migrate dev`
+    from generating spurious `VARCHAR(191)` downgrades on every run.
+  - Cleaned up leftover `_applicant_legacy_office_backup` table and `AuditLog` index casing via
+    migration `20260821120000_cleanup_schema_drift`.
+  - Updated `prisma:migrate` npm script to accept `--name` argument — run
+    `npm run prisma:migrate -- <name>` to avoid interactive prompt.
+- **Docs — Changelog obligation made more prominent:**
+  - Added changelog step (step 6) to `CONTRIBUTING.md` Development Workflow.
+  - Added changelog checkbox to PR Review Checklist in `CONTRIBUTING.md`.
+
 ## [1.1.0] - 2026-08-21
 
 ### Added
