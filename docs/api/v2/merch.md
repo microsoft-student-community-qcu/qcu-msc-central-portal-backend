@@ -117,7 +117,11 @@ Runs a **real-time stock check**; stock is **not** reserved (only decremented at
 Requires the matching `email`. A mismatch returns **404** (never 403) so an order's existence is
 never confirmed to a non-owner.
 
-**Success (200):** `{ success, data: { order: { orderRef, itemName, variantLabel, quantity, amount, status, rejectionReason, financeNote, … } } }`
+**Success (200):** `{ success, data: { order: { orderRef, itemName, variantLabel, quantity, amount, status, rejectionReason, financeNote, shortfallAmount, refundOwed, … } } }`
+
+`shortfallAmount` is the exact top-up the student still owes (AMOUNT_MISMATCH or a pricier swap) —
+the page shows this, **not** the full order total. `refundOwed` is money due back after a cheaper
+swap. Both are `null` when nothing is outstanding.
 
 **Errors:** `400` missing/invalid email · `404` not found / email mismatch · `500` internal
 
@@ -337,6 +341,16 @@ the order's **current status** (handles the case where an earlier send silently 
 notification tracking. Audit: `MERCH_ORDER_EMAIL_RESENT`.
 **Errors:** `404` not found · `409` no email for status / no refund record yet · `502` send failed · `503` payment details unconfigured (AWAITING_PAYMENT) · `500` internal
 
+### 19. Reissue Resolution Link
+
+`POST /api/v2/admin/merch/orders/:orderId/resolution-link` — Auth: finance. Order must be
+`AWAITING_RESOLUTION`. Mints a **fresh** self-service token (invalidating any prior unconsumed one),
+re-sends the sold-out email, and **returns the links** so Finance can relay them directly (e.g. over
+chat) when a student lost the email. The raw token is never stored — a lost link can only be
+replaced, never recovered. Audit: `MERCH_ORDER_RESOLUTION_LINK_ISSUED`.
+**Success (200):** `{ success, message, data: { swapUrl, refundUrl, emailed } }`
+**Errors:** `404` not found · `409` not awaiting resolution · `500` internal
+
 ---
 
 ## Settings & Audit
@@ -345,7 +359,7 @@ notification tracking. Audit: `MERCH_ORDER_EMAIL_RESENT`.
 - **Audit actions:** `MERCH_ITEM_CREATED`, `MERCH_ITEM_EDITED`, `MERCH_ITEM_ARCHIVED`,
   `MERCH_ORDER_CONFIRMED`, `MERCH_ORDER_REJECTED`, `MERCH_ORDER_CLAIMED`, `MERCH_ORDER_CANCELLED`,
   `MERCH_ORDER_AWAITING_RESOLUTION`, `MERCH_ORDER_REFUNDED`, `MERCH_ORDER_SWAPPED`,
-  `MERCH_ORDER_REFUND_REQUESTED`, `MERCH_ORDER_EMAIL_RESENT`.
+  `MERCH_ORDER_REFUND_REQUESTED`, `MERCH_ORDER_RESOLUTION_LINK_ISSUED`, `MERCH_ORDER_EMAIL_RESENT`.
 
 ## Oversell & Resolution
 

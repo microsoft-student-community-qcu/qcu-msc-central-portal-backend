@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `MerchOrder.refundRequestedAt`; `?overdueTopUp=true` finance-queue filter for pricier-swap
     top-ups unpaid after 7 days; new emails (`sendMerchSwapConfirmedEmail`, `sendMerchSwapTopUpEmail`,
     `sendMerchRefundRequestedEmail`); audit actions `MERCH_ORDER_SWAPPED`, `MERCH_ORDER_REFUND_REQUESTED`.
+  - Finance can reissue a lost link: `POST /api/v2/admin/merch/orders/:orderId/resolution-link` mints
+    a fresh token, re-sends the sold-out email, and returns the swap/refund URLs to relay directly
+    (audit `MERCH_ORDER_RESOLUTION_LINK_ISSUED`).
+  - Order tracking (`GET /api/v2/merch/orders/:orderRef`) now returns `shortfallAmount` + `refundOwed`,
+    so the page a student lands on shows the exact top-up owed (not the full total) or the refund due.
   - **Deferred:** the day-7 pre-expiry reminder is a scheduled job — tracked in #181 (no
     in-process scheduler exists yet). Expiry is non-terminal, so this is safe to defer.
 

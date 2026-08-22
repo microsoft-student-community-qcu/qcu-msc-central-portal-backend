@@ -111,6 +111,7 @@ Officer finds CONFIRMED order, clicks **"Mark as Claimed"** → **PAID_AND_CLAIM
 | POST | `/api/v2/admin/merch/orders/:orderId/cancel` | `requireAdminFinanceHead` | 20/min | Head only; restores stock if confirmed |
 | POST | `/api/v2/admin/merch/orders/:orderId/refund` | `requireAdminFinanceHead` | 20/min | Head only; AWAITING_RESOLUTION → REFUNDED + FULL MerchRefund |
 | POST | `/api/v2/admin/merch/orders/:orderId/resend-email` | `requireAdminFinance` | 20/min | Re-send current-status email |
+| POST | `/api/v2/admin/merch/orders/:orderId/resolution-link` | `requireAdminFinance` | 20/min | Reissue a fresh swap/refund link (AWAITING_RESOLUTION) + return URLs |
 | GET | `/api/v2/admin/merch/screenshots/:filename` | `requireAdminFinance` | — | Protected screenshot proxy (`proof-` prefix only) |
 
 ## 7. Email Triggers
@@ -136,7 +137,7 @@ All senders return a success boolean; the order's `lastNotifiedAt` / `lastNotifi
 ## 8. Settings / Toggles & Audit Events
 
 - **SystemSetting keys:** `merch_shop_open` (global open/close)
-- **AuditLog events:** `MERCH_ITEM_CREATED`, `MERCH_ITEM_EDITED`, `MERCH_ITEM_ARCHIVED`, `MERCH_ORDER_CONFIRMED`, `MERCH_ORDER_REJECTED`, `MERCH_ORDER_CLAIMED`, `MERCH_ORDER_CANCELLED`, `MERCH_ORDER_AWAITING_RESOLUTION`, `MERCH_ORDER_REFUNDED`, `MERCH_ORDER_SWAPPED`, `MERCH_ORDER_REFUND_REQUESTED`, `MERCH_ORDER_EMAIL_RESENT`
+- **AuditLog events:** `MERCH_ITEM_CREATED`, `MERCH_ITEM_EDITED`, `MERCH_ITEM_ARCHIVED`, `MERCH_ORDER_CONFIRMED`, `MERCH_ORDER_REJECTED`, `MERCH_ORDER_CLAIMED`, `MERCH_ORDER_CANCELLED`, `MERCH_ORDER_AWAITING_RESOLUTION`, `MERCH_ORDER_REFUNDED`, `MERCH_ORDER_SWAPPED`, `MERCH_ORDER_REFUND_REQUESTED`, `MERCH_ORDER_RESOLUTION_LINK_ISSUED`, `MERCH_ORDER_EMAIL_RESENT`
 
 ## 9. Open Questions
 
