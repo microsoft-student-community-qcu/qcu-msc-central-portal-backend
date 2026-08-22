@@ -414,6 +414,10 @@ model MerchVariant {
   itemId    String
   item      MerchItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
   label     String // e.g. "S", "M", "L", "XL", "One Size"
+  // Optional per-size price override (§8, Option A). When null the variant uses
+  // the parent item's price; when set it overrides it (e.g. an "XL" surcharge).
+  // Order amount + resolution price-delta use the EFFECTIVE price (price ?? item.price).
+  price     Decimal?     @db.Decimal(10, 2)
   stock     Int          @default(0)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
@@ -451,6 +455,10 @@ model MerchOrder {
   // The order stays CONFIRMED; Finance clears this by recording a
   // PRICE_DIFFERENCE MerchRefund. Null/0 means nothing outstanding.
   refundOwed         Decimal?                 @db.Decimal(10, 2)
+  // Set when the student picks "refund" on the resolution page (§8d). The order
+  // stays AWAITING_RESOLUTION; a head then records the FULL refund. Lets Finance
+  // tell "student wants a refund" from "still deciding".
+  refundRequestedAt  DateTime?
   // Whether this order currently holds decremented stock (Module 04 §8e). Set
   // when stock is committed (confirm, or an already-paid pricier swap) and
   // cleared on restore (cancel). Replaces inferring "stock is held" from the
@@ -466,6 +474,7 @@ model MerchOrder {
   updatedAt          DateTime                 @updatedAt
   proofSubmissions   PaymentProofSubmission[]
   refunds            MerchRefund[] // FULL and/or PRICE_DIFFERENCE payouts recorded against this order
+  resolutionTokens   MerchOrderResolutionToken[] // Self-service swap/refund links (§8d)
 
   @@index([status])
   @@index([email])
@@ -522,4 +531,22 @@ model MerchRefund {
   processedAt     DateTime          @default(now())
 
   @@unique([orderId, type])
+}
+
+// Single-use, unguessable link that lets an oversold (AWAITING_RESOLUTION)
+// student self-serve a variant swap or a refund without an account (Module 04
+// §8d). Only the SHA-256 hash of the token is stored (mirrors the password-reset
+// precedent), so a leaked DB row can't be replayed. 14-day TTL; regenerating a
+// token deletes prior unconsumed ones for the order. Expiry is never terminal —
+// the order stays AWAITING_RESOLUTION and Finance can mint a fresh token.
+model MerchOrderResolutionToken {
+  id         String     @id @default(uuid())
+  orderId    String
+  order      MerchOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  tokenHash  String     @unique // SHA-256 of the raw token (never store the raw token)
+  expiresAt  DateTime
+  consumedAt DateTime? // Set when the student completes a swap/refund through this link
+  createdAt  DateTime   @default(now())
+
+  @@index([orderId])
 }
