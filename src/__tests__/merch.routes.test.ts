@@ -220,6 +220,33 @@ describe("GET /api/v2/merch/orders/:orderRef", () => {
     expect(res.status).toBe(200);
     expect(res.body.data.order.orderRef).toBe("MSC-MERCH-2026-0042");
   });
+
+  it("surfaces the exact top-up owed (shortfallAmount) on the tracking page", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue({
+      orderRef: "MSC-MERCH-2026-0042",
+      studentName: "Jane",
+      studentId: null,
+      email: "owner@example.com",
+      gcashNumber: null,
+      quantity: 1,
+      amount: "350.00",
+      status: "REJECTED",
+      rejectionReason: "AMOUNT_MISMATCH",
+      financeNote: null,
+      shortfallAmount: "100.00",
+      refundOwed: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      variant: { label: "M", item: { name: "Shirt" } },
+    });
+    const res = await request(app)
+      .get("/api/v2/merch/orders/MSC-MERCH-2026-0042")
+      .query({ email: "owner@example.com" });
+    expect(res.status).toBe(200);
+    // The page must show the ₱100 owed, not the ₱350 order total.
+    expect(res.body.data.order.shortfallAmount).toBe(100);
+    expect(res.body.data.order.refundOwed).toBeNull();
+  });
 });
 
 // ── Payment proof (Flow 3) ──────────────────────────────────────────────────
@@ -804,6 +831,48 @@ describe("resolution links (§8d)", () => {
     );
     expect(prisma.merchOrderResolutionToken.update).toHaveBeenCalled();
     expect(prisma.auditLog.create).toHaveBeenCalled();
+  });
+});
+
+// ── §8d Issue/reissue resolution link (finance) ─────────────────────────────
+describe("POST /api/v2/admin/merch/orders/:orderId/resolution-link", () => {
+  it("mints a fresh link and returns swap + refund URLs for an AWAITING_RESOLUTION order", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue({
+      id: "order-1",
+      status: "AWAITING_RESOLUTION",
+      email: "jane@example.com",
+      studentName: "Jane",
+      orderRef: "MSC-MERCH-2026-0042",
+      variant: { label: "M", item: { name: "Shirt" } },
+    });
+    const res = await request(app).post("/api/v2/admin/merch/orders/order-1/resolution-link");
+    expect(res.status).toBe(200);
+    expect(res.body.data.swapUrl).toContain("/merch/resolve/");
+    expect(res.body.data.swapUrl).toContain("intent=swap");
+    expect(res.body.data.refundUrl).toContain("intent=refund");
+    // A fresh token is minted (prior unconsumed ones invalidated) + audited.
+    expect(prisma.merchOrderResolutionToken.deleteMany).toHaveBeenCalled();
+    expect(prisma.merchOrderResolutionToken.create).toHaveBeenCalled();
+    expect(prisma.auditLog.create).toHaveBeenCalled();
+  });
+
+  it("409s when the order is not awaiting resolution", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue({
+      id: "order-1",
+      status: "CONFIRMED",
+      email: "jane@example.com",
+      studentName: "Jane",
+      orderRef: "MSC-MERCH-2026-0042",
+      variant: { label: "M", item: { name: "Shirt" } },
+    });
+    const res = await request(app).post("/api/v2/admin/merch/orders/order-1/resolution-link");
+    expect(res.status).toBe(409);
+  });
+
+  it("404s for an unknown order", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue(null);
+    const res = await request(app).post("/api/v2/admin/merch/orders/nope/resolution-link");
+    expect(res.status).toBe(404);
   });
 });
 
