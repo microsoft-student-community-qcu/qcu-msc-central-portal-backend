@@ -7,6 +7,7 @@
  */
 
 import type { Prisma, MerchRejectionReason } from "@prisma/client";
+import { randomBytes, createHash } from "node:crypto";
 import path from "node:path";
 import { prisma } from "../config/database";
 import { env } from "../config/env";
@@ -148,4 +149,37 @@ export async function recordOrderNotification(orderId: string, ok: boolean): Pro
   } catch (err) {
     console.error(`[MERCH] Failed to record notification state for order ${orderId}:`, err);
   }
+}
+
+// ── Resolution tokens (Module 04 §8d) ───────────────────────────────────────
+// Unguessable single-use link that lets an oversold student self-serve a swap
+// or refund. Only the SHA-256 hash is stored (password-reset precedent).
+
+/** How long a resolution link stays valid. Expiry is never terminal — Finance can regenerate. */
+export const RESOLUTION_TOKEN_TTL_DAYS = 14;
+const RESOLUTION_TOKEN_TTL_MS = RESOLUTION_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000;
+
+/** SHA-256 the raw token before any DB read/write so a leaked row can't be replayed. */
+export function hashResolutionToken(raw: string): string {
+  return createHash("sha256").update(raw).digest("hex");
+}
+
+/**
+ * Mint a fresh resolution token for an order and return the RAW token (only its
+ * hash is stored). Deletes any prior unconsumed token for the order first, so a
+ * regenerated link invalidates the old one.
+ */
+export async function mintResolutionToken(orderId: string, now: Date = new Date()): Promise<string> {
+  const raw = randomBytes(32).toString("base64url");
+  const tokenHash = hashResolutionToken(raw);
+  const expiresAt = new Date(now.getTime() + RESOLUTION_TOKEN_TTL_MS);
+  await prisma.merchOrderResolutionToken.deleteMany({ where: { orderId, consumedAt: null } });
+  await prisma.merchOrderResolutionToken.create({ data: { orderId, tokenHash, expiresAt } });
+  return raw;
+}
+
+/** Build the student-facing swap/refund links (frontend routes) for a raw token. */
+export function resolutionUrls(rawToken: string): { swapUrl: string; refundUrl: string } {
+  const base = `${env.FRONTEND_URL}/merch/resolve/${encodeURIComponent(rawToken)}`;
+  return { swapUrl: `${base}?intent=swap`, refundUrl: `${base}?intent=refund` };
 }

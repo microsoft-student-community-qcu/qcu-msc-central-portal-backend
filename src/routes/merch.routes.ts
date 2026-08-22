@@ -1,8 +1,9 @@
 import { Router } from "express";
 import multer from "multer";
-import { merchOrderLimiter, merchPaymentProofLimiter, merchTrackingLimiter } from "../config/rateLimit";
+import { merchOrderLimiter, merchPaymentProofLimiter, merchTrackingLimiter, merchResolutionLimiter } from "../config/rateLimit";
 import { getCatalog, getCatalogItem, getCatalogPhoto } from "../controllers/merch.controller";
 import { createOrder, trackOrder, submitPaymentProof } from "../controllers/merch-order.controller";
+import { getResolution, resolveSwap, resolveRefund } from "../controllers/merch-resolution.controller";
 import { multerErrorHandler } from "../utils/multerError";
 
 /**
@@ -42,5 +43,10 @@ router.post(
   handleMulterError,
   submitPaymentProof
 );
+
+// ── Self-service resolution (§8d) — token-gated swap/refund for oversold orders ─
+router.get("/resolve/:token", merchResolutionLimiter, getResolution);
+router.post("/resolve/:token/swap", merchResolutionLimiter, resolveSwap);
+router.post("/resolve/:token/refund", merchResolutionLimiter, resolveRefund);
 
 export default router;

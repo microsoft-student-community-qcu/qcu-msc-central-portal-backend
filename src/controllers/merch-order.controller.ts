@@ -101,6 +101,7 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
         id: true,
         label: true,
         stock: true,
+        price: true, // Optional per-variant override (§8, Option A)
         item: { select: { id: true, name: true, price: true, status: true } },
       },
     });
@@ -119,8 +120,10 @@ export async function createOrder(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // amount snapshot = unit price × quantity (Decimal maths, not float).
-    const amount = new Prisma.Decimal(variant.item.price as Prisma.Decimal).mul(quantity);
+    // amount snapshot = EFFECTIVE unit price × quantity (variant override, else
+    // the item price). Decimal maths, not float.
+    const unitPrice = variant.price ?? (variant.item.price as Prisma.Decimal);
+    const amount = new Prisma.Decimal(unitPrice).mul(quantity);
     const authedUserId = req.userId ?? null;
 
     // Create the order, retrying on the rare orderRef collision (unique index).
@@ -349,13 +352,11 @@ export async function submitPaymentProof(req: Request, res: Response): Promise<v
       return;
     }
 
-    // A top-up resubmission pays only the outstanding difference after an
-    // AMOUNT_MISMATCH rejection (§8b). Flag it + snapshot the shortfall so the
-    // officer and the attempt timeline show it's a partial follow-up payment.
-    const isTopUp =
-      order.status === "REJECTED" &&
-      order.rejectionReason === "AMOUNT_MISMATCH" &&
-      order.shortfallAmount !== null;
+    // A top-up resubmission pays only the outstanding difference — either after
+    // an AMOUNT_MISMATCH rejection or a pricier resolution swap (§8b/§8d). Both
+    // set shortfallAmount, so that's the single signal. Flag it + snapshot the
+    // shortfall so the officer and the attempt timeline show it's a partial pay.
+    const isTopUp = order.shortfallAmount !== null;
 
     // Unique → accept into the verification queue.
     await prisma.$transaction([

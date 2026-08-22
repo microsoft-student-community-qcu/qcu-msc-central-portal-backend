@@ -37,3 +37,7 @@ export const merchPaymentProofLimiter = limiter(10, "Too many payment-proof subm
 // Order tracking is a public GET keyed by orderRef+email — limit to blunt
 // enumeration attempts.
 export const merchTrackingLimiter = limiter(30, "Too many requests. Please try again later.");
+
+// Self-service resolution links (§8d) — public, keyed by an unguessable token.
+// Slightly tighter than tracking since each action mutates an order.
+export const merchResolutionLimiter = limiter(20, "Too many requests. Please try again later.");

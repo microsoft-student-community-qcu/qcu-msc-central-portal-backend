@@ -23,6 +23,12 @@ const variantInputSchema = z.object({
     .number({ error: "Variant stock must be a number" })
     .int("Variant stock must be a whole number")
     .min(0, "Variant stock cannot be negative"),
+  // Optional per-size price override (§8, Option A). Omit/null → use item price.
+  price: z.coerce
+    .number({ error: "Variant price must be a number" })
+    .positive("Variant price must be greater than zero")
+    .max(1_000_000, "Variant price is unrealistically high")
+    .nullish(),
 });
 
 // `variants` arrives as a JSON string in multipart/form-data. Preprocess parses
@@ -225,6 +231,19 @@ export const refundOrderSchema = z
     path: ["note"],
   });
 
+// POST /api/v2/merch/resolve/:token/swap — student picks a replacement variant
+// on the self-service resolution page (§8d). acknowledgedTopUp must be true to
+// proceed with a pricier variant (the controller re-checks the price delta).
+export const resolveSwapSchema = z.object({
+  variantId: z
+    .string({ error: "Select a size to switch to" })
+    .min(1, "Select a size to switch to"),
+  acknowledgedTopUp: z
+    .boolean({ error: "acknowledgedTopUp must be true or false" })
+    .optional()
+    .default(false),
+});
+
 export type CreateMerchItemInput = z.infer<typeof createMerchItemSchema>;
 export type UpdateMerchItemInput = z.infer<typeof updateMerchItemSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
@@ -232,3 +251,4 @@ export type SubmitPaymentProofInput = z.infer<typeof submitPaymentProofSchema>;
 export type RejectOrderInput = z.infer<typeof rejectOrderSchema>;
 export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;
 export type RefundOrderInput = z.infer<typeof refundOrderSchema>;
+export type ResolveSwapInput = z.infer<typeof resolveSwapSchema>;

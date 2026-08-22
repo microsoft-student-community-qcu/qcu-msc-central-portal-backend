@@ -29,14 +29,15 @@ function serializeItem(item: {
   lowStockThreshold: number;
   createdAt: Date;
   updatedAt: Date;
-  variants: { id: string; label: string; stock: number }[];
+  variants: { id: string; label: string; stock: number; price: unknown }[];
 }) {
+  const itemPrice = Number(item.price);
   return {
     id: item.id,
     name: item.name,
     description: item.description,
     // Prisma Decimal → number for JSON; PHP merch prices are well within range.
-    price: Number(item.price),
+    price: itemPrice,
     photos: photosToArray(item.photos as never).map(merchPhotoUrl),
     lowStockThreshold: item.lowStockThreshold,
     createdAt: item.createdAt,
@@ -45,6 +46,8 @@ function serializeItem(item: {
       id: v.id,
       label: v.label,
       stock: v.stock,
+      // Effective price: the variant override when set, else the item price (§8).
+      price: v.price !== null && v.price !== undefined ? Number(v.price) : itemPrice,
       inStock: v.stock > 0,
       lowStock: v.stock > 0 && isLowStock(v.stock, item.lowStockThreshold),
     })),
@@ -61,7 +64,7 @@ const ITEM_SELECT = {
   createdAt: true,
   updatedAt: true,
   variants: {
-    select: { id: true, label: true, stock: true },
+    select: { id: true, label: true, stock: true, price: true },
     orderBy: { label: "asc" as const },
   },
 } as const;

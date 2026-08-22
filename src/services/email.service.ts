@@ -674,26 +674,44 @@ export async function sendMerchOrderRejectedEmail(to: string, data: MerchRejecte
 }
 
 /**
- * Oversell handling (§7a) — item sold out AFTER the student paid. No resubmit
- * button; reassures the student their money is safe and Finance will arrange a
- * swap or full refund. Sent when a confirm fails the stock decrement.
+ * Oversell handling (§7a/§8d) — item sold out AFTER the student paid. No
+ * resubmit button. When a resolution link is available, the email offers a
+ * self-service **swap** (primary button) and a **refund** (secondary link);
+ * otherwise it falls back to "Finance will contact you". Reassures the student
+ * their money is safe either way.
  */
 export async function sendMerchOutOfStockEmail(
   to: string,
-  data: { studentName: string; orderRef: string; itemName: string; variantLabel: string }
+  data: {
+    studentName: string;
+    orderRef: string;
+    itemName: string;
+    variantLabel: string;
+    swapUrl?: string | null;
+    refundUrl?: string | null;
+  }
 ): Promise<boolean> {
   try {
+    const selfServe = Boolean(data.swapUrl && data.refundUrl);
+    const paragraphs = [
+      `We're very sorry — <strong>${esc(data.itemName)}</strong> (${esc(data.variantLabel)}) for order <strong>${esc(data.orderRef)}</strong> sold out before we could confirm your payment.`,
+      "<strong>You have not lost your money.</strong> You can switch to another available size, or get a full refund — your choice.",
+    ];
+    if (selfServe) {
+      paragraphs.push(
+        `Prefer a refund instead? <a href="${data.refundUrl}" style="color:#0078D4;font-weight:600;">Request a refund here</a>. This link is private to you and expires in 14 days.`
+      );
+    } else {
+      paragraphs.push("Our Finance team will reach out to this email address to arrange your swap or refund. No action is needed right now — please do <strong>not</strong> resubmit payment.");
+    }
     await provider.sendEmail(
       to,
       `Action Needed — Order ${data.orderRef} Sold Out`,
       renderBrandedEmail({
-        headline: "Your item sold out — a refund is due",
+        headline: "Your item sold out — choose a swap or refund",
         greeting: `Hello ${data.studentName},`,
-        paragraphs: [
-          `We're very sorry — <strong>${esc(data.itemName)}</strong> (${esc(data.variantLabel)}) for order <strong>${esc(data.orderRef)}</strong> sold out before we could confirm your payment.`,
-          "<strong>You have not lost your money.</strong> Our Finance team will contact you to arrange either a swap for another available item/size, or a full refund of your payment.",
-          "No action is needed from you right now — please do <strong>not</strong> resubmit payment. We'll reach out using this email address.",
-        ],
+        paragraphs,
+        button: selfServe ? { href: data.swapUrl as string, label: "Choose Another Size" } : undefined,
         supportLine: true,
       }),
     );
@@ -701,6 +719,105 @@ export async function sendMerchOutOfStockEmail(
     return true;
   } catch (err) {
     logFailed("merch out of stock", to, err);
+    return false;
+  }
+}
+
+/** Resolution swap confirmed (§8d) — student swapped to an available variant. */
+export async function sendMerchSwapConfirmedEmail(
+  to: string,
+  data: { studentName: string; orderRef: string; itemName: string; variantLabel: string; refundOwed?: number | null }
+): Promise<boolean> {
+  try {
+    const paragraphs = [
+      `Your order <strong>${esc(data.orderRef)}</strong> has been switched to <strong>${esc(data.itemName)}</strong> (${esc(data.variantLabel)}) and is now confirmed.`,
+      "We'll announce the pickup schedule soon. Bring your order reference (or student ID) to claim your merch.",
+    ];
+    if (data.refundOwed && data.refundOwed > 0) {
+      paragraphs.push(
+        `Since the new size costs less, our Finance team will refund the difference of <strong>${esc(peso(data.refundOwed))}</strong> to you.`
+      );
+    }
+    await provider.sendEmail(
+      to,
+      `Order Updated — ${data.orderRef} Confirmed`,
+      renderBrandedEmail({
+        headline: "Your new size is confirmed!",
+        greeting: `Hello ${data.studentName},`,
+        paragraphs,
+      }),
+    );
+    logSent("Merch swap confirmed", to);
+    return true;
+  } catch (err) {
+    logFailed("merch swap confirmed", to, err);
+    return false;
+  }
+}
+
+/** Resolution swap needs a top-up (§8d) — pricier variant; student pays the difference. */
+export async function sendMerchSwapTopUpEmail(
+  to: string,
+  data: {
+    studentName: string;
+    orderRef: string;
+    itemName: string;
+    variantLabel: string;
+    shortfall: number;
+    gcashNumber?: string | null;
+    gcashQrImageUrl?: string | null;
+    trackingUrl: string;
+  }
+): Promise<boolean> {
+  try {
+    const paragraphs = [
+      `Your order <strong>${esc(data.orderRef)}</strong> has been reserved for <strong>${esc(data.itemName)}</strong> (${esc(data.variantLabel)}). We've held your stock.`,
+      `This size costs a little more, so to confirm please send the difference of <strong>${esc(peso(data.shortfall))}</strong>${data.gcashNumber ? ` to <strong>${esc(data.gcashNumber)}</strong>` : ""}, then submit the GCash reference number for that top-up on your order page.`,
+    ];
+    await provider.sendEmail(
+      to,
+      `Almost There — Top Up Order ${data.orderRef}`,
+      renderBrandedEmail({
+        headline: "One more step — top up the difference",
+        greeting: `Hello ${data.studentName},`,
+        paragraphs,
+        image: data.gcashQrImageUrl
+          ? { src: data.gcashQrImageUrl, alt: "GCash payment QR code", caption: `Send exactly ${peso(data.shortfall)}` }
+          : undefined,
+        button: { href: data.trackingUrl, label: "Submit Top-Up Payment Proof" },
+      }),
+    );
+    logSent("Merch swap top-up", to);
+    return true;
+  } catch (err) {
+    logFailed("merch swap top-up", to, err);
+    return false;
+  }
+}
+
+/** Resolution refund requested (§8d) — student chose a refund; Finance will process it. */
+export async function sendMerchRefundRequestedEmail(
+  to: string,
+  data: { studentName: string; orderRef: string }
+): Promise<boolean> {
+  try {
+    await provider.sendEmail(
+      to,
+      `Refund Requested — Order ${data.orderRef}`,
+      renderBrandedEmail({
+        headline: "We've received your refund request",
+        greeting: `Hello ${data.studentName},`,
+        paragraphs: [
+          `We've noted your refund request for order <strong>${esc(data.orderRef)}</strong>.`,
+          "Our Finance team will process the refund to your original payment method and email you a receipt once it's done.",
+        ],
+        supportLine: true,
+      }),
+    );
+    logSent("Merch refund requested", to);
+    return true;
+  } catch (err) {
+    logFailed("merch refund requested", to, err);
     return false;
   }
 }
