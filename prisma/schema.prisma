@@ -106,7 +106,7 @@ enum MerchOrderStatus {
   CONFIRMED // Payment verified; stock decremented; awaiting pickup
   PAID_AND_CLAIMED // Merch physically handed over — terminal success state
   REJECTED // Payment failed verification or duplicate reference — resubmittable
-  REFUND_PENDING // Student paid but item is unfulfillable (oversold) — refund owed
+  AWAITING_RESOLUTION // Student paid but item is unfulfillable (oversold) — awaiting their choice: swap variant or refund
   REFUNDED // Refund processed offline and recorded — terminal state
   CANCELLED // Head-cancelled (terminal); refunds handled offline
 }
@@ -144,7 +144,19 @@ enum PaymentProofDecision {
 enum MerchRefundMethod {
   GCASH
   CASH
+  MAYA
+  MARIBANK
   OTHER
+}
+
+// Kind of refund recorded against an order (Module 04 §8c):
+// - FULL: the whole payment is returned (oversold order that couldn't be
+//   fulfilled and the student chose a refund over a swap).
+// - PRICE_DIFFERENCE: the student swapped to a cheaper variant, so only the
+//   overpaid difference is returned; the order stays CONFIRMED.
+enum MerchRefundType {
+  FULL
+  PRICE_DIFFERENCE
 }
 
 // ============================================================================
@@ -431,16 +443,29 @@ model MerchOrder {
   status             MerchOrderStatus         @default(AWAITING_PAYMENT)
   rejectionReason    MerchRejectionReason? // Latest rejection reason (denormalised from the newest submission)
   financeNote        String?                  @db.Text // Free-text for OTHER rejections / cancellation notes
+  // Amount the student still owes on a top-up (Module 04 §8b): set when an
+  // officer rejects with AMOUNT_MISMATCH (partial payment) or when a resolution
+  // swap moves to a pricier variant. The student pays only this difference.
+  shortfallAmount    Decimal?                 @db.Decimal(10, 2)
+  // Amount the org owes the student after a cheaper-variant swap (Module 04 §8c).
+  // The order stays CONFIRMED; Finance clears this by recording a
+  // PRICE_DIFFERENCE MerchRefund. Null/0 means nothing outstanding.
+  refundOwed         Decimal?                 @db.Decimal(10, 2)
+  // Whether this order currently holds decremented stock (Module 04 §8e). Set
+  // when stock is committed (confirm, or an already-paid pricier swap) and
+  // cleared on restore (cancel). Replaces inferring "stock is held" from the
+  // status, which broke once stock can be held in AWAITING_PAYMENT (top-up).
+  stockHeld          Boolean                  @default(false)
   // Notification tracking (Module 04 §7b) — records the latest status-email
   // attempt so Finance can tell "emailed" from "silently failed" and find
-  // stale orders (e.g. un-notified REFUND_PENDING / AMOUNT_MISMATCH).
+  // stale orders (e.g. un-notified AWAITING_RESOLUTION / AMOUNT_MISMATCH).
   lastNotifiedAt     DateTime? // Time of the most recent status-email attempt (ok or not)
   lastNotificationOk Boolean? // Whether that most recent attempt actually sent
   notificationCount  Int                      @default(0) // Count of successful status emails
   createdAt          DateTime                 @default(now())
   updatedAt          DateTime                 @updatedAt
   proofSubmissions   PaymentProofSubmission[]
-  refund             MerchRefund? // Present once a refund is recorded (REFUNDED)
+  refunds            MerchRefund[] // FULL and/or PRICE_DIFFERENCE payouts recorded against this order
 
   @@index([status])
   @@index([email])
@@ -466,6 +491,11 @@ model PaymentProofSubmission {
   officerDecision PaymentProofDecision  @default(PENDING)
   rejectionReason MerchRejectionReason? // Officer's reason when officerDecision = REJECTED
   financeNote     String?               @db.Text // Free-text note for OTHER rejections
+  // Top-up tracking (Module 04 §8b): a submission that pays only the outstanding
+  // difference after an AMOUNT_MISMATCH rejection or a pricier swap. isTopUp
+  // flags it; shortfallAmount snapshots how much this attempt was meant to cover.
+  isTopUp         Boolean               @default(false)
+  shortfallAmount Decimal?              @db.Decimal(10, 2)
   reviewedById    String? // Actor (user id) who reviewed this attempt
   reviewedAt      DateTime? // When the officer decided on this attempt
   createdAt       DateTime              @default(now())
@@ -474,17 +504,22 @@ model PaymentProofSubmission {
   @@index([referenceNumber])
 }
 
-// Offline refund record for an oversold/cancelled order (Module 04 §7a).
-// One refund per order. Kept as a dedicated record (rather than a note on the
-// order) so refund amount, method, and reference are transparently auditable.
+// Offline refund record for an oversold/cancelled order (Module 04 §7a/§8c).
+// An order can hold at most one FULL and one PRICE_DIFFERENCE refund
+// (@@unique([orderId, type])) so a full refund and a swap-difference refund
+// never collide. Kept as dedicated records (rather than notes on the order) so
+// refund amount, method, and reference are transparently auditable.
 model MerchRefund {
   id              String            @id @default(uuid())
-  orderId         String            @unique
+  orderId         String
   order           MerchOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type            MerchRefundType   @default(FULL)
   amount          Decimal           @db.Decimal(10, 2) // Amount refunded (≤ order.amount)
   method          MerchRefundMethod
   referenceNumber String? // GCash/transfer reference of the refund, when applicable
   note            String?           @db.Text // Optional context (e.g. partial refund reason)
   processedById   String? // Actor (user id) who recorded the refund — head-only
   processedAt     DateTime          @default(now())
+
+  @@unique([orderId, type])
 }
