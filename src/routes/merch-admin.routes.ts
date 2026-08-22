@@ -62,7 +62,7 @@ router.post("/orders/:orderId/confirm", requireAdminFinance, adminMutationLimite
 router.post("/orders/:orderId/reject", requireAdminFinance, adminMutationLimiter, rejectOrder);
 router.post("/orders/:orderId/claim", requireAdminFinance, adminMutationLimiter, claimOrder);
 router.post("/orders/:orderId/cancel", requireAdminFinanceHead, adminMutationLimiter, cancelOrder);
-// Refund is head-only (records a MerchRefund + moves REFUND_PENDING → REFUNDED).
+// Refund is head-only (records a FULL MerchRefund + moves AWAITING_RESOLUTION → REFUNDED).
 router.post("/orders/:orderId/refund", requireAdminFinanceHead, adminMutationLimiter, refundOrder);
 // Manual re-notify for orders whose status email may have silently failed.
 router.post("/orders/:orderId/resend-email", requireAdminFinance, adminMutationLimiter, resendOrderEmail);
