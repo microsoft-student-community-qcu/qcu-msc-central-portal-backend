@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import nodemailer from "nodemailer";
+import type { MerchRejectionReason, MerchRefundMethod } from "@prisma/client";
 import { env } from "../config/env";
 import { renderBrandedEmail, esc, type BrandedEmailOptions } from "../utils/emailTemplate";
 
@@ -571,23 +572,97 @@ export async function sendMerchOrderConfirmedEmail(
  * student-fixable rejections (bad reference, amount mismatch, unclear
  * screenshot, other). Out-of-stock uses sendMerchOutOfStockEmail instead —
  * a paid student must never be told to "resubmit" for a sold-out item.
+ *
+ * The email now adapts its subject/headline/intro/CTA to the reason (§8a) and
+ * keeps the SYSTEM reason (`reason` block) separate from the OFFICER's own
+ * words (`note` block). For AMOUNT_MISMATCH the officer sets an exact shortfall,
+ * so the student is told the precise top-up amount and shown the GCash QR (§8b).
  */
-export async function sendMerchOrderRejectedEmail(
-  to: string,
-  data: { studentName: string; orderRef: string; reasonLabel: string; trackingUrl: string }
-): Promise<boolean> {
+export interface MerchRejectedEmailData {
+  studentName: string;
+  orderRef: string;
+  reason: MerchRejectionReason;
+  reasonLabel: string;
+  /** The officer's own free-text note, shown as a distinct "Note from the admin". */
+  financeNote?: string | null;
+  trackingUrl: string;
+  /** Present only for AMOUNT_MISMATCH: the exact difference the student must send. */
+  shortfall?: { amount: number; gcashNumber?: string | null; gcashQrImageUrl?: string | null } | null;
+}
+
+// Per-reason subject/headline/intro/CTA. Keeps copy out of the control flow and
+// guarantees every student-facing reason has intentional wording.
+function rejectedEmailCopy(
+  data: MerchRejectedEmailData
+): { subject: string; headline: string; intro: string; cta: string } {
+  const ref = esc(data.orderRef);
+  switch (data.reason) {
+    case "REFERENCE_NOT_FOUND":
+      return {
+        subject: `Payment Issue — Order ${data.orderRef}`,
+        headline: "We couldn't find your payment",
+        intro: `We couldn't match a GCash payment to the reference number submitted for order <strong>${ref}</strong>. Please double-check the 13-digit reference on your receipt and resubmit.`,
+        cta: "Resubmit Payment Proof",
+      };
+    case "AMOUNT_MISMATCH": {
+      const owed = data.shortfall ? peso(data.shortfall.amount) : "the remaining balance";
+      return {
+        subject: `Payment Incomplete — Order ${data.orderRef}`,
+        headline: "Your payment was a little short",
+        intro: `Thanks for your payment on order <strong>${ref}</strong>. It's short of the total, so to complete it please send <strong>${esc(owed)}</strong> more, then submit the new GCash reference number for that top-up.`,
+        cta: "Submit Top-Up Payment Proof",
+      };
+    }
+    case "SCREENSHOT_UNCLEAR":
+      return {
+        subject: `Payment Issue — Order ${data.orderRef}`,
+        headline: "We couldn't read your payment screenshot",
+        intro: `The screenshot for order <strong>${ref}</strong> was unclear or didn't match the reference number. Please upload a clearer screenshot that shows the amount, reference number, and date.`,
+        cta: "Resubmit Payment Proof",
+      };
+    default:
+      return {
+        subject: `Payment Issue — Order ${data.orderRef}`,
+        headline: "There's an issue with your payment",
+        intro: `We hit an issue verifying the payment for order <strong>${ref}</strong>. Please review the details below and resubmit your payment proof.`,
+        cta: "Resubmit Payment Proof",
+      };
+  }
+}
+
+export async function sendMerchOrderRejectedEmail(to: string, data: MerchRejectedEmailData): Promise<boolean> {
   try {
+    const copy = rejectedEmailCopy(data);
+    const paragraphs = [copy.intro];
+
+    // AMOUNT_MISMATCH: show the exact top-up and (if configured) the GCash QR so
+    // the student pays only the difference, not the whole order again.
+    const showQr = data.reason === "AMOUNT_MISMATCH" && data.shortfall?.gcashQrImageUrl;
+    if (data.reason === "AMOUNT_MISMATCH" && data.shortfall?.gcashNumber) {
+      paragraphs.push(
+        `Send the top-up to <strong>${esc(data.shortfall.gcashNumber)}</strong>, then return to your order page and submit the reference number for that payment.`
+      );
+    }
+
     await provider.sendEmail(
       to,
-      `Payment Issue — Order ${data.orderRef}`,
+      copy.subject,
       renderBrandedEmail({
-        headline: "We couldn't verify your payment",
+        headline: copy.headline,
         greeting: `Hello ${data.studentName},`,
-        paragraphs: [
-          `There was an issue verifying the payment for order <strong>${esc(data.orderRef)}</strong>.`,
-        ],
-        note: data.reasonLabel,
-        button: { href: data.trackingUrl, label: "Resubmit Payment Proof" },
+        paragraphs,
+        // System reason (never shown as the admin's words) + optional officer note.
+        reason: data.reasonLabel,
+        note: data.financeNote ?? undefined,
+        image:
+          showQr && data.shortfall
+            ? {
+                src: data.shortfall.gcashQrImageUrl as string,
+                alt: "GCash payment QR code",
+                caption: `Send exactly ${peso(data.shortfall.amount)}`,
+              }
+            : undefined,
+        button: { href: data.trackingUrl, label: copy.cta },
       }),
     );
     logSent("Merch order rejected", to);
@@ -631,18 +706,35 @@ export async function sendMerchOutOfStockEmail(
 }
 
 /** Refund processed (§7a) — offline refund recorded; transparency receipt. */
+// Human-readable refund method labels — the raw enum (e.g. "OTHER") must never
+// reach the student. OTHER always pairs with a required note (see schema).
+const REFUND_METHOD_LABELS: Record<MerchRefundMethod, string> = {
+  GCASH: "GCash",
+  CASH: "cash",
+  MAYA: "Maya",
+  MARIBANK: "Maribank",
+  OTHER: "another arrangement",
+};
+
 export async function sendMerchRefundProcessedEmail(
   to: string,
   data: {
     studentName: string;
     orderRef: string;
     amount: number;
-    method: string;
+    method: MerchRefundMethod;
     referenceNumber?: string | null;
     note?: string | null;
   }
 ): Promise<boolean> {
   try {
+    const methodLabel = REFUND_METHOD_LABELS[data.method] ?? "another arrangement";
+    // For OTHER the label is generic ("another arrangement"), so lean on the
+    // required note to explain how; point the student to it explicitly.
+    const methodSentence =
+      data.method === "OTHER"
+        ? `A refund of <strong>${esc(peso(data.amount))}</strong> for order <strong>${esc(data.orderRef)}</strong> has been processed. See the note below for details.`
+        : `A refund of <strong>${esc(peso(data.amount))}</strong> for order <strong>${esc(data.orderRef)}</strong> has been processed via <strong>${esc(methodLabel)}</strong>.`;
     await provider.sendEmail(
       to,
       `Refund Processed — Order ${data.orderRef}`,
@@ -650,7 +742,7 @@ export async function sendMerchRefundProcessedEmail(
         headline: "Your refund has been processed",
         greeting: `Hello ${data.studentName},`,
         paragraphs: [
-          `A refund of <strong>${esc(peso(data.amount))}</strong> for order <strong>${esc(data.orderRef)}</strong> has been processed via <strong>${esc(data.method)}</strong>.`,
+          methodSentence,
           data.referenceNumber
             ? `Refund reference: <strong>${esc(data.referenceNumber)}</strong>.`
             : "Please allow some time for the amount to reflect on your account.",

@@ -34,8 +34,14 @@ export interface BrandedEmailOptions {
   paragraphs?: string[];
   /** Bulleted list block with an optional intro label. */
   bullets?: { label?: string; items: string[] };
-  /** Highlighted admin message (e.g. rejection reason). */
+  /** Highlighted admin message (e.g. a free-text note the officer wrote). */
   note?: string;
+  /**
+   * System-generated reason for a status (e.g. a rejection reason label).
+   * Rendered as a distinct "Reason" block so it is never mistaken for the
+   * admin's own words (which belong in `note`).
+   */
+  reason?: string;
   button?: EmailButton;
   /** Large-print payload block (e.g. QR ticket code). */
   qrPayload?: string;
@@ -65,6 +71,13 @@ function escapeAttribute(value: string): string {
 function blockQuote(note?: string): string {
   if (!note) return "";
   return `<p style="margin:0 0 16px;background:#F3F4F6;border-left:4px solid ${CTA_COLOR};padding:12px 16px;font-size:14px;line-height:1.6;color:${TEXT_BODY};border-radius:0 6px 6px 0;"><strong style="color:${TEXT_PRIMARY}">Note from the admin:</strong><br/>${esc(note)}</p>`;
+}
+
+// System-generated reason (e.g. a rejection reason label). Amber-tinted and
+// labelled "Reason" so it reads as a system status, never as the admin's words.
+function reasonBlock(reason?: string): string {
+  if (!reason) return "";
+  return `<p style="margin:0 0 16px;background:#FEF3F2;border-left:4px solid #D92D20;padding:12px 16px;font-size:14px;line-height:1.6;color:${TEXT_BODY};border-radius:0 6px 6px 0;"><strong style="color:${TEXT_PRIMARY}">Reason:</strong><br/>${esc(reason)}</p>`;
 }
 
 function buttonBlock(button?: EmailButton): string {
@@ -127,6 +140,7 @@ function contents(options: BrandedEmailOptions): string {
       ? `<p style="margin:0 0 8px;font-size:15px;color:${TEXT_BODY};">${esc(options.bullets.label ?? "Please review the following:")}</p>` +
         `<ul style="margin:0 0 16px;padding-left:20px;">${options.bullets.items.map((item) => `<li style="margin:0 0 6px;font-size:14px;color:${TEXT_BODY};">${esc(item)}</li>`).join("")}</ul>`
       : "",
+    reasonBlock(options.reason),
     blockQuote(options.note),
     buttonBlock(options.button),
     qrBlock(options.qrPayload),

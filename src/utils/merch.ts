@@ -76,7 +76,7 @@ export function imageExtensionFor(mimetype: string): string {
 
 // Rejection reasons a student can resolve by resubmitting a correct payment
 // proof. OUT_OF_STOCK is deliberately excluded — no resubmission creates
-// inventory, so those orders route to REFUND_PENDING instead (issue #178).
+// inventory, so those orders route to AWAITING_RESOLUTION instead (issue #178).
 // DUPLICATE_REFERENCE stays resubmittable: an honest typo can collide with a
 // real reference, and the duplicate check simply re-runs on resubmit.
 const RESUBMITTABLE_REJECTIONS: readonly MerchRejectionReason[] = [

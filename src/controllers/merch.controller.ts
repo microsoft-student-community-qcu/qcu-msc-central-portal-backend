@@ -125,11 +125,20 @@ export async function getCatalogItem(req: Request, res: Response): Promise<void>
  */
 export async function getCatalogPhoto(req: Request, res: Response): Promise<void> {
   try {
-    const safe = safeStorageFilename(req.params.filename, CATALOG_PHOTO_PREFIX);
-    if (!safe) {
+    // Two-step so the error tells the caller WHICH rule failed: first validate
+    // the filename is safe (no traversal/illegal chars), then that it is a
+    // catalog photo. A payment screenshot (proof-*) is a valid filename but the
+    // wrong class here — say so explicitly instead of a vague "invalid".
+    const base = safeStorageFilename(req.params.filename);
+    if (!base) {
       res.status(400).json({ success: false, message: "Invalid photo filename" });
       return;
     }
+    if (!base.startsWith(CATALOG_PHOTO_PREFIX)) {
+      res.status(400).json({ success: false, message: "This file is not a catalog photo." });
+      return;
+    }
+    const safe = base;
     const { stream, contentType, contentLength } = await getMerchImageStream(safe);
     if (!stream) {
       res.status(404).json({ success: false, message: "Photo not found" });

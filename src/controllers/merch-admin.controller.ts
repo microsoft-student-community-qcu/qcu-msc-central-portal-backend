@@ -317,6 +317,11 @@ export async function listOrders(req: Request, res: Response): Promise<void> {
     const statusFilter = typeof req.query.status === "string" ? req.query.status.toUpperCase() : "";
     const status = toOrderStatus(statusFilter);
     const where: Prisma.MerchOrderWhereInput = status ? { status } : {};
+    // Optional filter for orders with an outstanding price-difference refund
+    // (cheaper-variant swaps, §8c) so Finance can find money it still owes.
+    if (req.query.refundOwed === "true") {
+      where.refundOwed = { gt: 0 };
+    }
 
     const [total, orders] = await Promise.all([
       prisma.merchOrder.count({ where }),
@@ -346,6 +351,9 @@ export async function listOrders(req: Request, res: Response): Promise<void> {
       amount: Number(o.amount),
       status: o.status,
       rejectionReason: o.rejectionReason,
+      shortfallAmount: o.shortfallAmount !== null ? Number(o.shortfallAmount) : null,
+      refundOwed: o.refundOwed !== null ? Number(o.refundOwed) : null,
+      stockHeld: o.stockHeld,
       latestReferenceNumber: o.proofSubmissions[0]?.referenceNumber ?? null,
       latestScreenshot: o.proofSubmissions[0]?.screenshotPath ?? null,
       attemptCount: o._count.proofSubmissions,
@@ -401,7 +409,12 @@ export async function confirmOrder(req: Request, res: Response): Promise<void> {
         data: { stock: { decrement: order.quantity } },
       });
       if (dec.count === 0) return false; // Stock ran out since submission
-      await tx.merchOrder.update({ where: { id: orderId }, data: { status: "CONFIRMED" } });
+      // Stock is now committed to this order: flag stockHeld so cancel restores
+      // it (§8e) and clear any recorded top-up shortfall (it's fully paid now).
+      await tx.merchOrder.update({
+        where: { id: orderId },
+        data: { status: "CONFIRMED", stockHeld: true, shortfallAmount: null },
+      });
       // The payment on this attempt was valid — record the officer's decision.
       if (latestSubmissionId) {
         await tx.paymentProofSubmission.update({
@@ -415,13 +428,13 @@ export async function confirmOrder(req: Request, res: Response): Promise<void> {
     if (!confirmed) {
       // Oversold: the student PAID but the last unit was confirmed for someone
       // else first. This is not a payment rejection — the payment was fine — so
-      // the order moves to REFUND_PENDING (owes a refund/swap), never REJECTED,
-      // and the student gets the out-of-stock email (no "resubmit" button).
-      // See issue #178 for why oversell is structural under the no-reserve model.
+      // the order moves to AWAITING_RESOLUTION (student chooses a swap or a
+      // refund), never REJECTED, and gets the sold-out email (no "resubmit"
+      // button). See issue #178 for why oversell is structural under no-reserve.
       await prisma.$transaction(async (tx) => {
         await tx.merchOrder.update({
           where: { id: orderId },
-          data: { status: "REFUND_PENDING", rejectionReason: "OUT_OF_STOCK" },
+          data: { status: "AWAITING_RESOLUTION", rejectionReason: "OUT_OF_STOCK" },
         });
         if (latestSubmissionId) {
           await tx.paymentProofSubmission.update({
@@ -432,7 +445,7 @@ export async function confirmOrder(req: Request, res: Response): Promise<void> {
       });
       await recordAudit({
         actorId,
-        action: "MERCH_ORDER_REFUND_PENDING",
+        action: "MERCH_ORDER_AWAITING_RESOLUTION",
         entityType: "MERCH_ORDER",
         entityId: orderId,
         details: { reason: "OUT_OF_STOCK", auto: true },
@@ -448,7 +461,7 @@ export async function confirmOrder(req: Request, res: Response): Promise<void> {
       res.status(409).json({
         success: false,
         message:
-          "Stock ran out before this order could be confirmed. The order is now awaiting a refund and the student has been notified — process the refund from the order.",
+          "Stock ran out before this order could be confirmed. The order now awaits the student's resolution (swap or refund) and they have been notified.",
       });
       return;
     }
@@ -499,6 +512,8 @@ export async function rejectOrder(req: Request, res: Response): Promise<void> {
         email: true,
         studentName: true,
         orderRef: true,
+        amount: true,
+        variant: { select: { label: true, item: { select: { name: true } } } },
         proofSubmissions: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
       },
     });
@@ -511,9 +526,67 @@ export async function rejectOrder(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const { reason, financeNote } = parsed.data;
+    const { reason, financeNote, shortfallAmount } = parsed.data;
     const actorId = actorFrom(req);
     const latestSubmissionId = order.proofSubmissions[0]?.id ?? null;
+
+    // ── Auto-reroute (§8a): OUT_OF_STOCK is NOT a payment rejection. The student
+    // paid; the item just can't be fulfilled. Rejecting would email them a
+    // "resubmit payment" link for money we already hold — the theft bug. Route
+    // to AWAITING_RESOLUTION (swap or refund) and send the sold-out email, which
+    // has no resubmit button. The payment itself was valid, so the submission is
+    // recorded VERIFIED. ──
+    if (reason === "OUT_OF_STOCK") {
+      await prisma.$transaction(async (tx) => {
+        await tx.merchOrder.update({
+          where: { id: orderId },
+          data: { status: "AWAITING_RESOLUTION", rejectionReason: "OUT_OF_STOCK", financeNote: financeNote ?? null },
+        });
+        if (latestSubmissionId) {
+          await tx.paymentProofSubmission.update({
+            where: { id: latestSubmissionId },
+            data: { officerDecision: "VERIFIED", reviewedById: actorId, reviewedAt: new Date() },
+          });
+        }
+      });
+      await recordAudit({
+        actorId,
+        action: "MERCH_ORDER_AWAITING_RESOLUTION",
+        entityType: "MERCH_ORDER",
+        entityId: orderId,
+        details: { reason: "OUT_OF_STOCK", via: "reject" },
+        ipAddress: ipFrom(req),
+      });
+      const emailed = await sendMerchOutOfStockEmail(order.email, {
+        studentName: order.studentName,
+        orderRef: order.orderRef,
+        itemName: order.variant.item.name,
+        variantLabel: order.variant.label,
+      });
+      await recordOrderNotification(orderId, emailed);
+      res.status(200).json({
+        success: true,
+        message:
+          "The student has already paid, so this order was routed to the refund/replacement track instead of being rejected. The student has been notified.",
+      });
+      return;
+    }
+
+    // AMOUNT_MISMATCH: the top-up the student must send has to be less than the
+    // order total (they underpaid — they can't owe the whole thing or more).
+    if (reason === "AMOUNT_MISMATCH" && shortfallAmount !== undefined) {
+      const total = Number(order.amount);
+      if (shortfallAmount >= total) {
+        res.status(400).json({
+          success: false,
+          message: `The shortfall must be less than the order total of ₱${total.toFixed(2)}.`,
+        });
+        return;
+      }
+    }
+
+    const shortfallDecimal =
+      reason === "AMOUNT_MISMATCH" && shortfallAmount !== undefined ? new Prisma.Decimal(shortfallAmount) : null;
 
     // Record the decision on BOTH the submission (per-attempt history — a later
     // resubmission never erases why this attempt failed) and the order (latest
@@ -521,7 +594,7 @@ export async function rejectOrder(req: Request, res: Response): Promise<void> {
     await prisma.$transaction(async (tx) => {
       await tx.merchOrder.update({
         where: { id: orderId },
-        data: { status: "REJECTED", rejectionReason: reason, financeNote: financeNote ?? null },
+        data: { status: "REJECTED", rejectionReason: reason, financeNote: financeNote ?? null, shortfallAmount: shortfallDecimal },
       });
       if (latestSubmissionId) {
         await tx.paymentProofSubmission.update({
@@ -530,6 +603,7 @@ export async function rejectOrder(req: Request, res: Response): Promise<void> {
             officerDecision: "REJECTED",
             rejectionReason: reason,
             financeNote: financeNote ?? null,
+            shortfallAmount: shortfallDecimal,
             reviewedById: actorId,
             reviewedAt: new Date(),
           },
@@ -549,8 +623,14 @@ export async function rejectOrder(req: Request, res: Response): Promise<void> {
     const emailed = await sendMerchOrderRejectedEmail(order.email, {
       studentName: order.studentName,
       orderRef: order.orderRef,
+      reason,
       reasonLabel: REJECTION_REASON_LABELS[reason] ?? reason,
+      financeNote: financeNote ?? null,
       trackingUrl: trackingUrl(order.orderRef),
+      shortfall:
+        reason === "AMOUNT_MISMATCH" && shortfallAmount !== undefined
+          ? { amount: shortfallAmount, gcashNumber: env.GCASH_NUMBER ?? null, gcashQrImageUrl: env.GCASH_QR_IMAGE_URL ?? null }
+          : null,
     });
     await recordOrderNotification(orderId, emailed);
 
@@ -618,24 +698,27 @@ export async function cancelOrder(req: Request, res: Response): Promise<void> {
 
     const order = await prisma.merchOrder.findUnique({
       where: { id: orderId },
-      select: { id: true, status: true, email: true, studentName: true, orderRef: true, quantity: true, variantId: true },
+      select: { id: true, status: true, email: true, studentName: true, orderRef: true, quantity: true, variantId: true, stockHeld: true },
     });
     if (!order) {
       res.status(404).json({ success: false, message: "Order not found" });
       return;
     }
-    // Terminal / refund-track states are not cancellable. Oversold orders
-    // (REFUND_PENDING) and refunded orders are handled by the refund endpoint,
-    // which keeps a dedicated MerchRefund record instead of a bare cancel.
-    const uncancellable: MerchOrderStatus[] = ["CANCELLED", "PAID_AND_CLAIMED", "REFUND_PENDING", "REFUNDED"];
+    // Terminal / resolution-track states are not cancellable. Oversold orders
+    // (AWAITING_RESOLUTION) and refunded orders are handled by the refund
+    // endpoint, which keeps a dedicated MerchRefund record instead of a bare
+    // cancel.
+    const uncancellable: MerchOrderStatus[] = ["CANCELLED", "PAID_AND_CLAIMED", "AWAITING_RESOLUTION", "REFUNDED"];
     if (uncancellable.includes(order.status)) {
       res.status(409).json({ success: false, message: "This order can no longer be cancelled." });
       return;
     }
 
-    // If the order was CONFIRMED, its stock was already decremented — return it.
+    // Restore stock only if this order is actually holding it (§8e). Reading the
+    // stockHeld flag instead of inferring "was it CONFIRMED?" keeps this correct
+    // for pricier-swap orders that hold stock while still AWAITING_PAYMENT.
     await prisma.$transaction(async (tx) => {
-      if (order.status === "CONFIRMED") {
+      if (order.stockHeld) {
         await tx.merchVariant.update({
           where: { id: order.variantId },
           data: { stock: { increment: order.quantity } },
@@ -643,7 +726,7 @@ export async function cancelOrder(req: Request, res: Response): Promise<void> {
       }
       await tx.merchOrder.update({
         where: { id: orderId },
-        data: { status: "CANCELLED", financeNote: parsed.data.financeNote },
+        data: { status: "CANCELLED", stockHeld: false, financeNote: parsed.data.financeNote },
       });
     });
 
@@ -652,7 +735,7 @@ export async function cancelOrder(req: Request, res: Response): Promise<void> {
       action: "MERCH_ORDER_CANCELLED",
       entityType: "MERCH_ORDER",
       entityId: orderId,
-      details: { restoredStock: order.status === "CONFIRMED" },
+      details: { restoredStock: order.stockHeld },
       ipAddress: ipFrom(req),
     });
 
@@ -685,7 +768,7 @@ export async function getOrderDetail(req: Request, res: Response): Promise<void>
       include: {
         variant: { select: { label: true, item: { select: { name: true } } } },
         proofSubmissions: { orderBy: { createdAt: "asc" } },
-        refund: true,
+        refunds: true,
       },
     });
     if (!order) {
@@ -705,6 +788,8 @@ export async function getOrderDetail(req: Request, res: Response): Promise<void>
       officerDecision: s.officerDecision,
       rejectionReason: s.rejectionReason,
       financeNote: s.financeNote,
+      isTopUp: s.isTopUp,
+      shortfallAmount: s.shortfallAmount !== null ? Number(s.shortfallAmount) : null,
       reviewedById: s.reviewedById,
       reviewedAt: s.reviewedAt,
       createdAt: s.createdAt,
@@ -727,22 +812,24 @@ export async function getOrderDetail(req: Request, res: Response): Promise<void>
           status: order.status,
           rejectionReason: order.rejectionReason,
           financeNote: order.financeNote,
+          shortfallAmount: order.shortfallAmount !== null ? Number(order.shortfallAmount) : null,
+          refundOwed: order.refundOwed !== null ? Number(order.refundOwed) : null,
+          stockHeld: order.stockHeld,
           lastNotifiedAt: order.lastNotifiedAt,
           lastNotificationOk: order.lastNotificationOk,
           notificationCount: order.notificationCount,
           createdAt: order.createdAt,
           updatedAt: order.updatedAt,
           submissions,
-          refund: order.refund
-            ? {
-                amount: Number(order.refund.amount),
-                method: order.refund.method,
-                referenceNumber: order.refund.referenceNumber,
-                note: order.refund.note,
-                processedById: order.refund.processedById,
-                processedAt: order.refund.processedAt,
-              }
-            : null,
+          refunds: order.refunds.map((r) => ({
+            type: r.type,
+            amount: Number(r.amount),
+            method: r.method,
+            referenceNumber: r.referenceNumber,
+            note: r.note,
+            processedById: r.processedById,
+            processedAt: r.processedAt,
+          })),
         },
       },
     });
@@ -754,7 +841,7 @@ export async function getOrderDetail(req: Request, res: Response): Promise<void>
 
 /**
  * POST /api/v2/admin/merch/orders/:orderId/refund — head-only. Records a
- * dedicated MerchRefund for an oversold order (REFUND_PENDING → REFUNDED) so
+ * dedicated MerchRefund for an oversold order (AWAITING_RESOLUTION → REFUNDED) so
  * the refund amount, method, and reference are transparently auditable (§7a).
  */
 export async function refundOrder(req: Request, res: Response): Promise<void> {
@@ -779,20 +866,22 @@ export async function refundOrder(req: Request, res: Response): Promise<void> {
         studentName: true,
         orderRef: true,
         amount: true,
-        refund: { select: { id: true } },
+        refunds: { select: { id: true, type: true } },
       },
     });
     if (!order) {
       res.status(404).json({ success: false, message: "Order not found" });
       return;
     }
-    // Refunds are recorded for orders that owe money after payment — the
-    // oversell REFUND_PENDING state. (Head cancellations note refunds offline.)
-    if (order.status !== "REFUND_PENDING") {
-      res.status(409).json({ success: false, message: "Only orders awaiting a refund can be refunded." });
+    // A FULL refund is recorded for an oversold order the student chose NOT to
+    // swap — the AWAITING_RESOLUTION state. (Cheaper-variant PRICE_DIFFERENCE
+    // refunds are recorded by the resolution flow; head cancellations note
+    // refunds offline.)
+    if (order.status !== "AWAITING_RESOLUTION") {
+      res.status(409).json({ success: false, message: "Only orders awaiting resolution can be refunded here." });
       return;
     }
-    if (order.refund) {
+    if (order.refunds.some((r) => r.type === "FULL")) {
       res.status(409).json({ success: false, message: "A refund has already been recorded for this order." });
       return;
     }
@@ -812,6 +901,7 @@ export async function refundOrder(req: Request, res: Response): Promise<void> {
       await tx.merchRefund.create({
         data: {
           orderId,
+          type: "FULL",
           amount: new Prisma.Decimal(amount),
           method,
           referenceNumber: referenceNumber ?? null,
@@ -860,7 +950,7 @@ export async function resendOrderEmail(req: Request, res: Response): Promise<voi
       where: { id: orderId },
       include: {
         variant: { select: { label: true, item: { select: { name: true } } } },
-        refund: true,
+        refunds: true,
       },
     });
     if (!order) {
@@ -897,31 +987,42 @@ export async function resendOrderEmail(req: Request, res: Response): Promise<voi
       case "CONFIRMED":
         emailed = await sendMerchOrderConfirmedEmail(order.email, { ...common, itemName, variantLabel });
         break;
-      case "REJECTED":
+      case "REJECTED": {
+        const reason = order.rejectionReason ?? "OTHER";
+        const shortfall = order.shortfallAmount !== null ? Number(order.shortfallAmount) : undefined;
         emailed = await sendMerchOrderRejectedEmail(order.email, {
           ...common,
+          reason,
           reasonLabel: order.rejectionReason
             ? REJECTION_REASON_LABELS[order.rejectionReason] ?? order.rejectionReason
             : "Your payment could not be verified.",
+          financeNote: order.financeNote,
           trackingUrl: trackingUrl(order.orderRef),
+          shortfall:
+            reason === "AMOUNT_MISMATCH" && shortfall !== undefined
+              ? { amount: shortfall, gcashNumber: env.GCASH_NUMBER ?? null, gcashQrImageUrl: env.GCASH_QR_IMAGE_URL ?? null }
+              : null,
         });
         break;
-      case "REFUND_PENDING":
+      }
+      case "AWAITING_RESOLUTION":
         emailed = await sendMerchOutOfStockEmail(order.email, { ...common, itemName, variantLabel });
         break;
-      case "REFUNDED":
-        if (!order.refund) {
+      case "REFUNDED": {
+        const fullRefund = order.refunds.find((r) => r.type === "FULL");
+        if (!fullRefund) {
           res.status(409).json({ success: false, message: "No refund record exists for this order yet." });
           return;
         }
         emailed = await sendMerchRefundProcessedEmail(order.email, {
           ...common,
-          amount: Number(order.refund.amount),
-          method: order.refund.method,
-          referenceNumber: order.refund.referenceNumber,
-          note: order.refund.note,
+          amount: Number(fullRefund.amount),
+          method: fullRefund.method,
+          referenceNumber: fullRefund.referenceNumber,
+          note: fullRefund.note,
         });
         break;
+      }
       case "PAID_AND_CLAIMED":
         emailed = await sendMerchOrderClaimedEmail(order.email, { ...common, itemName });
         break;
@@ -962,11 +1063,18 @@ export async function resendOrderEmail(req: Request, res: Response): Promise<voi
 /** GET /api/v2/admin/merch/screenshots/:filename — finance-only proxy. */
 export async function serveMerchScreenshot(req: Request, res: Response): Promise<void> {
   try {
-    const safe = safeStorageFilename(req.params.filename, SCREENSHOT_PREFIX);
-    if (!safe) {
+    // Two-step (see getCatalogPhoto): distinguish a malformed filename from a
+    // valid-but-wrong-class one (e.g. a catalog photo requested here).
+    const base = safeStorageFilename(req.params.filename);
+    if (!base) {
       res.status(400).json({ success: false, message: "Invalid screenshot filename" });
       return;
     }
+    if (!base.startsWith(SCREENSHOT_PREFIX)) {
+      res.status(400).json({ success: false, message: "This file is not a payment screenshot." });
+      return;
+    }
+    const safe = base;
     const { stream, contentType, contentLength } = await getMerchImageStream(safe);
     if (!stream) {
       res.status(404).json({ success: false, message: "Screenshot not found" });

@@ -270,7 +270,7 @@ export async function submitPaymentProof(req: Request, res: Response): Promise<v
 
     const order = await prisma.merchOrder.findUnique({
       where: { orderRef },
-      select: { id: true, email: true, status: true, studentName: true, rejectionReason: true },
+      select: { id: true, email: true, status: true, studentName: true, rejectionReason: true, shortfallAmount: true },
     });
 
     // Anti-enumeration: unknown order or email mismatch both return 404.
@@ -279,13 +279,13 @@ export async function submitPaymentProof(req: Request, res: Response): Promise<v
       return;
     }
 
-    // A paid order that's being refunded (e.g. sold out after payment) must
-    // never accept another payment — that's the double-pay exploit (issue #178).
-    if (order.status === "REFUND_PENDING" || order.status === "REFUNDED") {
+    // A paid order that's awaiting resolution / already refunded must never
+    // accept another payment — that's the double-pay exploit (issue #178).
+    if (order.status === "AWAITING_RESOLUTION" || order.status === "REFUNDED") {
       res.status(409).json({
         success: false,
         message:
-          "This order is being refunded and can no longer accept payment. Our Finance team will contact you about your refund or a replacement.",
+          "This order is being resolved and can no longer accept payment. Our Finance team will contact you about your refund or a replacement.",
       });
       return;
     }
@@ -349,14 +349,30 @@ export async function submitPaymentProof(req: Request, res: Response): Promise<v
       return;
     }
 
+    // A top-up resubmission pays only the outstanding difference after an
+    // AMOUNT_MISMATCH rejection (§8b). Flag it + snapshot the shortfall so the
+    // officer and the attempt timeline show it's a partial follow-up payment.
+    const isTopUp =
+      order.status === "REJECTED" &&
+      order.rejectionReason === "AMOUNT_MISMATCH" &&
+      order.shortfallAmount !== null;
+
     // Unique → accept into the verification queue.
     await prisma.$transaction([
       prisma.paymentProofSubmission.create({
-        data: { orderId: order.id, screenshotPath: filename, referenceNumber, result: "ACCEPTED" },
+        data: {
+          orderId: order.id,
+          screenshotPath: filename,
+          referenceNumber,
+          result: "ACCEPTED",
+          isTopUp,
+          shortfallAmount: isTopUp ? order.shortfallAmount : null,
+        },
       }),
       prisma.merchOrder.update({
         where: { id: order.id },
-        // Clear any prior rejection metadata on resubmit.
+        // Clear any prior rejection metadata on resubmit. shortfallAmount is
+        // kept so the officer still sees this is a top-up pending verification.
         data: { status: "PENDING_VERIFICATION", rejectionReason: null, financeNote: null },
       }),
     ]);

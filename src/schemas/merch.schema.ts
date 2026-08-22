@@ -166,10 +166,26 @@ export const rejectOrderSchema = z
       .trim()
       .max(500, "Note must be less than 500 characters")
       .optional(),
+    // Exact amount the student still owes — required for AMOUNT_MISMATCH so the
+    // student is told precisely how much to top up (§8b), forbidden otherwise.
+    // The controller additionally checks it is less than the order total.
+    shortfallAmount: z.coerce
+      .number({ error: "Shortfall amount must be a number" })
+      .positive("Shortfall amount must be greater than zero")
+      .max(1_000_000, "Shortfall amount is unrealistically high")
+      .optional(),
   })
   .refine((data) => data.reason !== "OTHER" || (data.financeNote && data.financeNote.length > 0), {
     message: "A note is required when the rejection reason is 'Other'",
     path: ["financeNote"],
+  })
+  .refine((data) => data.reason !== "AMOUNT_MISMATCH" || data.shortfallAmount !== undefined, {
+    message: "Enter the exact amount the student still needs to send",
+    path: ["shortfallAmount"],
+  })
+  .refine((data) => data.reason === "AMOUNT_MISMATCH" || data.shortfallAmount === undefined, {
+    message: "A shortfall amount only applies to an amount-mismatch rejection",
+    path: ["shortfallAmount"],
   });
 
 // POST /api/v2/admin/merch/orders/:orderId/cancel (head-only)
@@ -182,26 +198,32 @@ export const cancelOrderSchema = z.object({
 });
 
 // Refund method mirrors Prisma MerchRefundMethod.
-export const merchRefundMethodEnum = z.enum(["GCASH", "CASH", "OTHER"], {
-  error: "Refund method must be GCASH, CASH, or OTHER",
+export const merchRefundMethodEnum = z.enum(["GCASH", "CASH", "MAYA", "MARIBANK", "OTHER"], {
+  error: "Refund method must be GCash, cash, Maya, Maribank, or other",
 });
 
 // POST /api/v2/admin/merch/orders/:orderId/refund (head-only). The amount is
 // additionally checked against the order total in the controller (the schema
-// cannot see the order).
-export const refundOrderSchema = z.object({
-  amount: z.coerce
-    .number({ error: "Refund amount is required and must be a number" })
-    .positive("Refund amount must be greater than zero")
-    .max(1_000_000, "Refund amount is unrealistically high"),
-  method: merchRefundMethodEnum,
-  referenceNumber: z
-    .string()
-    .trim()
-    .max(50, "Reference number must be less than 50 characters")
-    .optional(),
-  note: z.string().trim().max(500, "Note must be less than 500 characters").optional(),
-});
+// cannot see the order). A note is required for OTHER so the student's receipt
+// can explain how the refund was issued (the method label is generic).
+export const refundOrderSchema = z
+  .object({
+    amount: z.coerce
+      .number({ error: "Refund amount is required and must be a number" })
+      .positive("Refund amount must be greater than zero")
+      .max(1_000_000, "Refund amount is unrealistically high"),
+    method: merchRefundMethodEnum,
+    referenceNumber: z
+      .string()
+      .trim()
+      .max(50, "Reference number must be less than 50 characters")
+      .optional(),
+    note: z.string().trim().max(500, "Note must be less than 500 characters").optional(),
+  })
+  .refine((data) => data.method !== "OTHER" || (data.note && data.note.length > 0), {
+    message: "A note explaining the refund is required when the method is 'Other'",
+    path: ["note"],
+  });
 
 export type CreateMerchItemInput = z.infer<typeof createMerchItemSchema>;
 export type UpdateMerchItemInput = z.infer<typeof updateMerchItemSchema>;
