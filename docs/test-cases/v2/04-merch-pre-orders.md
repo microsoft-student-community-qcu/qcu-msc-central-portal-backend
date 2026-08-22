@@ -87,6 +87,27 @@ notification features.
 | TC-70 | `POST …/orders/:id/reject` | `{reason:"SCREENSHOT_UNCLEAR", shortfallAmount:100}` | **400** `errors.shortfallAmount` (only applies to AMOUNT_MISMATCH) | - [ ] |
 | TC-71 | rejection email copy | reject with each of REFERENCE_NOT_FOUND / SCREENSHOT_UNCLEAR / OTHER | subject + headline differ per reason (not the old static "We couldn't verify your payment"); `financeNote` appears as **Note from the admin** for every reason | - [ ] |
 
+## §8d — Self-service resolution (swap / refund) + per-variant price
+
+Requires an order in `AWAITING_RESOLUTION` with a resolution link (from the sold-out email, or resend). Create an item with variants at different prices (e.g. M ₱350, L ₱400, S ₱300) to exercise deltas.
+
+| # | Endpoint / Action | Scenario | Expected | Result |
+|----|-------------------|----------|----------|--------|
+| TC-80 | `POST /api/v2/admin/merch/items` | variant with a `price` override | **201**; catalog shows that variant's own price; ordering it uses the override × qty | - [ ] |
+| TC-81 | `GET /api/v2/merch/resolve/:token` | valid link | **200**; `options` = in-stock same-item variants (current + sold-out excluded) with `priceDelta` + `direction` (same/cheaper/pricier); `canRefund:true` | - [ ] |
+| TC-82 | `GET …/resolve/:token` | consumed link | **410** already used | - [ ] |
+| TC-83 | `GET …/resolve/:token` | expired link (or unknown) | **410** expired / **404** invalid | - [ ] |
+| TC-84 | `GET …/resolve/:token` | order already resolved (e.g. CONFIRMED) | **409** already resolved | - [ ] |
+| TC-85 | `POST …/resolve/:token/swap` | pricier variant, no `acknowledgedTopUp` | **409** `data.requiresTopUp:true` + exact `shortfall` (no state change) | - [ ] |
+| TC-86 | `POST …/resolve/:token/swap` | pricier variant, `acknowledgedTopUp:true` | **200**; order → `AWAITING_PAYMENT`, `shortfallAmount` set, `stockHeld:true`; top-up email (exact ₱ + QR); token consumed | - [ ] |
+| TC-87 | resubmit top-up | after TC-86, `POST …/payment-proof` with the top-up reference | **200** → `PENDING_VERIFICATION`; submission `isTopUp:true`; **confirm does not double-decrement stock** | - [ ] |
+| TC-88 | `POST …/resolve/:token/swap` | cheaper variant | **200**; order → `CONFIRMED`, `refundOwed` = difference; swap-confirmed email mentions the refund | - [ ] |
+| TC-89 | `POST …/admin/merch/orders/:id/refund` (head) | CONFIRMED order with `refundOwed>0`, `{amount=diff}` | **200**; `PRICE_DIFFERENCE` MerchRefund; `refundOwed` cleared; order stays `CONFIRMED` | - [ ] |
+| TC-90 | `POST …/resolve/:token/swap` | target variant sold out mid-swap (stock 0) | **409** "sold out" (token **not** consumed) | - [ ] |
+| TC-91 | `POST …/resolve/:token/refund` | student picks refund | **200**; `refundRequestedAt` set; token consumed; ack email; `MERCH_ORDER_REFUND_REQUESTED` audited; order stays `AWAITING_RESOLUTION` | - [ ] |
+| TC-92 | `GET …/admin/merch/orders?overdueTopUp=true` | pricier-swap order unpaid 7+ days | **200**; lists the overdue top-up order | - [ ] |
+| TC-93 | reuse after action | reuse a token already consumed by a swap/refund | **410** already used | - [ ] |
+
 ## P2 — Edge & regression
 
 | # | Endpoint / Action | Scenario | Expected | Result |

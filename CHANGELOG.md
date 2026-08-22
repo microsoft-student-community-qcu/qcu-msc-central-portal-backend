@@ -14,6 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **V2 Module 04 (M2) — Self-service oversell resolution + per-variant pricing (§8d, Option A, #176):**
+  - Per-variant price override (`MerchVariant.price`) — a size can cost more/less than the base item
+    (e.g. XL surcharge); order amount + resolution deltas use the effective `variant.price ?? item.price`.
+    Migration `20260822140000_v2_merch_variant_price_resolution`.
+  - Self-service resolution links for `AWAITING_RESOLUTION` orders: `MerchOrderResolutionToken`
+    (SHA-256-hashed, single-use, 14-day TTL, regenerable) + public token-gated endpoints
+    `GET /api/v2/merch/resolve/:token`, `POST …/swap`, `POST …/refund`. The sold-out email now carries
+    **Choose Another Size** and **Request a refund** CTAs.
+  - Swap price settlement: same → `CONFIRMED`; cheaper → `CONFIRMED` + `refundOwed` (100% of the
+    difference, settled by a `PRICE_DIFFERENCE` refund via the refund endpoint); pricier → student
+    acknowledges, stock is held, order waits in `AWAITING_PAYMENT` for a top-up of just the difference.
+  - `MerchOrder.refundRequestedAt`; `?overdueTopUp=true` finance-queue filter for pricier-swap
+    top-ups unpaid after 7 days; new emails (`sendMerchSwapConfirmedEmail`, `sendMerchSwapTopUpEmail`,
+    `sendMerchRefundRequestedEmail`); audit actions `MERCH_ORDER_SWAPPED`, `MERCH_ORDER_REFUND_REQUESTED`.
+  - **Deferred:** the day-7 pre-expiry reminder is a scheduled job — tracked in #181 (no
+    in-process scheduler exists yet). Expiry is non-terminal, so this is safe to defer.
+
 - **V2 Module 04 (M2) — Merch oversell resolution groundwork (§8a–§8c, §8e, #176):**
   - Renamed the oversell order state `REFUND_PENDING` → `AWAITING_RESOLUTION` (a student can swap
     OUT of it, so "refund pending" overstated it) — migration

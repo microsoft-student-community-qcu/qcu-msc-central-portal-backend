@@ -95,7 +95,10 @@ Officer finds CONFIRMED order, clicks **"Mark as Claimed"** → **PAID_AND_CLAIM
 | GET | `/api/v2/merch/photos/:filename` | none | — | Public catalog-photo proxy (`item-` prefix only) |
 | POST | `/api/v2/merch/orders` | none (branches auth) | 10/min | Pre-order; real-time stock check |
 | GET | `/api/v2/merch/orders/:orderRef` | none (orderRef + email) | 30/min | Public order tracking |
-| POST | `/api/v2/merch/orders/:orderRef/payment-proof` | none (orderRef + email) | 10/min | Screenshot + reference; duplicate auto-reject; resubmit lock |
+| POST | `/api/v2/merch/orders/:orderRef/payment-proof` | none (orderRef + email) | 10/min | Screenshot + reference; duplicate auto-reject; resubmit lock; top-up aware |
+| GET | `/api/v2/merch/resolve/:token` | none (token) | 20/min | Oversell resolution: order context + same-item swap options (§8d) |
+| POST | `/api/v2/merch/resolve/:token/swap` | none (token) | 20/min | Switch variant (cheaper→refund diff, pricier→top-up); atomic + single-use |
+| POST | `/api/v2/merch/resolve/:token/refund` | none (token) | 20/min | Request a full refund; records intent, notifies Finance |
 | GET | `/api/v2/admin/merch/items` | `requireAdminFinance` | — | Full catalog incl. archived |
 | POST | `/api/v2/admin/merch/items` | `requireAdminFinance` | 20/min | Create item (multipart photos) |
 | PATCH | `/api/v2/admin/merch/items/:itemId` | `requireAdminFinance` | 20/min | Edit item |
@@ -117,10 +120,13 @@ Officer finds CONFIRMED order, clicks **"Mark as Claimed"** → **PAID_AND_CLAIM
 | Pre-order created | Payment QR + order details | Student |
 | Payment proof received | Verification in progress | Student |
 | Payment CONFIRMED | Pre-order secured + pickup instructions | Student |
-| Payment REJECTED (fixable) | Reason + resubmit button | Student |
+| Payment REJECTED (fixable) | Per-reason copy + resubmit button; AMOUNT_MISMATCH shows exact top-up + QR | Student |
 | Duplicate reference | Auto-reject notice | Student |
-| Sold out after payment | Refund/swap notice, **no** resubmit button | Student |
-| Refund processed | Refund receipt (amount + method) | Student |
+| Sold out after payment | Swap/refund CTAs (self-service link), **no** resubmit button | Student |
+| Swap confirmed | New size confirmed (+ refund-of-difference line if cheaper) | Student |
+| Swap needs top-up | Exact difference + QR (pricier swap) | Student |
+| Refund requested | Acknowledgement (student picked refund on the resolution page) | Student |
+| Refund processed | Refund receipt (amount + human method label) | Student |
 | Order claimed | Final receipt | Student |
 | Order cancelled (head) | Cancellation note | Student |
 
@@ -143,6 +149,7 @@ All senders return a success boolean; the order's `lastNotifiedAt` / `lastNotifi
 | 5 | Renamed `REFUND_PENDING` → `AWAITING_RESOLUTION`? | Yes — a student can swap OUT of it, so "refund pending" overstated the outcome. The state means "unfulfillable, pending the student's choice". Migration `20260822130000_v2_merch_resolution_prep`. | 2026-08-22 |
 | 6 | AMOUNT_MISMATCH: full re-pay or top-up the difference? | **Top-up.** The officer records the exact `shortfallAmount`; the student is emailed the precise amount + QR and pays only the difference (submission flagged `isTopUp`). | 2026-08-22 |
 | 7 | Swap price delta? | **Symmetric settle:** cheaper → refund 100% of the difference (`PRICE_DIFFERENCE` refund, order stays `CONFIRMED`); pricier → student confirms, then tops up the difference (stock held immediately). Same item only. | 2026-08-22 |
+| 8 | Day-7 reminder for unresolved oversell/top-up orders? | **Deferred to a scheduled job — issue #181.** No in-process scheduler exists yet; expiry is non-terminal (order stays `AWAITING_RESOLUTION`, Finance regenerates), so safe to defer. Overdue top-ups already surface via `?overdueTopUp=true`. | 2026-08-22 |
 
 ## 10. Testing Checklist
 

@@ -42,8 +42,8 @@ is closed.
         "price": 350, "photos": ["https://api.example/api/v2/merch/photos/item-abc.png"], "lowStockThreshold": 10,
         "createdAt": "…", "updatedAt": "…",
         "variants": [
-          { "id": "…", "label": "S", "stock": 3, "inStock": true, "lowStock": true },
-          { "id": "…", "label": "M", "stock": 0, "inStock": false, "lowStock": false }
+          { "id": "…", "label": "S", "stock": 3, "price": 350, "inStock": true, "lowStock": true },
+          { "id": "…", "label": "XL", "stock": 0, "price": 400, "inStock": false, "lowStock": false }
         ]
       }
     ]
@@ -148,6 +148,56 @@ reference moves the order to `PENDING_VERIFICATION`.
 
 ---
 
+## Student — Self-Service Resolution (§8d)
+
+When an order is oversold it enters `AWAITING_RESOLUTION` and the student is emailed an unguessable,
+single-use link (SHA-256-hashed token, 14-day TTL). These endpoints back that link — **no auth and
+no email check**: the token itself is the proof of ownership. Every successful action consumes the
+token. Rate limit: 20/min per IP.
+
+### 5b. Get Resolution
+
+`GET /api/v2/merch/resolve/:token` — returns the order context + same-item swap options.
+
+**Success (200):**
+```json
+{ "success": true, "data": {
+  "order": { "orderRef": "…", "itemName": "…", "soldOutVariantLabel": "M", "quantity": 1, "amountPaid": 350, "status": "AWAITING_RESOLUTION" },
+  "options": [ { "variantId": "…", "label": "L", "stock": 5, "newAmount": 400, "priceDelta": 50, "direction": "pricier" },
+               { "variantId": "…", "label": "S", "stock": 5, "newAmount": 300, "priceDelta": -50, "direction": "cheaper" } ],
+  "canRefund": true, "expiresAt": "…" } }
+```
+`priceDelta` uses the **effective** price (`variant.price ?? item.price`). `direction` is `same` /
+`cheaper` / `pricier`. Sold-out and current variants are excluded.
+**Errors:** `404` invalid token · `410` consumed / expired · `409` already resolved · `500` internal
+
+### 5c. Swap Variant
+
+`POST /api/v2/merch/resolve/:token/swap`
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `variantId` | string | A different, in-stock, same-item variant |
+| `acknowledgedTopUp` | boolean | **Required `true`** when the target is pricier (student confirms paying the difference) |
+
+Atomically commits the target's stock, repoints the order, and consumes the token.
+- **same price** → `CONFIRMED`.
+- **cheaper** → `CONFIRMED` + `refundOwed` = the difference (Finance refunds 100% via §17); swap-confirmed email.
+- **pricier** → holds stock, `AWAITING_PAYMENT` + `shortfallAmount` = the difference; top-up email (exact ₱ + QR). The student pays only the difference and submits proof (recorded `isTopUp`); confirming that top-up does **not** re-decrement stock.
+
+**Success (200):** `{ success, message, data: { status, shortfall, refundOwed, trackingUrl } }` · Audit: `MERCH_ORDER_SWAPPED`
+**409 (pricier, no ack):** `{ data: { requiresTopUp: true, shortfall, variantId, newAmount } }`
+**Errors:** `400` validation / same-or-unavailable variant · `404`/`410`/`409` token state · `409` target sold out mid-swap · `500` internal
+
+### 5d. Request Refund
+
+`POST /api/v2/merch/resolve/:token/refund` — records `refundRequestedAt`, consumes the token, and
+emails an acknowledgement. The order stays `AWAITING_RESOLUTION` until a head records the `FULL`
+refund (§17). Audit: `MERCH_ORDER_REFUND_REQUESTED`.
+**Errors:** `404`/`410`/`409` token state · `500` internal
+
+---
+
 ## Admin — Item Management (Finance)
 
 > All under `/api/v2/admin/merch`. `requireAdminFinance` (ADMIN_FINANCE, ADMIN_FINANCE_HEAD,
@@ -167,7 +217,7 @@ reference moves the order to `PENDING_VERIFICATION`.
 | `description` | string | ≤2000 |
 | `price` | number | > 0 |
 | `lowStockThreshold` | int? | default 10 |
-| `variants` | JSON string | `[{"label":"S","stock":50}]` — ≥1, unique labels |
+| `variants` | JSON string | `[{"label":"S","stock":50,"price":350}]` — ≥1, unique labels; `price` optional per variant (overrides the item price, §8) |
 | `photos` | file[] (1–6, JPEG/PNG/WEBP) | required |
 
 **Success (201):** `{ success, data: { item }, message: "Item created" }` · Audit: `MERCH_ITEM_CREATED`
@@ -191,12 +241,13 @@ New `photos` **replace** the set; `variants` upsert by label (stock update / add
 
 ### 10. List Orders (queue)
 
-`GET /api/v2/admin/merch/orders?status=&refundOwed=&page=&pageSize=` — FCFS (createdAt asc), paginated (max 50). Auth: finance.
+`GET /api/v2/admin/merch/orders?status=&refundOwed=&overdueTopUp=&page=&pageSize=` — FCFS (createdAt asc), paginated (max 50). Auth: finance.
 `status` accepts any `MerchOrderStatus` (incl. `AWAITING_RESOLUTION`); `refundOwed=true` filters to
-orders that still owe a swap price-difference. Each row includes the latest reference number +
-screenshot filename (serve via §15), `attemptCount`, `shortfallAmount`, `refundOwed`, `stockHeld`,
-and notification tracking (`lastNotifiedAt`, `lastNotificationOk`, `notificationCount`) so
-stale/failed notifications and outstanding money are findable.
+orders that still owe a swap price-difference; `overdueTopUp=true` filters to pricier-swap orders
+that reserved stock but haven't paid the difference in 7+ days (§8e). Each row includes the latest
+reference number + screenshot filename (serve via §15), `attemptCount`, `shortfallAmount`,
+`refundOwed`, `stockHeld`, and notification tracking (`lastNotifiedAt`, `lastNotificationOk`,
+`notificationCount`).
 
 ### 11. Confirm Payment
 
@@ -263,7 +314,9 @@ Lets an officer see e.g. "attempt 2 (top-up) — attempt 1 rejected AMOUNT_MISMA
 
 ### 17. Record Refund — head-only
 
-`POST /api/v2/admin/merch/orders/:orderId/refund` — Auth: **ADMIN_FINANCE_HEAD**. Order must be `AWAITING_RESOLUTION`.
+`POST /api/v2/admin/merch/orders/:orderId/refund` — Auth: **ADMIN_FINANCE_HEAD**. The refund **type is inferred from order state**:
+`AWAITING_RESOLUTION` → a `FULL` refund (→ `REFUNDED`); a `CONFIRMED` order with `refundOwed > 0` → a
+`PRICE_DIFFERENCE` refund settling a cheaper swap (clears `refundOwed`, stays `CONFIRMED`).
 
 | Field | Type | Notes |
 |-------|------|-------|
@@ -273,8 +326,9 @@ Lets an officer see e.g. "attempt 2 (top-up) — attempt 1 rejected AMOUNT_MISMA
 | `note` | string? | Optional context (≤500); **required when `method=OTHER`** |
 
 Creates a `FULL` `MerchRefund`, moves the order to `REFUNDED`, emails the student a receipt (with a
-human method label — never the raw enum). One `FULL` refund per order. Audit: `MERCH_ORDER_REFUNDED`.
-**Errors:** `400` validation / amount > total / missing note for OTHER · `403` non-head · `404` not found · `409` not awaiting resolution / already refunded · `500` internal
+human method label — never the raw enum). One refund per (order, type). A `PRICE_DIFFERENCE` refund
+must be ≤ `refundOwed`; a `FULL` refund must be ≤ the order total. Audit: `MERCH_ORDER_REFUNDED`.
+**Errors:** `400` validation / amount over allowed / missing note for OTHER · `403` non-head · `404` not found · `409` nothing owed / already refunded · `500` internal
 
 ### 18. Resend Status Email
 

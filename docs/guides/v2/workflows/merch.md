@@ -92,7 +92,26 @@ Live stages except resolution-track ──head cancel──▶ CANCELLED   (stoc
   returns 404, never 403.
 - **Image proxies are prefix-scoped:** the public photo proxy serves only `item-*`; the finance
   screenshot proxy serves only `proof-*`. Neither accepts traversal filenames.
+- **Resolution links are unguessable + single-use:** the swap/refund link carries a 32-byte token
+  stored only as its SHA-256 hash (14-day TTL). The token is the proof of ownership, so no email
+  check is needed; each action consumes it, and expiry is never terminal (Finance can resend/regenerate).
 - Every finance mutation writes a tamper-evident `MERCH_*` audit entry.
+
+## Self-service resolution (§8d)
+
+An oversold `AWAITING_RESOLUTION` order emails the student two CTAs — **Choose Another Size** and
+**Request a refund** — both pointing at `${FRONTEND_URL}/merch/resolve/:token`:
+
+- **Swap** (`POST …/resolve/:token/swap`): same-item variants only. Same price → `CONFIRMED`.
+  Cheaper → `CONFIRMED` and 100% of the difference is refunded (`refundOwed`, settled by a
+  `PRICE_DIFFERENCE` refund). Pricier → the student must acknowledge, stock is held, and the order
+  waits in `AWAITING_PAYMENT` for a top-up of just the difference.
+- **Refund** (`POST …/resolve/:token/refund`): records the request; a head then records the `FULL`
+  refund → `REFUNDED`.
+
+Reminder emails (e.g. a day-7 nudge before expiry) are **deferred** to a scheduled job — see issue
+**#181**. Expiry is safe without it: the order stays `AWAITING_RESOLUTION` and Finance can
+regenerate a link.
 
 ## Configuration
 

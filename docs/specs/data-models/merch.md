@@ -37,6 +37,7 @@ model MerchVariant {
   itemId    String
   item      MerchItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
   label     String
+  price     Decimal?     @db.Decimal(10, 2) // Optional per-size override (§8); null → item price
   stock     Int          @default(0)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
@@ -64,6 +65,7 @@ model MerchOrder {
   financeNote        String?                  @db.Text
   shortfallAmount    Decimal?                 @db.Decimal(10, 2) // Top-up owed by student (§8b)
   refundOwed         Decimal?                 @db.Decimal(10, 2) // Difference owed to student after a cheaper swap (§8c)
+  refundRequestedAt  DateTime? // Set when the student picks "refund" on the resolution page (§8d)
   stockHeld          Boolean                  @default(false) // Whether this order currently holds decremented stock (§8e)
   lastNotifiedAt     DateTime? // Time of most recent status-email attempt (§7b)
   lastNotificationOk Boolean? // Whether that attempt actually sent
@@ -113,6 +115,18 @@ model MerchRefund {
 
   @@unique([orderId, type])
 }
+
+model MerchOrderResolutionToken {
+  id         String     @id @default(uuid())
+  orderId    String
+  order      MerchOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  tokenHash  String     @unique // SHA-256 of the raw token (raw is never stored)
+  expiresAt  DateTime   // 14-day TTL
+  consumedAt DateTime?  // Set when a swap/refund completes through this link
+  createdAt  DateTime   @default(now())
+
+  @@index([orderId])
+}
 ```
 
 ## Enums
@@ -130,7 +144,7 @@ model MerchRefund {
 ## Field Notes
 
 - **`MerchItem.photos`** — JSON array of stored **filenames** (`item-<uuid>.<ext>`), not blob URLs. MySQL has no scalar string arrays, so JSON is used; the app always sets it (defaults to `[]`). Serializers turn filenames into absolute proxy URLs (`/api/v2/merch/photos/:filename`) because the blob container is private. Legacy rows storing full URLs still resolve (the serializer passes absolute URLs through unchanged).
-- **`MerchItem.price` / `MerchOrder.amount`** — `Decimal(10,2)`, never `Float`, to avoid floating-point money errors. `amount` is a snapshot of `price × quantity` at order time so later price edits don't rewrite historical orders.
+- **`MerchItem.price` / `MerchVariant.price` / `MerchOrder.amount`** — `Decimal(10,2)`, never `Float`. A variant may override the item price (§8, e.g. an "XL" surcharge); the **effective** unit price is `variant.price ?? item.price`. `amount` snapshots `effectivePrice × quantity` at order time so later edits don't rewrite historical orders.
 - **`MerchOrder.orderRef`** — human-facing tracking ID, format `MSC-MERCH-YYYY-NNNN`, unique. Sequential/predictable by design; anti-enumeration relies on the required order email (see #178 discussion for the accepted trade-off).
 - **`MerchOrder.userId`** — set when the buyer was logged in; guest fields are always stored regardless.
 - **`MerchOrder.gcashNumber`** — recorded for reference only; verification hinges on `referenceNumber`, not on whose GCash paid.
@@ -138,6 +152,8 @@ model MerchRefund {
 - **`MerchOrder.shortfallAmount`** (§8b) — the exact top-up a student still owes after an `AMOUNT_MISMATCH` rejection (or a pricier resolution swap). The student pays only this, not the whole order again. Cleared on `CONFIRMED`.
 - **`MerchOrder.refundOwed`** (§8c) — money the org owes the student after a cheaper-variant swap. The order stays `CONFIRMED`; Finance clears it by recording a `PRICE_DIFFERENCE` `MerchRefund`. Surfaced by the `?refundOwed=true` queue filter.
 - **`MerchOrder.stockHeld`** (§8e) — authoritative flag for "this order holds decremented stock". Set on confirm (or a pricier already-paid swap), cleared on cancel/restore. Replaces inferring stock-held from status, which broke once stock can be held while `AWAITING_PAYMENT` (top-up).
+- **`MerchOrder.refundRequestedAt`** (§8d) — set when the student picks "refund" on the resolution page. The order stays `AWAITING_RESOLUTION`; a head then records the `FULL` refund. Distinguishes "wants a refund" from "still deciding".
+- **`MerchOrderResolutionToken`** (§8d) — unguessable single-use link for an oversold student to self-serve a swap or refund without an account. Only the SHA-256 hash is stored (password-reset precedent); 14-day TTL; minting deletes prior unconsumed tokens for the order. Expiry is never terminal — the order stays `AWAITING_RESOLUTION` and Finance can regenerate.
 - **`MerchOrder.lastNotifiedAt` / `lastNotificationOk` / `notificationCount`** (§7b) — merch email senders return a boolean; these record the latest attempt so Finance can spot silently-failed notifications (`lastNotificationOk === false`) and re-send.
 - **`PaymentProofSubmission.officerDecision`** (§7b) — the officer's decision on **that specific attempt**, so a later resubmission never erases why an earlier attempt failed. `result` (automated) and `officerDecision` (human) are independent: a `DUPLICATE_REJECTED` attempt is terminal via `result` and never reaches an officer.
 - **`PaymentProofSubmission.isTopUp` / `shortfallAmount`** (§8b) — mark a submission that pays only the outstanding difference (not the full amount) and snapshot how much it was meant to cover, so the attempt timeline reads correctly.
@@ -151,12 +167,13 @@ MerchItem (1) ──→ (Many) MerchVariant        [cascade delete]
 MerchVariant (1) ──→ (Many) MerchOrder       [restrict delete — orders pin variants]
 MerchOrder (1) ──→ (Many) PaymentProofSubmission [cascade delete]
 MerchOrder (1) ──→ (0..2) MerchRefund         [cascade delete — one FULL + one PRICE_DIFFERENCE]
+MerchOrder (1) ──→ (Many) MerchOrderResolutionToken [cascade delete]
 User (0 or 1) ──→ (Many) MerchOrder          [SetNull on user delete]
 ```
 
 **Cascade rules:**
 - Deleting a `MerchItem` cascades to its `MerchVariant`s.
-- Deleting a `MerchOrder` cascades to its `PaymentProofSubmission`s and its `MerchRefund`s.
+- Deleting a `MerchOrder` cascades to its `PaymentProofSubmission`s, `MerchRefund`s, and resolution tokens.
 - A `MerchVariant` cannot be deleted while orders reference it (`RESTRICT`) — archive the parent item instead.
 - Deleting a `User` sets `MerchOrder.userId` to null (order record retained).
 
