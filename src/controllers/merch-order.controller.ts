@@ -40,6 +40,8 @@ function serializeOrder(order: {
   status: string;
   rejectionReason: string | null;
   financeNote: string | null;
+  shortfallAmount: unknown;
+  refundOwed: unknown;
   createdAt: Date;
   updatedAt: Date;
   variant: { label: string; item: { name: string } };
@@ -57,6 +59,11 @@ function serializeOrder(order: {
     rejectionReason: order.rejectionReason,
     // financeNote is only surfaced for the free-text OTHER rejection / cancellation.
     financeNote: order.financeNote,
+    // Money the student still owes (AMOUNT_MISMATCH top-up or a pricier swap) so
+    // the tracking page shows the exact amount due — not the full order total.
+    shortfallAmount: order.shortfallAmount != null ? Number(order.shortfallAmount) : null,
+    // Money owed back to the student after a cheaper swap.
+    refundOwed: order.refundOwed != null ? Number(order.refundOwed) : null,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };
@@ -224,6 +231,8 @@ export async function trackOrder(req: Request, res: Response): Promise<void> {
         status: true,
         rejectionReason: true,
         financeNote: true,
+        shortfallAmount: true,
+        refundOwed: true,
         createdAt: true,
         updatedAt: true,
         variant: { select: { label: true, item: { select: { name: true } } } },

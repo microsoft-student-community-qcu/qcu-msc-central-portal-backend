@@ -34,6 +34,7 @@ export type AuditAction =
   | "MERCH_ORDER_REFUNDED"
   | "MERCH_ORDER_SWAPPED"
   | "MERCH_ORDER_REFUND_REQUESTED"
+  | "MERCH_ORDER_RESOLUTION_LINK_ISSUED"
   | "MERCH_ORDER_EMAIL_RESENT";
 
 export interface RecordAuditInput {

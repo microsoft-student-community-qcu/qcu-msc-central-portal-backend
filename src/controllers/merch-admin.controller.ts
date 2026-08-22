@@ -1130,6 +1130,73 @@ export async function resendOrderEmail(req: Request, res: Response): Promise<voi
   }
 }
 
+/**
+ * POST /api/v2/admin/merch/orders/:orderId/resolution-link — reissue the
+ * self-service swap/refund link for an AWAITING_RESOLUTION order (§8d). Mints a
+ * FRESH token (invalidating any prior unconsumed one), re-sends the sold-out
+ * email, and RETURNS the links so Finance can also relay them directly (e.g.
+ * over chat) when a student lost the email. The raw token is never persisted, so
+ * a lost link can only be replaced, never recovered.
+ */
+export async function issueResolutionLink(req: Request, res: Response): Promise<void> {
+  try {
+    const { orderId } = req.params;
+    const order = await prisma.merchOrder.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        status: true,
+        email: true,
+        studentName: true,
+        orderRef: true,
+        variant: { select: { label: true, item: { select: { name: true } } } },
+      },
+    });
+    if (!order) {
+      res.status(404).json({ success: false, message: "Order not found" });
+      return;
+    }
+    // A resolution link only makes sense while the order is unresolved.
+    if (order.status !== "AWAITING_RESOLUTION") {
+      res.status(409).json({ success: false, message: "This order is not awaiting resolution." });
+      return;
+    }
+
+    const rawToken = await mintResolutionToken(orderId);
+    const { swapUrl, refundUrl } = resolutionUrls(rawToken);
+
+    const emailed = await sendMerchOutOfStockEmail(order.email, {
+      studentName: order.studentName,
+      orderRef: order.orderRef,
+      itemName: order.variant.item.name,
+      variantLabel: order.variant.label,
+      swapUrl,
+      refundUrl,
+    });
+    await recordOrderNotification(orderId, emailed);
+
+    await recordAudit({
+      actorId: actorFrom(req),
+      action: "MERCH_ORDER_RESOLUTION_LINK_ISSUED",
+      entityType: "MERCH_ORDER",
+      entityId: orderId,
+      details: { emailed },
+      ipAddress: ipFrom(req),
+    });
+
+    res.status(200).json({
+      success: true,
+      message: emailed
+        ? "A fresh resolution link was issued and emailed to the student."
+        : "A fresh resolution link was issued (the email failed to send — you can share the links below directly).",
+      data: { swapUrl, refundUrl, emailed },
+    });
+  } catch (error) {
+    console.error("Failed to issue resolution link:", error);
+    res.status(500).json({ success: false, message: "Internal server error while issuing the resolution link" });
+  }
+}
+
 // ── Protected screenshot proxy ──────────────────────────────────────────────
 
 /** GET /api/v2/admin/merch/screenshots/:filename — finance-only proxy. */

@@ -16,6 +16,7 @@ import {
   cancelOrder,
   refundOrder,
   resendOrderEmail,
+  issueResolutionLink,
   serveMerchScreenshot,
 } from "../controllers/merch-admin.controller";
 
@@ -66,6 +67,8 @@ router.post("/orders/:orderId/cancel", requireAdminFinanceHead, adminMutationLim
 router.post("/orders/:orderId/refund", requireAdminFinanceHead, adminMutationLimiter, refundOrder);
 // Manual re-notify for orders whose status email may have silently failed.
 router.post("/orders/:orderId/resend-email", requireAdminFinance, adminMutationLimiter, resendOrderEmail);
+// Reissue a fresh self-service resolution link for an AWAITING_RESOLUTION order (§8d).
+router.post("/orders/:orderId/resolution-link", requireAdminFinance, adminMutationLimiter, issueResolutionLink);
 
 // ── Protected screenshot proxy ──────────────────────────────────────────────
 router.get("/screenshots/:filename", requireAdminFinance, serveMerchScreenshot);

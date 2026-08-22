@@ -6,10 +6,13 @@ import rateLimit from "express-rate-limit";
 const oneMinuteWindow = 60 * 1000;
 
 // Generic fallback message for endpoints without a specific one.
+// In the test environment the ceiling is lifted so a suite that exercises many
+// endpoints against one in-memory store can't trip the limiter (the OCR limiter,
+// which has a dedicated 429 test, is defined separately and unaffected).
 function limiter(max: number, message: string) {
   return rateLimit({
     windowMs: oneMinuteWindow,
-    max,
+    max: process.env.NODE_ENV === "test" ? 100000 : max,
     message: { success: false, message },
     standardHeaders: true,
     legacyHeaders: false,
