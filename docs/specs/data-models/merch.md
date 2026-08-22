@@ -7,10 +7,12 @@ catalog of `MerchItem`s, each with one or more sellable `MerchVariant`s (sizes).
 a `MerchOrder` and pay offline via GCash; every payment-proof upload is recorded as a
 `PaymentProofSubmission` for a tamper-resistant audit trail.
 
-Stock lives on the variant and is **only decremented when an order reaches `CONFIRMED`** — it is
-never reserved at order time (PRD-V2 Finance Flow 2). Because payment happens before verification,
-this means an item can oversell: a paid order that can't be fulfilled moves to `REFUND_PENDING` and
-is closed out with a `MerchRefund` (see #178 for the structural prevention proposal).
+Stock lives on the variant and is **decremented when an order becomes fulfillable** — at
+`CONFIRMED`, or when an already-paid order accepts a pricier resolution swap (§8). It is never
+reserved at order time (PRD-V2 Finance Flow 2). Because payment happens before verification, an
+item can oversell: a paid order that can't be fulfilled moves to `AWAITING_RESOLUTION`, where the
+student chooses a variant swap or a refund (closed out with a `MerchRefund`; see #178 for the
+structural-prevention proposal).
 
 ## Prisma Definitions
 
@@ -60,13 +62,16 @@ model MerchOrder {
   status             MerchOrderStatus         @default(AWAITING_PAYMENT)
   rejectionReason    MerchRejectionReason? // Latest reason (denormalised from newest submission)
   financeNote        String?                  @db.Text
+  shortfallAmount    Decimal?                 @db.Decimal(10, 2) // Top-up owed by student (§8b)
+  refundOwed         Decimal?                 @db.Decimal(10, 2) // Difference owed to student after a cheaper swap (§8c)
+  stockHeld          Boolean                  @default(false) // Whether this order currently holds decremented stock (§8e)
   lastNotifiedAt     DateTime? // Time of most recent status-email attempt (§7b)
   lastNotificationOk Boolean? // Whether that attempt actually sent
   notificationCount  Int                      @default(0) // Count of successful status emails
   createdAt          DateTime                 @default(now())
   updatedAt          DateTime                 @updatedAt
   proofSubmissions   PaymentProofSubmission[]
-  refund             MerchRefund? // Present once a refund is recorded (REFUNDED)
+  refunds            MerchRefund[] // FULL and/or PRICE_DIFFERENCE payouts (§8c)
 
   @@index([status])
   @@index([email])
@@ -84,6 +89,8 @@ model PaymentProofSubmission {
   officerDecision PaymentProofDecision  @default(PENDING) // Human review of this attempt (§7b)
   rejectionReason MerchRejectionReason? // Officer's reason when REJECTED
   financeNote     String?               @db.Text
+  isTopUp         Boolean               @default(false) // Pays only the outstanding difference (§8b)
+  shortfallAmount Decimal?              @db.Decimal(10, 2) // Amount this top-up was meant to cover
   reviewedById    String? // Actor who reviewed this attempt
   reviewedAt      DateTime?
   createdAt       DateTime              @default(now())
@@ -94,14 +101,17 @@ model PaymentProofSubmission {
 
 model MerchRefund {
   id              String            @id @default(uuid())
-  orderId         String            @unique
+  orderId         String
   order           MerchOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type            MerchRefundType   @default(FULL) // FULL (oversell) or PRICE_DIFFERENCE (cheaper swap)
   amount          Decimal           @db.Decimal(10, 2) // ≤ order.amount
   method          MerchRefundMethod
   referenceNumber String?
   note            String?           @db.Text
   processedById   String? // Actor (head) who recorded the refund
   processedAt     DateTime          @default(now())
+
+  @@unique([orderId, type])
 }
 ```
 
@@ -110,11 +120,12 @@ model MerchRefund {
 | Enum | Values | Notes |
 |------|--------|-------|
 | `MerchItemStatus` | `ACTIVE`, `ARCHIVED` | ARCHIVED hides the item from the public catalog but preserves order history |
-| `MerchOrderStatus` | `AWAITING_PAYMENT`, `PENDING_VERIFICATION`, `CONFIRMED`, `PAID_AND_CLAIMED`, `REJECTED`, `REFUND_PENDING`, `REFUNDED`, `CANCELLED` | Lifecycle per Flows 2–5. Stock decremented at `CONFIRMED`. `REFUND_PENDING` = paid but unfulfillable (oversold); `REFUNDED` = refund recorded |
-| `MerchRejectionReason` | `REFERENCE_NOT_FOUND`, `AMOUNT_MISMATCH`, `SCREENSHOT_UNCLEAR`, `DUPLICATE_REFERENCE`, `OUT_OF_STOCK`, `OTHER` | `OTHER` pairs with free-text `financeNote`. Only `OUT_OF_STOCK` is non-resubmittable (routes to `REFUND_PENDING`) |
+| `MerchOrderStatus` | `AWAITING_PAYMENT`, `PENDING_VERIFICATION`, `CONFIRMED`, `PAID_AND_CLAIMED`, `REJECTED`, `AWAITING_RESOLUTION`, `REFUNDED`, `CANCELLED` | Lifecycle per Flows 2–5. Stock decremented at `CONFIRMED` (or a pricier resolution swap). `AWAITING_RESOLUTION` = paid but unfulfillable (oversold) — student swaps or refunds; `REFUNDED` = full refund recorded |
+| `MerchRejectionReason` | `REFERENCE_NOT_FOUND`, `AMOUNT_MISMATCH`, `SCREENSHOT_UNCLEAR`, `DUPLICATE_REFERENCE`, `OUT_OF_STOCK`, `OTHER` | `OTHER` pairs with free-text `financeNote`; `AMOUNT_MISMATCH` pairs with `shortfallAmount`. `OUT_OF_STOCK` is not a rejection — it auto-reroutes to `AWAITING_RESOLUTION` |
 | `PaymentProofResult` | `ACCEPTED`, `DUPLICATE_REJECTED` | Automated intake outcome of a single submission attempt |
 | `PaymentProofDecision` | `PENDING`, `VERIFIED`, `REJECTED` | Officer's review decision on a single submission (§7b); distinct from the automated `result` |
-| `MerchRefundMethod` | `GCASH`, `CASH`, `OTHER` | How an offline refund was issued |
+| `MerchRefundMethod` | `GCASH`, `CASH`, `MAYA`, `MARIBANK`, `OTHER` | How an offline refund was issued. `OTHER` requires an explanatory note |
+| `MerchRefundType` | `FULL`, `PRICE_DIFFERENCE` | `FULL` = whole payment returned (oversell refund); `PRICE_DIFFERENCE` = overpaid difference after a cheaper swap |
 
 ## Field Notes
 
@@ -124,10 +135,14 @@ model MerchRefund {
 - **`MerchOrder.userId`** — set when the buyer was logged in; guest fields are always stored regardless.
 - **`MerchOrder.gcashNumber`** — recorded for reference only; verification hinges on `referenceNumber`, not on whose GCash paid.
 - **`MerchOrder.rejectionReason`** — denormalised "latest" reason; the authoritative per-attempt history lives on `PaymentProofSubmission`.
+- **`MerchOrder.shortfallAmount`** (§8b) — the exact top-up a student still owes after an `AMOUNT_MISMATCH` rejection (or a pricier resolution swap). The student pays only this, not the whole order again. Cleared on `CONFIRMED`.
+- **`MerchOrder.refundOwed`** (§8c) — money the org owes the student after a cheaper-variant swap. The order stays `CONFIRMED`; Finance clears it by recording a `PRICE_DIFFERENCE` `MerchRefund`. Surfaced by the `?refundOwed=true` queue filter.
+- **`MerchOrder.stockHeld`** (§8e) — authoritative flag for "this order holds decremented stock". Set on confirm (or a pricier already-paid swap), cleared on cancel/restore. Replaces inferring stock-held from status, which broke once stock can be held while `AWAITING_PAYMENT` (top-up).
 - **`MerchOrder.lastNotifiedAt` / `lastNotificationOk` / `notificationCount`** (§7b) — merch email senders return a boolean; these record the latest attempt so Finance can spot silently-failed notifications (`lastNotificationOk === false`) and re-send.
 - **`PaymentProofSubmission.officerDecision`** (§7b) — the officer's decision on **that specific attempt**, so a later resubmission never erases why an earlier attempt failed. `result` (automated) and `officerDecision` (human) are independent: a `DUPLICATE_REJECTED` attempt is terminal via `result` and never reaches an officer.
+- **`PaymentProofSubmission.isTopUp` / `shortfallAmount`** (§8b) — mark a submission that pays only the outstanding difference (not the full amount) and snapshot how much it was meant to cover, so the attempt timeline reads correctly.
 - **`PaymentProofSubmission.referenceNumber`** — indexed but **not unique**: a duplicate reference is the exact event we must record, so a unique constraint would block the write that logs the violation. Duplicate detection is enforced in application code across all orders and submissions.
-- **`MerchRefund`** — one per order (`orderId` unique). A dedicated record (rather than a note on the order) keeps refund amount, method, and reference transparently auditable. Created head-only when an order moves `REFUND_PENDING → REFUNDED`.
+- **`MerchRefund`** — up to one `FULL` and one `PRICE_DIFFERENCE` per order (`@@unique([orderId, type])`). A dedicated record (rather than a note on the order) keeps refund amount, method, and reference transparently auditable. A `FULL` refund (head-only) moves an oversold order `AWAITING_RESOLUTION → REFUNDED`; a `PRICE_DIFFERENCE` refund settles a cheaper swap and leaves the order `CONFIRMED`.
 
 ## Relationships
 
@@ -135,13 +150,13 @@ model MerchRefund {
 MerchItem (1) ──→ (Many) MerchVariant        [cascade delete]
 MerchVariant (1) ──→ (Many) MerchOrder       [restrict delete — orders pin variants]
 MerchOrder (1) ──→ (Many) PaymentProofSubmission [cascade delete]
-MerchOrder (1) ──→ (0 or 1) MerchRefund      [cascade delete]
+MerchOrder (1) ──→ (0..2) MerchRefund         [cascade delete — one FULL + one PRICE_DIFFERENCE]
 User (0 or 1) ──→ (Many) MerchOrder          [SetNull on user delete]
 ```
 
 **Cascade rules:**
 - Deleting a `MerchItem` cascades to its `MerchVariant`s.
-- Deleting a `MerchOrder` cascades to its `PaymentProofSubmission`s and its `MerchRefund`.
+- Deleting a `MerchOrder` cascades to its `PaymentProofSubmission`s and its `MerchRefund`s.
 - A `MerchVariant` cannot be deleted while orders reference it (`RESTRICT`) — archive the parent item instead.
 - Deleting a `User` sets `MerchOrder.userId` to null (order record retained).
 

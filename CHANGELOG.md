@@ -14,8 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **V2 Module 04 (M2) — Merch oversell resolution groundwork (§8a–§8c, §8e, #176):**
+  - Renamed the oversell order state `REFUND_PENDING` → `AWAITING_RESOLUTION` (a student can swap
+    OUT of it, so "refund pending" overstated it) — migration
+    `20260822130000_v2_merch_resolution_prep` (safe in-place enum rename).
+  - Top-up support: `MerchOrder.shortfallAmount` + `PaymentProofSubmission.isTopUp` /
+    `shortfallAmount`. Rejecting with `AMOUNT_MISMATCH` now requires the exact shortfall, and the
+    student is emailed the precise amount to send (with the GCash QR) — they top up the difference,
+    not the whole order.
+  - Refund rework: `MerchRefundType` (`FULL` / `PRICE_DIFFERENCE`), `MerchRefund` now keyed
+    `@@unique([orderId, type])` (a full refund and a swap-difference refund can coexist);
+    `MerchRefundMethod` gains `MAYA` and `MARIBANK`; `MerchOrder.refundOwed` tracks money owed after
+    a cheaper swap, with a `?refundOwed=true` finance-queue filter.
+  - `MerchOrder.stockHeld` — authoritative "this order holds stock" flag; cancel now restores stock
+    from it rather than inferring from status (correct once stock can be held in `AWAITING_PAYMENT`).
+
 - **V2 Module 04 (M2) — Merch refunds + operability (§7a/§7b, #176; oversell tracked in #178):**
-  - Refund flow: new `REFUND_PENDING` / `REFUNDED` order states, `MerchRefund` record
+  - Refund flow: new `AWAITING_RESOLUTION` / `REFUNDED` order states, `MerchRefund` record
     (amount, method, reference, note, processor), and head-only
     `POST /api/v2/admin/merch/orders/:orderId/refund` — migration
     `20260822120000_v2_merch_refunds_notifications`.
@@ -24,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `GET /api/v2/admin/merch/orders/:orderId` returning the full attempt timeline.
   - Notification tracking: `lastNotifiedAt` / `lastNotificationOk` / `notificationCount` on
     `MerchOrder` (merch email senders now return a boolean); admin order list surfaces these +
-    `attemptCount` and accepts the `REFUND_PENDING` status filter.
+    `attemptCount` and accepts the `AWAITING_RESOLUTION` status filter.
   - `POST /api/v2/admin/merch/orders/:orderId/resend-email` — manual re-notify for orders whose
     status email may have silently failed.
   - Public catalog photo proxy `GET /api/v2/merch/photos/:filename` (serves catalog images from
@@ -56,9 +71,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Merch `/reject` with `OUT_OF_STOCK` told paid students to "resubmit payment" (#176):** rejecting
+  an order with `OUT_OF_STOCK` now auto-reroutes it to `AWAITING_RESOLUTION` (never `REJECTED`) and
+  sends the sold-out email (no resubmit button) — the same safe path confirm already used. Closes
+  the second half of the oversell "stealing" bug (the reject endpoint was still vulnerable).
+- **Merch rejection emails were static and mislabelled (#176):** the rejection email now adapts its
+  subject/headline/body/CTA to the reason (§8a) and renders the system reason in a distinct
+  **Reason** block, separate from the officer's own **Note from the admin** — previously the
+  system's text was shown as if the admin had written it, and every rejection said "We couldn't
+  verify your payment". The officer's `financeNote` is now included for every reason, not just
+  `OTHER`.
+- **Merch refund email leaked the raw method enum (#176):** the refund receipt renders human labels
+  (`GCash`, `cash`, `Maya`, `Maribank`) instead of the enum; `OTHER` now requires a note and the
+  email points the student to it ("see the note below") instead of printing "via OTHER".
+- **Merch image-proxy errors were ambiguous (#176):** the public photo proxy and finance screenshot
+  proxy now distinguish a malformed filename ("Invalid … filename") from a valid-but-wrong-class
+  one ("This file is not a catalog photo." / "… not a payment screenshot."), so requesting a
+  `proof-*` file from the public photo proxy explains itself.
 - **Merch oversell told paid students to "resubmit payment" (#176):** confirming an oversold
-  order now routes it to `REFUND_PENDING` (never `REJECTED`) and sends a dedicated out-of-stock
-  email with no resubmit button; payment-proof resubmission is blocked for `REFUND_PENDING` and
+  order now routes it to `AWAITING_RESOLUTION` (never `REJECTED`) and sends a dedicated out-of-stock
+  email with no resubmit button; payment-proof resubmission is blocked for `AWAITING_RESOLUTION` and
   for non-fixable rejections (`OUT_OF_STOCK`) so a paid student can no longer be led into paying
   twice. Structural oversell prevention (soft-hold) is deferred to #178.
 - **Merch >6-photo upload closed the connection (#176):** shared `multerErrorHandler`

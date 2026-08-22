@@ -102,11 +102,11 @@ Officer finds CONFIRMED order, clicks **"Mark as Claimed"** → **PAID_AND_CLAIM
 | POST | `/api/v2/admin/merch/items/:itemId/archive` | `requireAdminFinanceHead` | 20/min | Archive (head only) |
 | GET | `/api/v2/admin/merch/orders` | `requireAdminFinance` | — | Finance queue (status filter + pagination) |
 | GET | `/api/v2/admin/merch/orders/:orderId` | `requireAdminFinance` | — | Order detail + payment-proof timeline |
-| POST | `/api/v2/admin/merch/orders/:orderId/confirm` | `requireAdminFinance` | 20/min | Atomic stock decrement; oversold → REFUND_PENDING |
+| POST | `/api/v2/admin/merch/orders/:orderId/confirm` | `requireAdminFinance` | 20/min | Atomic stock decrement; oversold → AWAITING_RESOLUTION |
 | POST | `/api/v2/admin/merch/orders/:orderId/reject` | `requireAdminFinance` | 20/min | Preset reasons; per-attempt decision recorded |
 | POST | `/api/v2/admin/merch/orders/:orderId/claim` | `requireAdminFinance` | 20/min | PAID_AND_CLAIMED + receipt email |
 | POST | `/api/v2/admin/merch/orders/:orderId/cancel` | `requireAdminFinanceHead` | 20/min | Head only; restores stock if confirmed |
-| POST | `/api/v2/admin/merch/orders/:orderId/refund` | `requireAdminFinanceHead` | 20/min | Head only; REFUND_PENDING → REFUNDED + MerchRefund |
+| POST | `/api/v2/admin/merch/orders/:orderId/refund` | `requireAdminFinanceHead` | 20/min | Head only; AWAITING_RESOLUTION → REFUNDED + FULL MerchRefund |
 | POST | `/api/v2/admin/merch/orders/:orderId/resend-email` | `requireAdminFinance` | 20/min | Re-send current-status email |
 | GET | `/api/v2/admin/merch/screenshots/:filename` | `requireAdminFinance` | — | Protected screenshot proxy (`proof-` prefix only) |
 
@@ -130,7 +130,7 @@ All senders return a success boolean; the order's `lastNotifiedAt` / `lastNotifi
 ## 8. Settings / Toggles & Audit Events
 
 - **SystemSetting keys:** `merch_shop_open` (global open/close)
-- **AuditLog events:** `MERCH_ITEM_CREATED`, `MERCH_ITEM_EDITED`, `MERCH_ITEM_ARCHIVED`, `MERCH_ORDER_CONFIRMED`, `MERCH_ORDER_REJECTED`, `MERCH_ORDER_CLAIMED`, `MERCH_ORDER_CANCELLED`, `MERCH_ORDER_REFUND_PENDING`, `MERCH_ORDER_REFUNDED`, `MERCH_ORDER_EMAIL_RESENT`
+- **AuditLog events:** `MERCH_ITEM_CREATED`, `MERCH_ITEM_EDITED`, `MERCH_ITEM_ARCHIVED`, `MERCH_ORDER_CONFIRMED`, `MERCH_ORDER_REJECTED`, `MERCH_ORDER_CLAIMED`, `MERCH_ORDER_CANCELLED`, `MERCH_ORDER_AWAITING_RESOLUTION`, `MERCH_ORDER_REFUNDED`, `MERCH_ORDER_SWAPPED`, `MERCH_ORDER_REFUND_REQUESTED`, `MERCH_ORDER_EMAIL_RESENT`
 
 ## 9. Open Questions
 
@@ -138,20 +138,24 @@ All senders return a success boolean; the order's `lastNotifiedAt` / `lastNotifi
 |---|----------|----------|------|
 | 1 | Should `ADMIN_FINANCE_HEAD` be a separate role or a flag on `ADMIN_FINANCE`? (PRD lists it as separate role) | Separate role (already in `UserRole` since M0). `requireAdminFinance` admits both `ADMIN_FINANCE` and `ADMIN_FINANCE_HEAD`; head-only actions (archive, cancel, refund) use `requireAdminFinanceHead`. | 2026-08-21 |
 | 2 | Dynamic amount-locked GCash QR vs static org QR? | **Static org QR** (`GCASH_QR_IMAGE_URL`) shown with the exact amount as text. Verification hinges on the reference number, so a dynamic EMVCo QR adds spec/scan-testing risk for no functional gain. | 2026-08-21 |
-| 3 | How to handle overselling (paid order, no stock)? | **Reactive refund** for now: oversold confirm → `REFUND_PENDING` → head records a `MerchRefund` → `REFUNDED`. No resubmission for a paid student. Structural prevention (TTL soft-hold) deferred to **issue #178**. | 2026-08-22 |
+| 3 | How to handle overselling (paid order, no stock)? | **Student-driven resolution:** oversold confirm (and a manual `OUT_OF_STOCK` reject) → `AWAITING_RESOLUTION`; the student swaps to another variant or takes a `FULL` refund (head records it → `REFUNDED`). No resubmission for a paid student. Structural prevention (TTL soft-hold) deferred to **issue #178**. | 2026-08-22 |
 | 4 | Catalog photos in a private blob container 403 for anonymous browsers? | **Public proxy** `GET /api/v2/merch/photos/:filename` streams from the private container, restricted to the `item-` prefix so it can never serve a payment screenshot. Photos are stored as filenames. | 2026-08-22 |
+| 5 | Renamed `REFUND_PENDING` → `AWAITING_RESOLUTION`? | Yes — a student can swap OUT of it, so "refund pending" overstated the outcome. The state means "unfulfillable, pending the student's choice". Migration `20260822130000_v2_merch_resolution_prep`. | 2026-08-22 |
+| 6 | AMOUNT_MISMATCH: full re-pay or top-up the difference? | **Top-up.** The officer records the exact `shortfallAmount`; the student is emailed the precise amount + QR and pays only the difference (submission flagged `isTopUp`). | 2026-08-22 |
+| 7 | Swap price delta? | **Symmetric settle:** cheaper → refund 100% of the difference (`PRICE_DIFFERENCE` refund, order stays `CONFIRMED`); pricier → student confirms, then tops up the difference (stock held immediately). Same item only. | 2026-08-22 |
 
 ## 10. Testing Checklist
 
 - [x] 200/201 success, 400 validation, 401 auth, 403 forbidden, 404 not found
 - [x] Duplicate reference auto-rejects regardless of other order status
-- [x] Real-time stock check on submit; stock decrement only on CONFIRMED
-- [x] Oversold confirm → REFUND_PENDING (not REJECTED); out-of-stock email has no resubmit button
-- [x] Resubmit blocked for OUT_OF_STOCK / REFUND_PENDING; allowed for fixable rejections
-- [x] Refund (head-only) records MerchRefund and moves REFUND_PENDING → REFUNDED
+- [x] Real-time stock check on submit; stock decrement only when fulfillable (CONFIRMED / paid swap)
+- [x] Oversold confirm **and** `OUT_OF_STOCK` reject → AWAITING_RESOLUTION (not REJECTED); sold-out email has no resubmit button
+- [x] Resubmit blocked for OUT_OF_STOCK / AWAITING_RESOLUTION; allowed for fixable rejections
+- [x] AMOUNT_MISMATCH requires shortfall (< total); student emailed exact top-up; resubmission flagged isTopUp
+- [x] Refund (head-only, FULL) records MerchRefund and moves AWAITING_RESOLUTION → REFUNDED; OTHER method requires a note; email shows human label
 - [x] Per-attempt officer decision preserved; order detail timeline returns attempts
 - [x] Resend-email + notification tracking
-- [x] >6-photo upload returns clean 400; screenshot/photo proxies reject traversal + wrong prefix
+- [x] >6-photo upload returns clean 400; screenshot/photo proxies reject traversal + wrong prefix (distinct messages)
 - [x] Archive preserves order records
 - [x] Head-only endpoints 403 for plain finance officers
 - [x] Docs updated (data models + workflow guide + API)
