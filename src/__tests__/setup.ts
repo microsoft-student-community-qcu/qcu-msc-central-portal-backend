@@ -130,7 +130,16 @@ vi.mock("../config/database", () => {
     },
     merchRefund: {
       findUnique: vi.fn(),
+      findMany: vi.fn(),
       create: vi.fn(),
+      count: vi.fn(),
+    },
+    merchOrderResolutionToken: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      deleteMany: vi.fn(),
       count: vi.fn(),
     },
   };
@@ -214,4 +223,7 @@ vi.mock("../services/email.service", () => ({
   sendMerchOrderCancelledEmail: vi.fn(() => Promise.resolve(true)),
   sendMerchOutOfStockEmail: vi.fn(() => Promise.resolve(true)),
   sendMerchRefundProcessedEmail: vi.fn(() => Promise.resolve(true)),
+  sendMerchSwapConfirmedEmail: vi.fn(() => Promise.resolve(true)),
+  sendMerchSwapTopUpEmail: vi.fn(() => Promise.resolve(true)),
+  sendMerchRefundRequestedEmail: vi.fn(() => Promise.resolve(true)),
 }));

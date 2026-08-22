@@ -651,3 +651,203 @@ describe("item photo upload cap (§8)", () => {
     expect(res.body.message).toMatch(/at most 6 photos/i);
   });
 });
+
+// ── §8 Per-variant price override ───────────────────────────────────────────
+describe("per-variant price (§8, Option A)", () => {
+  it("uses the variant price override for the order amount", async () => {
+    openShop();
+    (prisma.merchVariant.findUnique as any).mockResolvedValue({
+      id: "v-xl",
+      label: "XL",
+      stock: 50,
+      price: "400.00", // override > item price
+      item: { id: "item-1", name: "Shirt", price: "350.00", status: "ACTIVE" },
+    });
+    (prisma.merchOrder.count as any).mockResolvedValue(0);
+    (prisma.merchOrder.create as any).mockResolvedValue({ id: "o1", orderRef: "MSC-MERCH-2026-0001" });
+
+    const res = await request(app)
+      .post("/api/v2/merch/orders")
+      .send({ variantId: "v-xl", quantity: 2, studentName: "Jane", email: "jane@example.com" });
+    expect(res.status).toBe(201);
+    expect(res.body.data.amount).toBe(800); // 400 × 2 (override, not 350)
+  });
+});
+
+// ── §8d Self-service resolution (swap / refund) ─────────────────────────────
+describe("resolution links (§8d)", () => {
+  // A valid, unconsumed token for an AWAITING_RESOLUTION order. Same item has a
+  // sold-out M (current), a pricier L (+50), and a cheaper S (−50).
+  function tokenFixture(overrides: any = {}) {
+    return {
+      id: "tok-1",
+      consumedAt: null,
+      expiresAt: new Date(Date.now() + 1_000_000_000),
+      order: {
+        id: "order-1",
+        orderRef: "MSC-MERCH-2026-0042",
+        email: "jane@example.com",
+        studentName: "Jane",
+        status: "AWAITING_RESOLUTION",
+        quantity: 1,
+        amount: "350.00",
+        variantId: "v-m",
+        variant: {
+          label: "M",
+          item: {
+            id: "item-1",
+            name: "Shirt",
+            price: "350.00",
+            variants: [
+              { id: "v-m", label: "M", stock: 0, price: null },
+              { id: "v-l", label: "L", stock: 5, price: "400.00" },
+              { id: "v-s", label: "S", stock: 5, price: "300.00" },
+            ],
+          },
+        },
+        ...overrides,
+      },
+    };
+  }
+
+  it("GET returns swap options with price deltas", async () => {
+    (prisma.merchOrderResolutionToken.findUnique as any).mockResolvedValue(tokenFixture());
+    const res = await request(app).get("/api/v2/merch/resolve/rawtoken");
+    expect(res.status).toBe(200);
+    expect(res.body.data.options).toHaveLength(2); // L + S (M excluded)
+    const byLabel = Object.fromEntries(res.body.data.options.map((o: any) => [o.label, o]));
+    expect(byLabel.L.direction).toBe("pricier");
+    expect(byLabel.L.priceDelta).toBe(50);
+    expect(byLabel.S.direction).toBe("cheaper");
+    expect(byLabel.S.priceDelta).toBe(-50);
+    expect(res.body.data.canRefund).toBe(true);
+  });
+
+  it("GET 410s a consumed token", async () => {
+    (prisma.merchOrderResolutionToken.findUnique as any).mockResolvedValue({ ...tokenFixture(), consumedAt: new Date() });
+    const res = await request(app).get("/api/v2/merch/resolve/rawtoken");
+    expect(res.status).toBe(410);
+  });
+
+  it("GET 410s an expired token", async () => {
+    (prisma.merchOrderResolutionToken.findUnique as any).mockResolvedValue({ ...tokenFixture(), expiresAt: new Date(Date.now() - 1000) });
+    const res = await request(app).get("/api/v2/merch/resolve/rawtoken");
+    expect(res.status).toBe(410);
+  });
+
+  it("GET 409s once the order is already resolved", async () => {
+    const t = tokenFixture();
+    t.order.status = "CONFIRMED";
+    (prisma.merchOrderResolutionToken.findUnique as any).mockResolvedValue(t);
+    const res = await request(app).get("/api/v2/merch/resolve/rawtoken");
+    expect(res.status).toBe(409);
+  });
+
+  it("GET 404s an unknown token", async () => {
+    (prisma.merchOrderResolutionToken.findUnique as any).mockResolvedValue(null);
+    const res = await request(app).get("/api/v2/merch/resolve/rawtoken");
+    expect(res.status).toBe(404);
+  });
+
+  it("swap to a pricier variant without acknowledgement → 409 requiresTopUp", async () => {
+    (prisma.merchOrderResolutionToken.findUnique as any).mockResolvedValue(tokenFixture());
+    const res = await request(app)
+      .post("/api/v2/merch/resolve/rawtoken/swap")
+      .send({ variantId: "v-l" });
+    expect(res.status).toBe(409);
+    expect(res.body.data.requiresTopUp).toBe(true);
+    expect(res.body.data.shortfall).toBe(50);
+  });
+
+  it("swap to a pricier variant with acknowledgement → AWAITING_PAYMENT + shortfall", async () => {
+    (prisma.merchOrderResolutionToken.findUnique as any).mockResolvedValue(tokenFixture());
+    (prisma.merchVariant.updateMany as any).mockResolvedValue({ count: 1 });
+    const res = await request(app)
+      .post("/api/v2/merch/resolve/rawtoken/swap")
+      .send({ variantId: "v-l", acknowledgedTopUp: true });
+    expect(res.status).toBe(200);
+    expect(prisma.merchVariant.updateMany).toHaveBeenCalled(); // stock held
+    expect(prisma.merchOrder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "AWAITING_PAYMENT", stockHeld: true }) })
+    );
+    expect(prisma.merchOrderResolutionToken.update).toHaveBeenCalled(); // token consumed
+  });
+
+  it("swap to a cheaper variant → CONFIRMED (refund of the difference owed)", async () => {
+    (prisma.merchOrderResolutionToken.findUnique as any).mockResolvedValue(tokenFixture());
+    (prisma.merchVariant.updateMany as any).mockResolvedValue({ count: 1 });
+    const res = await request(app)
+      .post("/api/v2/merch/resolve/rawtoken/swap")
+      .send({ variantId: "v-s" });
+    expect(res.status).toBe(200);
+    expect(prisma.merchOrder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: "CONFIRMED", stockHeld: true }) })
+    );
+  });
+
+  it("swap 409s when the target sold out mid-swap", async () => {
+    (prisma.merchOrderResolutionToken.findUnique as any).mockResolvedValue(tokenFixture());
+    (prisma.merchVariant.updateMany as any).mockResolvedValue({ count: 0 });
+    const res = await request(app)
+      .post("/api/v2/merch/resolve/rawtoken/swap")
+      .send({ variantId: "v-s" });
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/sold out/i);
+  });
+
+  it("refund request records the intent and consumes the token", async () => {
+    (prisma.merchOrderResolutionToken.findUnique as any).mockResolvedValue(tokenFixture());
+    const res = await request(app).post("/api/v2/merch/resolve/rawtoken/refund");
+    expect(res.status).toBe(200);
+    expect(prisma.merchOrder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ refundRequestedAt: expect.any(Date) }) })
+    );
+    expect(prisma.merchOrderResolutionToken.update).toHaveBeenCalled();
+    expect(prisma.auditLog.create).toHaveBeenCalled();
+  });
+});
+
+// ── §8c PRICE_DIFFERENCE refund (cheaper-swap settlement) ───────────────────
+describe("admin refund — PRICE_DIFFERENCE (§8c)", () => {
+  it("records a PRICE_DIFFERENCE refund on a CONFIRMED order that owes a difference", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue({
+      id: "order-1",
+      status: "CONFIRMED",
+      email: "jane@example.com",
+      studentName: "Jane",
+      orderRef: "MSC-MERCH-2026-0042",
+      amount: 300,
+      refundOwed: 50,
+      refunds: [],
+    });
+    const res = await request(app)
+      .post("/api/v2/admin/merch/orders/order-1/refund")
+      .send({ amount: 50, method: "GCASH" });
+    expect(res.status).toBe(200);
+    expect(prisma.merchRefund.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ type: "PRICE_DIFFERENCE" }) })
+    );
+    // Order stays CONFIRMED; only refundOwed is cleared.
+    expect(prisma.merchOrder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { refundOwed: null } })
+    );
+  });
+
+  it("rejects a PRICE_DIFFERENCE refund larger than the amount owed", async () => {
+    (prisma.merchOrder.findUnique as any).mockResolvedValue({
+      id: "order-1",
+      status: "CONFIRMED",
+      email: "jane@example.com",
+      studentName: "Jane",
+      orderRef: "MSC-MERCH-2026-0042",
+      amount: 300,
+      refundOwed: 50,
+      refunds: [],
+    });
+    const res = await request(app)
+      .post("/api/v2/admin/merch/orders/order-1/refund")
+      .send({ amount: 100, method: "GCASH" });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/difference owed/i);
+  });
+});
