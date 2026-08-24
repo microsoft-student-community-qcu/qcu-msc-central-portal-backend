@@ -592,7 +592,7 @@ export interface MerchRejectedEmailData {
 
 // Per-reason subject/headline/intro/CTA. Keeps copy out of the control flow and
 // guarantees every student-facing reason has intentional wording.
-function rejectedEmailCopy(
+export function rejectedEmailCopy(
   data: MerchRejectedEmailData
 ): { subject: string; headline: string; intro: string; cta: string } {
   const ref = esc(data.orderRef);
@@ -825,7 +825,7 @@ export async function sendMerchRefundRequestedEmail(
 /** Refund processed (§7a) — offline refund recorded; transparency receipt. */
 // Human-readable refund method labels — the raw enum (e.g. "OTHER") must never
 // reach the student. OTHER always pairs with a required note (see schema).
-const REFUND_METHOD_LABELS: Record<MerchRefundMethod, string> = {
+export const REFUND_METHOD_LABELS: Record<MerchRefundMethod, string> = {
   GCASH: "GCash",
   CASH: "cash",
   MAYA: "Maya",

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { requireAdminFinance, requireAdminFinanceHead } from "./authMiddleware";
+import { requireAuth, requireAdminFinance, requireAdminFinanceHead } from "./authMiddleware";
 import { adminMutationLimiter } from "../config/rateLimit";
 import { multerErrorHandler } from "../utils/multerError";
 import {
@@ -35,6 +35,12 @@ const handleMulterError = multerErrorHandler(
 );
 
 const router = Router();
+
+// Every admin merch endpoint requires an authenticated session FIRST, so an
+// unauthenticated (no-token) request gets 401 (not 403). The role guards below
+// then return 403 for an authenticated-but-wrong-role caller. This mirrors the
+// applicant admin routes (requireAuth → role guard) and keeps 401 vs 403 correct.
+router.use(requireAuth);
 
 // ── Item management (Flow 1) ────────────────────────────────────────────────
 router.get("/items", requireAdminFinance, listItemsAdmin);

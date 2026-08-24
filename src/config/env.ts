@@ -2,8 +2,12 @@ import dotenv from "dotenv";
 import { expand } from "dotenv-expand";
 import { z } from "zod";
 
-// Load environment variables from .env file and expand variables
-const rawEnv = dotenv.config();
+// Load environment variables from .env file and expand variables. A custom
+// DOTENV_CONFIG_PATH (e.g. an e2e server instance that needs GCASH unset) is
+// honoured; otherwise the default ./.env is used.
+const rawEnv = process.env.DOTENV_CONFIG_PATH
+  ? dotenv.config({ path: process.env.DOTENV_CONFIG_PATH })
+  : dotenv.config();
 expand(rawEnv);
 
 const envSchema = z.object({

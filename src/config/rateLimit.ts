@@ -6,13 +6,16 @@ import rateLimit from "express-rate-limit";
 const oneMinuteWindow = 60 * 1000;
 
 // Generic fallback message for endpoints without a specific one.
-// In the test environment the ceiling is lifted so a suite that exercises many
-// endpoints against one in-memory store can't trip the limiter (the OCR limiter,
-// which has a dedicated 429 test, is defined separately and unaffected).
+// The ceiling is lifted in the test environment — and in a local e2e run
+// (E2E_RELAX_RATELIMIT=true) — so a suite/seeder that exercises many endpoints
+// against one in-memory store can't trip the limiter. The OCR limiter, which
+// has a dedicated 429 test, is defined separately and unaffected. A dedicated
+// e2e server instance keeps real limits (flag off) to prove the 429 path.
 function limiter(max: number, message: string) {
+  const relaxed = process.env.NODE_ENV === "test" || process.env.E2E_RELAX_RATELIMIT === "true";
   return rateLimit({
     windowMs: oneMinuteWindow,
-    max: process.env.NODE_ENV === "test" ? 100000 : max,
+    max: relaxed ? 100000 : max,
     message: { success: false, message },
     standardHeaders: true,
     legacyHeaders: false,
