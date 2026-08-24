@@ -11,3 +11,7 @@ dist/
 eng.traineddata
 
 opencode.json
+# E2E harness (Module 04) — transient run output + fixtures (contain runtime tokens/ids)
+scripts/e2e/out/
+scripts/e2e/fixtures/
+uploads/merch
