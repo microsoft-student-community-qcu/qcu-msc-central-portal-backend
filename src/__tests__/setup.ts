@@ -12,6 +12,7 @@ process.env.BETTER_AUTH_URL = "http://localhost:5000";
 process.env.FRONTEND_URL = "http://localhost:5173";
 process.env.OCR_MAX_FAILURES = "3";
 process.env.RESEND_API_KEY = "re_test-key-for-testing";
+process.env.EMAIL_PROVIDER = "RESEND";
 process.env.AZURE_STORAGE_ACCOUNT_NAME = "test-storage-account";
 process.env.GCASH_NUMBER = "09171234567";
 process.env.GCASH_QR_IMAGE_URL = "https://test-storage-account.blob.core.windows.net/merch/org-gcash-qr.png";

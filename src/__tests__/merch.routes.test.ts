@@ -76,6 +76,9 @@ function closeShop(): void {
 beforeEach(() => {
   vi.clearAllMocks();
   asGuest();
+  // Admin merch routes now gate on requireAuth first; default it to pass so the
+  // role-guard behaviour under test is what's exercised.
+  mockRequireAuth.mockImplementation((_req: any, _res: any, next: any) => next());
   // Default: all admin guards pass unless a test overrides them.
   allowRole(mockRequireAdminFinance, "ADMIN_FINANCE");
   allowRole(mockRequireAdminFinanceHead, "ADMIN_FINANCE_HEAD");
