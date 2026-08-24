@@ -14,6 +14,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **V2 Module 04 (M2) — full endpoint test suite + Postman collection + report (#176):**
+  - Executable Postman collection `QCU MSC Central Portal — V2 Merch Pre-Orders`
+    (`postman/`) covering **all 23 Pre-Order endpoints** 1:1 with
+    `docs/test-cases/v2/04-merch-pre-orders.md` — happy paths, RBAC (401/403), validation, edge,
+    oversell-resolution, refunds, and shop-toggle.
+  - E2E harness `scripts/e2e/` (`run.ts` seeds every precondition via the real API + runs the
+    collection with **Newman**; `report.ts` emits the per-TC report). Latest run:
+    **157 requests · 289 assertions · 0 failures.**
+  - Per-TC execution report `docs/test-cases/v2/04-merch-pre-orders-test-report.md` (actual status +
+    body for every case, defect log, runner matrix, readiness verdict).
+  - Email-render suite `src/__tests__/merch.email.test.ts` (10 assertions) — verifies dynamic
+    rejection headlines, the Reason-vs-admin-Note split, human refund method labels, the exact ₱
+    top-up, and the no-"Resubmit" sold-out email.
+  - Test-only knobs: `DOTENV_CONFIG_PATH` support in `env.ts` and an `E2E_RELAX_RATELIMIT` flag
+    (both dev/e2e only; production behaviour unchanged).
+
+### Fixed
+
+- **Merch admin endpoints returned 403 for unauthenticated requests (should be 401) (#176):** the
+  `/api/v2/admin/merch` routes used only role guards, so a no-token request got 403. Added
+  `requireAuth` to the admin merch router so an unauthenticated request now returns **401** and an
+  authenticated wrong-role request returns **403** — matching the applicant admin routes. Covered by
+  TC-100–TC-117.
+
 - **V2 Module 04 (M2) — Self-service oversell resolution + per-variant pricing (§8d, Option A, #176):**
   - Per-variant price override (`MerchVariant.price`) — a size can cost more/less than the base item
     (e.g. XL surcharge); order amount + resolution deltas use the effective `variant.price ?? item.price`.
