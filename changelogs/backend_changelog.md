@@ -1,6 +1,36 @@
 # Backend Modification Changelog
 
+## 0. V2 Event Fields — Venue, Deadline, Banner, QR Flag, Registration Toggle (2026-08-18)
+
+### **A. Database Schema (`prisma/schema.prisma`)**
+- `EventType` gained `QCU_STUDENTS_ONLY`, the middle tier between `PUBLIC` and `MEMBERS_ONLY`.
+- `Event` gained `venue`, `registrationDeadline`, `bannerImageUrl`, `requiresQrTicket` (default `true`), and `isRegistrationOpen` (default `true`).
+- `Registration` gained `course` and `yearLevel`.
+- `priorityStartDate` / `generalStartDate` are now **nullable and deprecated** — superseded by `registrationDeadline` + `isRegistrationOpen`. Retained for existing V1 rows and still returned by the read endpoints; scheduled for removal in `v2`.
+- Migration: `prisma/migrations/20260818041200_add_v2_event_fields/migration.sql`.
+
+### **B. Validation (`src/schemas/event.schema.ts`, `src/schemas/registerEvent.schema.ts`)**
+- `createEventSchema` validates the new fields, coerces multipart string booleans, and rejects a `registrationDeadline` that falls after the event `date`.
+- Added `toggleRegistrationSchema` for the new toggle endpoint.
+- `registerEventSchema` was converted into a factory keyed on the event's `type`: `ocrSessionId` is required only for `QCU_STUDENTS_ONLY`, rejected for `PUBLIC`, and never required for members. `course` / `yearLevel` follow the same tiering.
+
+### **C. Registration Gating (`src/controllers/eventController.ts`)**
+- `MEMBERS_ONLY` → authenticated `MEMBER` only (403 otherwise); `QCU_STUDENTS_ONLY` → members bypass, guests must present a valid `ocrSessionId`; `PUBLIC` → no OCR, no auth, `studentId` / `course` / `yearLevel` all optional.
+- New guards return 403 when `isRegistrationOpen` is `false` or `registrationDeadline` has passed, ahead of the existing capacity (409) check.
+
+### **D. New Endpoint**
+- `PATCH /api/v1/events/:eventId/registration-toggle` (ADMIN_LOGISTICS) closes/reopens registration independently of deadline and capacity. It only blocks *new* registrations — existing registrations, tickets, and check-ins are untouched — and is fully reversible.
+
+### **E. Banner Uploads (`src/utils/imageStorage.ts`, `src/routes/event.routes.ts`)**
+- Banner files are validated through `src/utils/fileValidation.ts` (MIME + magic bytes + 5MB cap) and streamed to the Azure Blob `event-banners` container. `bannerImageUrl` is always derived server-side and never accepted from the request body.
+
+### **F. Read Endpoints (`src/controllers/eventsFeedController.ts`)**
+- The feed and detail responses now include `venue`, `registrationDeadline`, `bannerImageUrl`, `requiresQrTicket`, and `isRegistrationOpen`.
+
+---
+
 ## 3. Security Fixes
+
 
 ### **VUL-016 — Mass Assignment Privilege Escalation on User Sign-Up** (2026-07-30)
 - **Root Cause:** The sign-up handler at `src/app.ts` forwarded raw `req.body` to Better Auth, allowing a malicious client to inject `role: "ADMIN_HR"` and escalate privileges at account creation.

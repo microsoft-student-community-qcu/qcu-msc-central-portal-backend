@@ -59,9 +59,16 @@ export const mockEventRecord = {
   title: "Test Event",
   description: "A test event",
   date: new Date(now.getTime() + 86400000), // tomorrow
+  venue: "QCU San Bartolome Gymnasium",
+  registrationDeadline: new Date(now.getTime() + 43200000), // 12 hours from now
+  bannerImageUrl: null,
+  requiresQrTicket: true,
+  isRegistrationOpen: true,
+  // Deprecated V1 tiered window — retained on the fixture for compatibility.
   priorityStartDate: new Date("2025-01-01"),
   generalStartDate: new Date("2025-06-01"),
-  type: "PUBLIC" as const,
+  type: "QCU_STUDENTS_ONLY" as const,
+
   maxCapacity: 100,
   createdAt: pastDate,
   updatedAt: pastDate,

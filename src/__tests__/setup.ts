@@ -64,7 +64,9 @@ vi.mock("../config/database", () => ({
       findUnique: vi.fn(),
       findMany: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
     },
+
     registration: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
@@ -103,6 +105,10 @@ vi.mock("../utils/imageStorage", () => ({
   saveDocument: vi.fn((_buffer: Buffer, filename: string) =>
     path.join(process.env.DOCUMENT_STORAGE_PATH!, filename)
   ),
+  saveEventBanner: vi.fn((_buffer: Buffer, filename: string) =>
+    path.join(process.env.IMAGE_STORAGE_PATH!, filename)
+  ),
+
   ensureStorageDir: vi.fn(() => process.env.IMAGE_STORAGE_PATH!),
   ensureDocumentStorageDir: vi.fn(() => process.env.DOCUMENT_STORAGE_PATH!),
   getImagePath: vi.fn((filename: string) =>

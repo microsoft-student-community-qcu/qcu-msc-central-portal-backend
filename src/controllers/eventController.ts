@@ -1,9 +1,16 @@
 import { Request, Response } from "express";
 import { randomUUID } from "crypto";
-import { registerEventSchema } from "../schemas/registerEvent.schema";
+import { getRegisterEventSchema } from "../schemas/registerEvent.schema";
 import { prisma } from "../config/database";
 import { ocrStore } from "../config/ocrStore";
-import { createEventSchema, reviewRegistrationSchema } from "../schemas/event.schema";
+import {
+  createEventSchema,
+  registrationToggleSchema,
+  reviewRegistrationSchema,
+} from "../schemas/event.schema";
+import { validateImageMimeType } from "../utils/fileValidation";
+import { saveEventBanner } from "../utils/imageStorage";
+
 import {
   sendRegistrationConfirmedEmail,
   sendRegistrationPendingReviewEmail,
@@ -49,35 +56,42 @@ export async function registerForEvent(
       return;
     }
 
-    // ── 2. Members-Only block ────────────────────────────────────────────
+    // ── 2. Event type gating (V2 Flow 2) ─────────────────────────────────
+    //   MEMBERS_ONLY      → authenticated MEMBER only
+    //   QCU_STUDENTS_ONLY → members bypass; guests must pass OCR (enforced
+    //                       by the schema selected in step 5)
+    //   PUBLIC            → no auth, no OCR
     if (event.type === "MEMBERS_ONLY" && !isMemberPath) {
       res.status(403).json({
         success: false,
         message:
-          "This event is for members only. Please apply to the organization.",
+          "This event is exclusively for active MSC members. Please apply to the organization to join.",
       });
       return;
     }
 
-    // ── 3. Registration window checks (Guests only — Members bypass) ────
+    // ── 3. Registration window checks ────────────────────────────────────
+    // V2 replaced V1's tiered priority/general window with a single
+    // deadline plus a manual open/close toggle (Flow 6). Both apply to
+    // members and guests alike.
     const now = new Date();
-    const inPriorityWindow =
-      now >= event.priorityStartDate && now < event.generalStartDate;
-    if (!isMemberPath) {
-      if (now < event.priorityStartDate) {
-        res
-          .status(403)
-          .json({ success: false, message: "Registration has not opened yet." });
-        return;
-      }
-      if (inPriorityWindow) {
-        res.status(403).json({
-          success: false,
-          message: "General Admission has not started.",
-        });
-        return;
-      }
+
+    if (!event.isRegistrationOpen) {
+      res.status(403).json({
+        success: false,
+        message: "Registration for this event is currently closed.",
+      });
+      return;
     }
+
+    if (event.registrationDeadline && now > event.registrationDeadline) {
+      res.status(403).json({
+        success: false,
+        message: "The registration deadline for this event has passed.",
+      });
+      return;
+    }
+
 
     // ── 4. Capacity check ─────────────────────────────────────────────────
     const currentRegistrationCount = await prisma.registration.count({
@@ -97,9 +111,12 @@ export async function registerForEvent(
     let middleInitial: string | null = null;
     let email: string;
     let studentId: string | null = null;
+    let course: string | null = null;
+    let yearLevel: string | null = null;
     let manualRegistration = false;
     let resolvedUserId: string | null = null;
     let ocrSessionId: string | undefined;
+
     if (isMemberPath) {
       const user = await prisma.user.findUnique({ where: { id: userId! } });
       if (!user) {
@@ -124,8 +141,10 @@ export async function registerForEvent(
         return;
       }
     } else {
-      // ── Guest path — validate body, resolve OCR session ───────────────
-      const parsed = registerEventSchema.safeParse(req.body);
+      // ── Guest path — validate body against the event-type schema ──────
+      // PUBLIC events accept no ocrSessionId at all; QCU_STUDENTS_ONLY
+      // requires one (OCR is the enrollment gate for that tier).
+      const parsed = getRegisterEventSchema(event.type).safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({
           success: false,
@@ -135,41 +154,43 @@ export async function registerForEvent(
         return;
       }
 
-      const { lastName: bodyLastName, firstName: bodyFirstName, middleInitial: bodyMiddleInitial, email: bodyEmail, ocrSessionId: sessionOcrId } = parsed.data;
-      ocrSessionId = sessionOcrId;
+      const data = parsed.data as Record<string, string | undefined>;
+      lastName = data.lastName ?? null;
+      firstName = data.firstName ?? null;
+      middleInitial = data.middleInitial ?? null;
+      email = data.email as string;
+      course = data.course ?? null;
+      yearLevel = data.yearLevel ?? null;
 
-      if (!ocrSessionId) {
-        res
-          .status(400)
-          .json({ success: false, message: "ocrSessionId is required" });
-        return;
+      if (event.type === "PUBLIC") {
+        // No OCR — the (optional) student ID is self-reported.
+        studentId = data.studentId ?? null;
+      } else {
+        ocrSessionId = data.ocrSessionId;
+
+        const session = ocrSessionId ? ocrStore.getSession(ocrSessionId) : null;
+        if (!session) {
+          res.status(400).json({
+            success: false,
+            message:
+              "OCR session expired or invalid. Please re-verify your Student ID via POST /api/v1/ocr/verify.",
+          });
+          return;
+        }
+
+        studentId = session.studentId;
+        manualRegistration = session.manualRequired;
+        if (!studentId && !manualRegistration) {
+          // Defensive — shouldn't happen given ocrStore's own logic, but
+          // guards against an inconsistent session state.
+          res.status(400).json({
+            success: false,
+            message: "Student ID could not be resolved from OCR session.",
+          });
+          return;
+        }
       }
 
-      const session = ocrStore.getSession(ocrSessionId);
-      if (!session) {
-        res.status(400).json({
-          success: false,
-          message:
-            "OCR session expired or invalid. Please re-verify your Student ID via POST /api/v1/ocr/verify.",
-        });
-        return;
-      }
-
-      lastName = bodyLastName;
-      firstName = bodyFirstName;
-      middleInitial = bodyMiddleInitial ?? null;
-      email = bodyEmail;
-      studentId = session.studentId;
-      manualRegistration = session.manualRequired;
-      if (!studentId && !manualRegistration) {
-        // Defensive — shouldn't happen given ocrStore's own logic, but
-        // guards against an inconsistent session state.
-        res.status(400).json({
-          success: false,
-          message: "Student ID could not be resolved from OCR session.",
-        });
-        return;
-      }
 
       // Duplicate prevention by studentId — blocks ticket hoarding via
       // repeated scans of the same physical ID.
@@ -199,7 +220,10 @@ export async function registerForEvent(
         firstName: firstName ?? "",
         middleInitial,
         email,
+        course,
+        yearLevel,
         qrPayload,
+
         manual_registration: manualRegistration,
         status: manualRegistration ? "PENDING_REVIEW" : "APPROVED",
       },
@@ -264,6 +288,11 @@ export async function registerForEvent(
  *
  * Creates a new event. ADMIN_LOGISTICS only.
  * Once created, the event automatically appears in the public /events feed.
+ *
+ * Accepts multipart/form-data so the banner image (optional `bannerImage`
+ * file field) can be uploaded alongside the text fields. The stored
+ * bannerImageUrl is always derived server-side from the uploaded file —
+ * never accepted from the request body.
  */
 export async function createEvent(
   req: Request,
@@ -280,13 +309,37 @@ export async function createEvent(
       return;
     }
 
+    // ── Optional banner upload ────────────────────────────────────────────
+    const bannerFile = (req.files as Record<string, Express.Multer.File[]> | undefined)
+      ?.bannerImage?.[0];
+    let bannerImageUrl: string | null = null;
+
+    if (bannerFile) {
+      // Magic-byte validation (VUL-010) — the extension/Content-Type
+      // reported by the client is not trusted.
+      const validation = await validateImageMimeType(bannerFile.buffer, "bannerImage");
+      if (!validation.valid) {
+        res.status(400).json({ success: false, message: validation.message });
+        return;
+      }
+
+      bannerImageUrl = await saveEventBanner(
+        bannerFile.buffer,
+        `${randomUUID()}-${bannerFile.originalname}`,
+        bannerFile.mimetype
+      );
+    }
+
     const event = await prisma.event.create({
       data: {
         title: parsed.data.title,
         description: parsed.data.description ?? null,
         date: parsed.data.date,
-        priorityStartDate: parsed.data.priorityStartDate,
-        generalStartDate: parsed.data.generalStartDate,
+        venue: parsed.data.venue,
+        registrationDeadline: parsed.data.registrationDeadline,
+        bannerImageUrl,
+        requiresQrTicket: parsed.data.requiresQrTicket ?? true,
+        isRegistrationOpen: parsed.data.isRegistrationOpen ?? true,
         type: parsed.data.type ?? "PUBLIC",
         maxCapacity: parsed.data.maxCapacity,
       },
@@ -305,6 +358,66 @@ export async function createEvent(
     });
   }
 }
+
+// ── Admin: Toggle Registration Open/Closed ───────────────────────────────
+
+/**
+ * PATCH /api/v1/events/:eventId/registration-toggle
+ *
+ * Manually opens or closes registration for an event (V2 Flow 6),
+ * independently of the deadline and remaining capacity. Closing only
+ * blocks *new* registrations — existing ones are untouched — and the
+ * action is fully reversible. ADMIN_LOGISTICS only.
+ *
+ * Body: { isRegistrationOpen: boolean }
+ */
+export async function toggleEventRegistration(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const { eventId } = req.params;
+    const parsed = registrationToggleSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) {
+      res.status(404).json({ success: false, message: "Event not found" });
+      return;
+    }
+
+    const updated = await prisma.event.update({
+      where: { id: eventId },
+      data: { isRegistrationOpen: parsed.data.isRegistrationOpen },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        eventId: updated.id,
+        isRegistrationOpen: updated.isRegistrationOpen,
+      },
+      message: updated.isRegistrationOpen
+        ? "Registration reopened successfully"
+        : "Registration closed successfully",
+    });
+  } catch (error) {
+    console.error("Failed to toggle event registration:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
+
 
 // ── Admin: Get Event Attendee Roster ─────────────────────────────────────
 

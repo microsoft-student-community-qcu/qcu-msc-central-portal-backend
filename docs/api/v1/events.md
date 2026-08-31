@@ -1,7 +1,22 @@
 # Event Management & Registration API
 
 ## Overview
-The Event Management API handles creation, management, and registration for workshops, seminars, and initiatives. Supports both public and members-only events with capacity management.
+The Event Management API handles creation, management, and registration for workshops, seminars, and initiatives. Events belong to one of three visibility tiers (`PUBLIC`, `QCU_STUDENTS_ONLY`, `MEMBERS_ONLY`), each with its own registration gate, and support capacity management, a single registration deadline, and a manual open/close toggle.
+
+### Registration Gating by Event Type
+
+| `type` | Who may register | OCR required? | Auth required? |
+|--------|------------------|---------------|----------------|
+| `PUBLIC` | Anyone | No | No |
+| `QCU_STUDENTS_ONLY` | Verified QCU students + members | Yes for non-members (`ocrSessionId`); members bypass | No |
+| `MEMBERS_ONLY` | Active MSC members only | No | Yes (role `MEMBER`) |
+
+For `PUBLIC` events `studentId`, `course`, and `yearLevel` are all optional and self-reported.
+
+### Deprecated Fields
+
+`priorityStartDate` and `generalStartDate` (V1's tiered registration window) are **deprecated as of the V2 event fields release**. They are still persisted and returned by the feed and detail endpoints for backward compatibility within `v1`, but they are no longer accepted on create and no longer gate registration. Registration timing is now controlled by `registrationDeadline` plus `isRegistrationOpen`. Plan to remove them in `v2`.
+
 
 ---
 
@@ -17,14 +32,19 @@ Creates a new workshop, seminar, or initiative event. Only ADMIN_LOGISTICS users
 
 **Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
 
+**Content-Type:** `multipart/form-data` (required when uploading a banner) or `application/json`
+
 **Request Parameters:**
 - `title` (string, required): Event title (1-150 characters)
 - `description` (string, optional): Event description (max 1000 characters)
 - `date` (string, required): Event date in ISO 8601 format (YYYY-MM-DDTHH:mm:ssZ)
-- `priorityStartDate` (string, required): When Members can start registering (ISO 8601)
-- `generalStartDate` (string, required): When general admission opens (ISO 8601, must be after `priorityStartDate`)
-- `type` (enum, optional): Event visibility - `PUBLIC` or `MEMBERS_ONLY`. Defaults to `PUBLIC`
+- `venue` (string, required): Physical or online venue (1-200 characters)
+- `registrationDeadline` (string, required): Last moment registrations are accepted (ISO 8601, must be on or before `date`)
+- `type` (enum, optional): Event visibility — `PUBLIC`, `QCU_STUDENTS_ONLY`, or `MEMBERS_ONLY`. Defaults to `PUBLIC`
 - `maxCapacity` (number, required): Maximum number of attendees (positive integer)
+- `requiresQrTicket` (boolean, optional): Whether attendees receive a QR ticket for check-in. Defaults to `true`
+- `isRegistrationOpen` (boolean, optional): Whether registration is open on creation. Defaults to `true`
+- `bannerImage` (file, optional): Banner image file (JPEG/PNG/WebP, max 5MB). Validated by magic bytes and stored in Azure Blob Storage; the resulting `bannerImageUrl` is derived server-side and is never accepted from the request body
 
 **Response Format:**
 ```json
@@ -35,9 +55,12 @@ Creates a new workshop, seminar, or initiative event. Only ADMIN_LOGISTICS users
     "title": string,
     "description": string | null,
     "date": string (ISO 8601),
-    "priorityStartDate": string (ISO 8601),
-    "generalStartDate": string (ISO 8601),
-    "type": "PUBLIC" | "MEMBERS_ONLY",
+    "venue": string,
+    "registrationDeadline": string (ISO 8601),
+    "bannerImageUrl": string | null,
+    "requiresQrTicket": boolean,
+    "isRegistrationOpen": boolean,
+    "type": "PUBLIC" | "QCU_STUDENTS_ONLY" | "MEMBERS_ONLY",
     "maxCapacity": number,
     "createdAt": string (ISO 8601)
   },
@@ -48,17 +71,16 @@ Creates a new workshop, seminar, or initiative event. Only ADMIN_LOGISTICS users
 **Example Request:**
 ```bash
 curl -X POST http://localhost:5000/api/v1/events \
-  -H "Content-Type: application/json" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -d '{
-    "title": "Python Workshop 2026",
-    "description": "Learn advanced Python programming techniques",
-    "date": "2026-07-15T14:00:00Z",
-    "priorityStartDate": "2026-07-01T09:00:00Z",
-    "generalStartDate": "2026-07-03T09:00:00Z",
-    "type": "PUBLIC",
-    "maxCapacity": 50
-  }'
+  -F "title=Python Workshop 2026" \
+  -F "description=Learn advanced Python programming techniques" \
+  -F "date=2026-07-15T14:00:00Z" \
+  -F "venue=QCU San Bartolome Gymnasium" \
+  -F "registrationDeadline=2026-07-13T23:59:00Z" \
+  -F "type=QCU_STUDENTS_ONLY" \
+  -F "requiresQrTicket=true" \
+  -F "maxCapacity=50" \
+  -F "bannerImage=@./banner.png"
 ```
 
 **Example Response:**
@@ -70,9 +92,12 @@ curl -X POST http://localhost:5000/api/v1/events \
     "title": "Python Workshop 2026",
     "description": "Learn advanced Python programming techniques",
     "date": "2026-07-15T14:00:00Z",
-    "priorityStartDate": "2026-07-01T09:00:00Z",
-    "generalStartDate": "2026-07-03T09:00:00Z",
-    "type": "PUBLIC",
+    "venue": "QCU San Bartolome Gymnasium",
+    "registrationDeadline": "2026-07-13T23:59:00Z",
+    "bannerImageUrl": "https://qcumsc.blob.core.windows.net/event-banners/8f2c...-banner.png",
+    "requiresQrTicket": true,
+    "isRegistrationOpen": true,
+    "type": "QCU_STUDENTS_ONLY",
     "maxCapacity": 50,
     "createdAt": "2026-06-15T10:30:00Z"
   },
@@ -80,7 +105,70 @@ curl -X POST http://localhost:5000/api/v1/events \
 }
 ```
 
+**Status Codes:**
+- `201`: Event created
+- `400`: Validation error, deadline after the event date, or invalid/oversized banner image
+- `401`: Unauthorized
+- `403`: Not ADMIN_LOGISTICS
+- `500`: Internal server error
+
 ---
+
+### 1a. Toggle Event Registration
+
+**Description:**  
+Manually opens or closes registration for an event, independently of the deadline and remaining capacity (V2 Flow 6). Closing only blocks **new** registrations — existing registrations, tickets, and check-ins are untouched — and the action is fully reversible.
+
+**Method:** `PATCH`  
+**Path:** `/api/v1/events/:eventId/registration-toggle`
+
+**Authentication:** Required (Bearer token, ADMIN_LOGISTICS only)
+
+**Request Parameters:**
+- `isRegistrationOpen` (boolean, required): `false` to close registration, `true` to reopen it
+
+**Response Format:**
+```json
+{
+  "success": boolean,
+  "data": {
+    "eventId": string,
+    "isRegistrationOpen": boolean
+  },
+  "message": string
+}
+```
+
+**Example Request:**
+```bash
+curl -X PATCH http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655440002/registration-toggle \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -d '{"isRegistrationOpen": false}'
+```
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "eventId": "770e8400-e29b-41d4-a716-446655440002",
+    "isRegistrationOpen": false
+  },
+  "message": "Registration closed successfully"
+}
+```
+
+**Status Codes:**
+- `200`: Toggle applied
+- `400`: `isRegistrationOpen` missing or not a boolean
+- `401`: Unauthorized
+- `403`: Not ADMIN_LOGISTICS
+- `404`: Event not found
+- `500`: Internal server error
+
+---
+
 
 ### 2. Get Event by ID
 
@@ -99,11 +187,17 @@ Retrieves details of a specific event.
     "title": string,
     "description": string | null,
     "date": string (ISO 8601),
-    "priorityStartDate": string (ISO 8601),
-    "generalStartDate": string (ISO 8601),
-    "type": "PUBLIC" | "MEMBERS_ONLY",
+    "venue": string,
+    "registrationDeadline": string (ISO 8601),
+    "bannerImageUrl": string | null,
+    "requiresQrTicket": boolean,
+    "isRegistrationOpen": boolean,
+    "priorityStartDate": string (ISO 8601),   // deprecated
+    "generalStartDate": string (ISO 8601),    // deprecated
+    "type": "PUBLIC" | "QCU_STUDENTS_ONLY" | "MEMBERS_ONLY",
     "maxCapacity": number,
     "registeredCount": number,
+
     "spotsRemaining": number,
     "createdAt": string (ISO 8601),
     "updatedAt": string (ISO 8601)
@@ -126,11 +220,17 @@ curl -X GET http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-44665544
     "title": "Python Workshop 2026",
     "description": "Learn advanced Python programming techniques",
     "date": "2026-07-15T14:00:00Z",
+    "venue": "QCU San Bartolome Gymnasium",
+    "registrationDeadline": "2026-07-13T23:59:00Z",
+    "bannerImageUrl": "https://qcumsc.blob.core.windows.net/event-banners/8f2c...-banner.png",
+    "requiresQrTicket": true,
+    "isRegistrationOpen": true,
     "priorityStartDate": "2026-07-01T09:00:00Z",
     "generalStartDate": "2026-07-03T09:00:00Z",
-    "type": "PUBLIC",
+    "type": "QCU_STUDENTS_ONLY",
     "maxCapacity": 50,
     "registeredCount": 12,
+
     "spotsRemaining": 38,
     "createdAt": "2026-06-15T10:30:00Z",
     "updatedAt": "2026-06-15T10:30:00Z"
@@ -149,38 +249,41 @@ Retrieves all events with optional filtering by type or date range.
 **Method:** `GET`  
 **Path:** `/api/v1/events`
 
-**Query Parameters:**
-- `type` (optional): Filter by type - `PUBLIC` or `MEMBERS_ONLY`
-- `startDate` (optional): Filter events from this date (ISO 8601)
-- `endDate` (optional): Filter events until this date (ISO 8601)
-- `limit` (optional): Number of records to return (default: 50)
-- `offset` (optional): Pagination offset (default: 0)
+Returns only events whose `date` has not yet passed, sorted soonest first.
 
 **Response Format:**
 ```json
 {
   "success": boolean,
-  "data": {
-    "total": number,
-    "events": [
-      {
-        "id": string,
-        "title": string,
-        "date": string,
-        "type": string,
-        "maxCapacity": number,
-        "registeredCount": number
-      }
-    ]
-  },
-  "message": string
+  "data": [
+    {
+      "id": string,
+      "title": string,
+      "description": string | null,
+      "date": string (ISO 8601),
+      "venue": string,
+      "registrationDeadline": string (ISO 8601),
+      "bannerImageUrl": string | null,
+      "requiresQrTicket": boolean,
+      "isRegistrationOpen": boolean,
+      "priorityStartDate": string (ISO 8601),
+      "generalStartDate": string (ISO 8601),
+      "type": "PUBLIC" | "QCU_STUDENTS_ONLY" | "MEMBERS_ONLY",
+      "maxCapacity": number,
+      "registeredCount": number,
+      "spotsRemaining": number
+    }
+  ]
 }
 ```
 
+`priorityStartDate` and `generalStartDate` are deprecated (see Deprecated Fields above).
+
 **Example Request:**
 ```bash
-curl -X GET "http://localhost:5000/api/v1/events?type=PUBLIC&limit=20"
+curl -X GET "http://localhost:5000/api/v1/events"
 ```
+
 
 ---
 
@@ -189,7 +292,8 @@ curl -X GET "http://localhost:5000/api/v1/events?type=PUBLIC&limit=20"
 ### 4. Register for Event
 
 **Description:**  
-Registers a guest (no account required) or an authenticated member for an event. Guest registrations must first call `POST /api/v1/ocr/verify` to obtain an `ocrSessionId`. Authenticated members bypass OCR and use their profile data automatically. The endpoint generates a QR payload for event check-in.
+Registers a guest (no account required) or an authenticated member for an event. The required inputs depend on the event's `type` (see Registration Gating by Event Type above): guests on `QCU_STUDENTS_ONLY` events must first call `POST /api/v1/ocr/verify` to obtain an `ocrSessionId`, guests on `PUBLIC` events supply no OCR at all, and `MEMBERS_ONLY` events reject anyone who is not an authenticated `MEMBER`. Authenticated members always bypass OCR and use their profile data automatically. Registration is additionally blocked when `isRegistrationOpen` is `false` (403), when `registrationDeadline` has passed (403), or when the event is at capacity (409). The endpoint generates a QR payload for event check-in.
+
 
 ---
 
@@ -242,13 +346,17 @@ curl -X PATCH http://localhost:5000/api/v1/events/770e8400-e29b-41d4-a716-446655
 **Path:** `/api/v1/events/:eventId/register`
 
 **Request Parameters:**
+Authenticated members send an empty body — all identity fields come from their User record. Guests send:
+
 - `lastName` (string, required): Attendee's last name (1-100 characters)
 - `firstName` (string, required): Attendee's first name (1-100 characters)
 - `middleInitial` (string, optional): Middle initial, single letter optionally followed by a dot
 - `email` (string, required): Attendee's email address
-- `studentId` (string, optional): QCU Student ID in `YY-NNNN` format; required for guest registrations and used when OCR cannot extract it
-- `ocrSessionId` (string, required): OCR session token returned from `POST /api/v1/ocr/verify`
-- `userId` (string, optional): User ID if the attendee is already authenticated (auto-attached server-side from JWT)
+- `course` (string): Course/program. Required on `QCU_STUDENTS_ONLY` events, optional on `PUBLIC` events
+- `yearLevel` (string): Year level. Required on `QCU_STUDENTS_ONLY` events, optional on `PUBLIC` events
+- `studentId` (string, optional): QCU Student ID in `YY-NNNN` format. `PUBLIC` events only — self-reported. On `QCU_STUDENTS_ONLY` events it is ignored and always derived from the OCR session
+- `ocrSessionId` (string): OCR session token returned from `POST /api/v1/ocr/verify`. **Required on `QCU_STUDENTS_ONLY` events; rejected on `PUBLIC` events.** Never required for members
+
 
 **Response Format:**
 ```json

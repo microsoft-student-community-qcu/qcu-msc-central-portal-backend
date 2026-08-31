@@ -48,3 +48,22 @@
 | **4.1** | **Email Engine:** Integrate brand-aligned HTML templates with transport services linked to status changes and registration triggers. | Frontend & Backend |
 | **4.2** | **System QA:** Testing of mobile QR check-in and HR status mutation/email pipeline with dummy data and CSV export. | Logistics & M&D Heads |
 | **4.3** | **Deployment:** Configure production hosting environment, secure environment variables, and official go-live deployment. | Head Dev |
+
+---
+
+## Post-V1 Addendum: V2 Event Fields (Flows 1, 2 & 6)
+
+Delivered on top of the V1 milestones above; tracked here so the timeline stays consistent with the shipped schema.
+
+| Task ID | Activity | Responsibility |
+| :--- | :--- | :--- |
+| **A.1** | **Event Schema Expansion (Flow 1):** Add `venue`, `registrationDeadline`, `bannerImageUrl` (Azure Blob), `requiresQrTicket`, and `isRegistrationOpen` to `Event`; add `course` and `yearLevel` to `Registration`. | Backend Team |
+| **A.2** | **Third Event Tier (Flow 2):** Add `QCU_STUDENTS_ONLY` to `EventType` and gate registration per tier — `MEMBERS_ONLY` requires an authenticated `MEMBER`, `QCU_STUDENTS_ONLY` requires a valid `ocrSessionId` for non-members, `PUBLIC` requires neither OCR nor auth. | Backend Team |
+| **A.3** | **Registration Toggle (Flow 6):** Ship `PATCH /api/v1/events/:eventId/registration-toggle` (ADMIN_LOGISTICS) to close/reopen registration independently of deadline and capacity, without affecting existing registrations. | Backend Team |
+| **A.4** | **Banner Upload Pipeline:** Validate banner uploads through `src/utils/fileValidation.ts` (MIME + magic-byte + size) and persist them to the Azure Blob `event-banners` container. | Backend Team |
+
+### Decision Log — Tiered Window vs. Single Deadline
+
+The V1 tiered registration window (`priorityStartDate` / `generalStartDate`) is **deprecated in favour of V2's single `registrationDeadline` + `isRegistrationOpen`**. Both columns are retained as nullable for existing V1 rows and are still returned by the feed and detail endpoints for backward compatibility within `v1`, but they are no longer accepted on create and no longer gate registration. Removal is scheduled for `v2`.
+
+
